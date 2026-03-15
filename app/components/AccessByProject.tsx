@@ -1,77 +1,80 @@
 "use client";
 
-import React from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import React, { useEffect, useState } from 'react';
+import { motion } from 'framer-motion';
+import { fetchAccessData } from '@/app/actions/getProjectData';
 
-interface ChartData {
-  label: string;
-  value: number;
-  color: string;
-}
+const AccessByProject = () => {
+  const [data, setData] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
 
-const AccessByProject = ({ data = [] }: { data: ChartData[] }) => {
-  const maxValue = 30000;
-  // Define the steps for your grid lines
+  const maxValue = 30000; 
   const gridLines = [0, 10000, 20000, 30000];
 
+  useEffect(() => {
+    fetchAccessData().then(dbData => {
+      setData(dbData);
+      setLoading(false);
+    });
+  }, []);
+
   return (
-    <div className="w-full min-h-[280px] max-w-2xl rounded-2xl px-4 py-0 font-sans">
-      <h2 className="text-[18px] font-bold text-[#1a1a1a] mb-8 text-left">Access By Project</h2>
+    <div className="w-full rounded-3xl py-8 px-8 bg-gray-50">
+      <h2 className="text-[20px] font-bold -mt-[25px] text-gray-900 mb-10">Access By Project</h2>
       
-      <div className="relative h-[180px] ml-10 mr-4">
-        {/* Y-Axis Labels & Grid Lines */}
+      <div className="relative h-[160px] ml-10 mr-4 mb-8">
+        {/* Y-Axis & Grid Lines */}
         <div className="absolute inset-0 flex flex-col-reverse justify-between pointer-events-none">
           {gridLines.map((line) => (
             <div key={line} className="relative w-full flex items-center">
-              {/* The Label */}
-              <span className="absolute -left-10 text-[13px] text-[#9ca3af]">
-                {line === 0 ? "0" : `${line / 1000}K`}
+              <span className="absolute -left-12 text-[14px] text-gray-400 font-medium">
+                {line === 0 ? '0' : `${line/1000}K`}
               </span>
-              {/* The Horizontal Line */}
               <div className="w-full border-t border-gray-100" />
             </div>
           ))}
         </div>
 
-        {/* Chart Bars Container */}
-        <div className="relative flex justify-around items-end w-full h-full pb-[1px] z-10">
-          <AnimatePresence>
-            {data.map((item, index) => {
-              const heightPercentage = Math.min((item.value / maxValue) * 100, 100);
+        {/* Bars Container */}
+        <div className="relative flex justify-around items-end w-full h-full z-10 px-4">
+          {!loading && data.map((item, index) => (
+            <div key={index} className="flex flex-col items-center flex-1 group relative 
+            h-full justify-end">
+              
+              {/* Tooltip on Hover */}
+              <div className="absolute -top-10 opacity-0 group-hover:opacity-100 bg-gray-900 text-white text-[12px] py-1 px-3 rounded-lg transition-all duration-300 z-20 whitespace-nowrap shadow-xl">
+                {item.value.toLocaleString()}
+                <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-2 h-2 bg-gray-900 rotate-45" />
+              </div>
 
-              return (
-                <div key={item.label} className="flex flex-col items-center flex-1 group relative h-full justify-end">
-                  {/* Animated Bar */}
-                  <motion.div
-                    key={`${item.label}-${item.value}`}
-                    initial={{ height: 0 }}
-                    animate={{ height: `${heightPercentage}%` }}
-                    exit={{ height: 0 }}
-                    transition={{ 
-                      duration: 1.2, 
-                      delay: index * 0.1, 
-                      ease: [0.33, 1, 0.68, 1] 
-                    }}
-                    style={{ backgroundColor: item.color }}
-                    className="w-[32px] md:w-[38px] rounded-t-full cursor-pointer relative group-hover:brightness-110 transition-all duration-300"
-                  >
-                    {/* Tooltip */}
-                    <div className="absolute -top-12 left-1/2 -translate-x-1/2 bg-[#1f2937] text-white text-[11px] py-1.5 px-2.5 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none z-20 shadow-xl whitespace-nowrap">
-                      {item.value.toLocaleString()}
-                      <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-2 h-2 bg-[#1f2937] rotate-45"></div>
-                    </div>
-                  </motion.div>
-                  
-                  {/* X-Axis Labels */}
-                  <span className="absolute -bottom-8 text-[13px] text-[#9ca3af] whitespace-nowrap">
-                    {item.label}
-                  </span>
-                </div>
-              );
-            })}
-          </AnimatePresence>
+              {/* Bar - Styled to match Block.jpg (fully rounded) */}
+              <motion.div
+                initial={{ height: 0 }}
+                animate={{ height: `${(item.value / maxValue) * 100}%` }}
+                transition={{ duration: 1, ease: [0.4, 0, 0.2, 1] }}
+                style={{ backgroundColor: item.color }}
+                className="w-[28px] md:w-[36px] rounded-full cursor-pointer 
+                hover:brightness-110 transition-all shadow-sm"
+              />
+
+              {/* X-Axis Label */}
+              <div className="absolute -bottom-10 w-full text-center">
+                <span className="text-[10px] line-clamp-2 leading-[1.2] text-gray-500 
+                font-medium  wrap
+                 ">
+                  {item.label}
+                </span>
+              </div>
+            </div>
+          ))}
         </div>
       </div>
+
+      {loading && (
+        <div className="flex items-center justify-center h-[220px]">
+          <div className="w-6 h-6 border-2 border-orange-500 border-t-transparent rounded-full animate-spin" />
+        </div>
+      )}
     </div>
   );
 };

@@ -10,7 +10,7 @@ const chartData = [
 
 export default function Projectschart() {
   return (
-    <div className="py-4 px-4 mb-12 space-y-10 bg-gray-50 rounded-2xl">
+    <div className="p-2 mb-8 space-y-10 bg-gray-50 rounded-2xl">
       <AccessByProject data={chartData} />
     </div>
   );
