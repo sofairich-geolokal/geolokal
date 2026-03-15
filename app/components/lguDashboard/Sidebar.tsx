@@ -24,7 +24,7 @@ const Sidebar = () => {
     // localStorage.removeItem('token'); 
     
     // Redirect to login page
-    router.push("/login"); 
+    router.push("/lgu-login"); 
   };
 
   return (

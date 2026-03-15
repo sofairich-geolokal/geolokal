@@ -1,15 +1,26 @@
 "use client";
 
-import React from 'react';
+import React, { useState } from 'react';
 import { motion } from 'framer-motion';
 
 interface SourceData {
   label: string;
   percentage: number;
+  value: number;
   color: string;
+  status: string;
+  lastUpdated: string;
+  source: string;
+  description: string;
 }
 
-const SourceTypesChart = ({ data }: { data: SourceData[] }) => {
+export default function SourceTypesChart({ data }: { data: SourceData[] }) {
+  const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
+  const [mousePos, setMousePos] = useState({ x: 0, y: 0 });
+
+  // Debug logging
+  console.log('SourceTypesChart received data:', JSON.stringify(data, null, 2));
+
   const size = 150;
   const strokeWidth = 35;
   const center = size / 2;
@@ -18,8 +29,12 @@ const SourceTypesChart = ({ data }: { data: SourceData[] }) => {
 
   let cumulativeOffset = 0;
 
+  const handleMouseMove = (e: React.MouseEvent) => {
+    setMousePos({ x: e.clientX, y: e.clientY });
+  };
+
   return (
-    <div className="w-full max-w-2xl p-4 font-sans flex flex-col md:flex-row gap-10">
+    <div className="w-full max-w-2xl p-4 font-sans flex flex-col md:flex-row gap-10" onMouseMove={handleMouseMove}>
       <div className="relative w-[200px] h-[200px]">
         <h2 className="absolute -top-10 left-0 text-xl mb-10 font-bold text-gray-900 whitespace-nowrap">
           Source Types Data
@@ -45,6 +60,9 @@ const SourceTypesChart = ({ data }: { data: SourceData[] }) => {
                 animate={{ strokeDashoffset: -currentOffset }}
                 transition={{ duration: 1, delay: 0.2, ease: "easeOut" }}
                 strokeLinecap="butt"
+                className="cursor-pointer hover:opacity-80 transition-opacity"
+                onMouseEnter={() => setHoveredIndex(index)}
+                onMouseLeave={() => setHoveredIndex(null)}
               />
             );
           })}
@@ -72,8 +90,23 @@ const SourceTypesChart = ({ data }: { data: SourceData[] }) => {
           </div>
         ))}
       </div>
+
+      {/* --- HOVER TOAST (INSIGHTS) --- */}
+      {hoveredIndex !== null && (
+        <div 
+          className="fixed z-50 pointer-events-none bg-gray-900 text-white p-3 rounded-lg shadow-xl text-xs flex flex-col gap-1 transition-opacity duration-200"
+          style={{ left: mousePos.x + 15, top: mousePos.y + 15 }}
+        >
+          <span className="font-bold border-b border-gray-700 pb-1 mb-1">{data[hoveredIndex]?.label || 'Unknown'}</span>
+          
+          <span>📊 Contribution: {data[hoveredIndex]?.percentage || 0}%</span>
+          <span>📈 Total Records: {data[hoveredIndex]?.value || 0}</span>
+          <span>🔄 Status: {data[hoveredIndex]?.status || 'Unknown'}</span>
+          <span>🗄️ Source: {data[hoveredIndex]?.source || 'Database'}</span>
+          <span>⏰ Last Updated: {data[hoveredIndex]?.lastUpdated ? new Date(data[hoveredIndex].lastUpdated).toLocaleString() : 'Not available'}</span>
+        </div>
+      )}
+      
     </div>
   );
-};
-
-export default SourceTypesChart;
+}
