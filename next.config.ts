@@ -1,7 +1,10 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  // Remove turbopack root configuration for deployment compatibility
+  // Fix Turbopack root warning for deployment
+  turbopack: {
+    root: process.cwd(),
+  },
 };
 
 export default nextConfig;
