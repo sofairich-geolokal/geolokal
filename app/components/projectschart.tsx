@@ -11,7 +11,7 @@ const chartData = [
 export default function Projectschart() {
   return (
     <div className="p-2 mb-8 space-y-10 bg-gray-50 rounded-2xl">
-      <AccessByProject data={chartData} />
+      <AccessByProject />
     </div>
   );
 }

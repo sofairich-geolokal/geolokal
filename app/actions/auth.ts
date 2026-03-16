@@ -1,6 +1,7 @@
 'use server';
 
 import { cookies } from 'next/headers';
+import { redirect } from 'next/navigation';
 import { query } from '@/lib/db';
 
 export async function login(username: string, password: string) {
@@ -49,4 +50,14 @@ export async function login(username: string, password: string) {
     console.error('SERVER AUTH ERROR:', error.message);
     return { success: false, error: 'Database connection failed. Please try again later.' };
   }
+}
+
+export async function logout() {
+  try {
+    const cookieStore = await cookies();
+    cookieStore.delete('auth_token');
+  } catch (error: any) {
+    console.error('LOGOUT ERROR:', error.message);
+  }
+  redirect('/lgu-login');
 }
