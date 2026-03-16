@@ -1,9 +1,7 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  turbopack: {
-    root: 'C:\\Dev\\geolokal',
-  },
+  // Remove turbopack root configuration for deployment compatibility
 };
 
 export default nextConfig;
