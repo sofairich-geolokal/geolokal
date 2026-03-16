@@ -2,13 +2,8 @@
 import { Pool } from 'pg';
 
 const pool = new Pool({
-  user: 'postgres',
-  host: 'localhost',
-  database: 'postgres',
-  //database:'GeoLokal',
-  password: 'Rukhsar', 
-  port: 5432,
+  connectionString: process.env.DATABASE_URL,
+  ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false
 });
 
 export const query = (text: string, params?: any[]) => pool.query(text, params);
-console.log('query');
