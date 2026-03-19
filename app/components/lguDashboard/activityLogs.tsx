@@ -8,12 +8,14 @@ interface AuditLog {
   action: string;
   details: string;
   created_by: string;
+  id?: number;
 }
 
 const ActivityLogs = () => {
   const [logs, setLogs] = useState<AuditLog[]>([]);
   const [loading, setLoading] = useState(true);
   const [currentPage, setCurrentPage] = useState(1);
+  const [selectedLogs, setSelectedLogs] = useState<number[]>([]);
   const itemsPerPage = 10; 
 
   // Mapping dictionary to convert initials to full words
@@ -21,6 +23,12 @@ const ActivityLogs = () => {
     "V": "Viewer",
     "L": "Ibaan LGU",
     "S": "Super Admin"
+  };
+
+  // Function to get role display name with brackets
+  const getRoleDisplay = (role: string) => {
+    const roleName = actorMap[role] || role;
+    return `${roleName} [${role}]`;
   };
 
   useEffect(() => {
@@ -93,6 +101,46 @@ const ActivityLogs = () => {
     }
   };
 
+  const toggleLogSelection = (logId: number) => {
+    setSelectedLogs(prev => 
+      prev.includes(logId) 
+        ? prev.filter(id => id !== logId)
+        : [...prev, logId]
+    );
+  };
+
+  const deleteSelectedLogs = async () => {
+    if (selectedLogs.length === 0) {
+      alert('Please select at least one log entry to delete.');
+      return;
+    }
+
+    const confirmDelete = window.confirm(`Are you sure you want to delete ${selectedLogs.length} selected log entr${selectedLogs.length > 1 ? 'ies' : 'y'}?`);
+    if (!confirmDelete) return;
+
+    try {
+      const response = await fetch('/api/logs', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ids: selectedLogs })
+      });
+      
+      if (!response.ok) {
+        throw new Error('Failed to delete selected logs');
+      }
+      
+      const result = await response.json();
+      console.log(result.message);
+      
+      // Remove deleted logs from local state
+      setLogs(prev => prev.filter(log => !selectedLogs.includes(log.id || 0)));
+      setSelectedLogs([]);
+    } catch (error: any) {
+      console.error('Delete logs error:', error.message);
+      alert('Failed to delete selected logs. Please try again.');
+    }
+  };
+
   const indexOfLastItem = currentPage * itemsPerPage;
   const indexOfFirstItem = indexOfLastItem - itemsPerPage;
   const currentLogs = logs.slice(indexOfFirstItem, indexOfLastItem);
@@ -121,10 +169,17 @@ const ActivityLogs = () => {
             Export CSV
           </button>
           <button 
-            onClick={clearLogs}
-            className="flex-1 sm:flex-none bg-[#ef4444] hover:bg-[#dc2626] text-white text-sm font-semibold py-2 px-4 md:px-6 rounded-lg transition-colors"
+            onClick={deleteSelectedLogs}
+            className="flex-1 sm:flex-none bg-[#ef4444] hover:bg-[#dc2626] text-white text-sm font-semibold py-2 px-4 md:px-6 rounded-lg transition-colors disabled:opacity-50"
+            disabled={selectedLogs.length === 0}
           >
-            Clear Logs
+            Delete Selected ({selectedLogs.length})
+          </button>
+          <button 
+            onClick={clearLogs}
+            className="flex-1 sm:flex-none bg-red-600 hover:bg-red-700 text-white text-sm font-semibold py-2 px-4 md:px-6 rounded-lg transition-colors"
+          >
+            Clear All
           </button>
         </div>
       </div>
@@ -135,6 +190,19 @@ const ActivityLogs = () => {
           <table className="w-full text-left border-collapse min-w-[600px] lg:min-w-full">
             <thead>
               <tr className="text-gray-800 font-bold text-sm md:text-[15px] border-b border-gray-100">
+                <th className="px-2 md:px-6 py-3">
+                  <input
+                    type="checkbox"
+                    onChange={(e) => {
+                      if (e.target.checked) {
+                        setSelectedLogs(currentLogs.map(log => log.id || 0));
+                      } else {
+                        setSelectedLogs([]);
+                      }
+                    }}
+                    className="rounded border-gray-300"
+                  />
+                </th>
                 <th className="px-4 md:px-6 py-3">Timestamp</th>
                 <th className="px-4 md:px-6 py-3">Actor</th>
                 <th className="px-4 md:px-6 py-3">Action</th>
@@ -149,6 +217,14 @@ const ActivityLogs = () => {
                     key={index} 
                     className={`${index % 2 === 0 ? 'bg-[#eeeffc]' : 'bg-transparent'} text-gray-700 hover:bg-white/50 transition-colors`}
                   >
+                    <td className="px-2 md:px-6 py-2">
+                      <input
+                        type="checkbox"
+                        checked={selectedLogs.includes(log.id || 0)}
+                        onChange={() => toggleLogSelection(log.id || 0)}
+                        className="rounded border-gray-300"
+                      />
+                    </td>
                     <td className="px-2 md:px-6 py-2 whitespace-nowrap">{log.timestamp}</td>
                     {/* Displaying the full actor name */}
                     <td className="px-2 md:px-6 py-2 font-bold text-[#2d4369]">{log.actor}</td>
@@ -159,7 +235,7 @@ const ActivityLogs = () => {
                 ))
               ) : (
                 <tr>
-                  <td colSpan={5} className="px-6 py-10 text-center text-gray-400 italic">
+                  <td colSpan={6} className="px-6 py-10 text-center text-gray-400 italic">
                     No activity logs found.
                   </td>
                 </tr>

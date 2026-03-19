@@ -3,10 +3,14 @@
 
 import React, { useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
+import { useAuth } from '@/hooks/useAuth';
 
 const MapDetailView = () => {
   const { id } = useParams();
   const [project, setProject] = useState<any>(null);
+  
+  // Check authentication
+  useAuth();
 
   useEffect(() => {
     // Fetch specific project data by ID

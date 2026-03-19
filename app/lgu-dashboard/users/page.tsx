@@ -1,9 +1,13 @@
 import UserManagement from "../../components/lguDashboard/users";
+import { requireAuth } from '@/lib/auth';
 
-export default function DashboardPage() {
-return(
-  <div className=" h-auto h-full" >
-    <UserManagement />
-  </div>
-)
+export default async function DashboardPage() {
+  // Check authentication - will redirect to login if not authenticated
+  await requireAuth();
+
+  return(
+    <div className=" h-auto h-full" >
+      <UserManagement />
+    </div>
+  )
 }
