@@ -1,16 +1,23 @@
 import React from 'react';
 import Sidebar from '@/app/components/lguDashboard/Sidebar';
+import { requireAuth, getUserData } from '@/lib/auth';
 
 export const metadata = {
   title: 'LGU User Dashboard',
   description: 'Management system for Ibaan, Batangas',
 };
 
-export default function DashboardLayout({
+export default async function DashboardLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
+  // Check authentication - will redirect to login if not authenticated
+  const userId = await requireAuth();
+  
+  // Fetch user data
+  const userData = await getUserData(userId);
+
   return (
     <div className="flex h-screen bg-[#f3f4f9] overflow-hidden">
       {/* 1. Sidebar - Fixed width, high contrast */}
@@ -27,15 +34,15 @@ export default function DashboardLayout({
             <span className="text-white">/</span>
             <span>User</span>
             <span className="text-white">/</span>
-            <span className="text-white font-semibold">Ibaan Admin</span>
+            <span className="text-white font-semibold">{userData?.username || 'Admin'}</span>
           </div>
           
           <div className="flex items-center space-x-8 text-sm text-white">
             <p>
-              <span className="font-bold">User:</span> Ibaan Admin
+              <span className="font-bold">User:</span> {userData?.username || 'Unknown User'}
             </p>
             <p>
-              <span className="font-bold">LGU:</span> Ibaan, Batangas
+              <span className="font-bold">Location:</span> {userData?.location || 'Not Assigned'}
             </p>
           </div>
         </header>

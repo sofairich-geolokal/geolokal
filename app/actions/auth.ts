@@ -4,11 +4,11 @@ import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
 import { query } from '@/lib/db';
 
-export async function login(username: string, password: string) {
+export async function login(username: string, password: string, selectedCityId?: string) {
   try {
     // 1. Fetch User
     const result = await query(
-      'SELECT id, username, lgu_id, password_hash FROM users WHERE username = $1',
+      'SELECT id, username, lgu_id, password_hash, role FROM users WHERE username = $1',
       [username]
     );
     
@@ -22,8 +22,19 @@ export async function login(username: string, password: string) {
     if (user.password_hash !== password) {
       return { success: false, error: 'Incorrect password.' };
     }
+
+    // 3. For Viewer role, update their lgu_id with selected city if provided
+    let finalLguId = user.lgu_id;
+    if (user.role === 'Viewer' && selectedCityId) {
+      // Update the user's lgu_id with the selected city
+      await query(
+        'UPDATE users SET lgu_id = $1 WHERE id = $2',
+        [selectedCityId, user.id]
+      );
+      finalLguId = selectedCityId;
+    }
     
-    // 3. Generate Token & Set Cookie
+    // 4. Generate Token & Set Cookie
     const authToken = `token_${user.id}_${Date.now()}`;
     const cookieStore = await cookies();
     
@@ -41,7 +52,8 @@ export async function login(username: string, password: string) {
       user: { 
         id: String(user.id), 
         username: user.username, 
-        lgu_id: String(user.lgu_id || '') 
+        lgu_id: String(finalLguId || ''),
+        role: user.role || 'Viewer'
       } 
     };
 
