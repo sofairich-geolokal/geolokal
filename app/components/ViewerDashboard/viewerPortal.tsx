@@ -6,9 +6,9 @@ import shp from 'shpjs';
 import { LayoutDashboard, Table as TableIcon, Map as MapIcon, LogOut, Users, Home, Maximize, Activity } from 'lucide-react';
 
 interface GeoProperties {
-  brgy?: string;
-  Shape_Area?: number;
-  FID_case01?: number;
+  brgy?: string | null;
+  Shape_Area?: number | null;
+  FID_case01?: number | null;
   [key: string]: any;
 }
 
@@ -18,7 +18,7 @@ interface GeoFeature {
   geometry?: any;
 }
 
-interface GeoJSON {
+interface CustomGeoJSON {
   type: string;
   features?: GeoFeature[];
 }
@@ -40,7 +40,7 @@ interface Stats {
 
 const ViewerPortal = () => {
   const [activeTab, setActiveTab] = useState<string>('dashboard');
-  const [geoData, setGeoData] = useState<GeoJSON | null>(null);
+  const [geoData, setGeoData] = useState<CustomGeoJSON | null>(null);
   const [stats, setStats] = useState<Stats>({ population: 0, households: 0, landArea: "0", density: 0 });
   const [barangayList, setBarangayList] = useState<BarangayData[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -55,12 +55,36 @@ const ViewerPortal = () => {
           if (data.data) {
             // Process the loaded geojson data
             const geojson = data.data;
-            setGeoData(geojson);
+            // Convert to our custom format if needed
+            let features: any[] = [];
             
-            const features = Array.isArray(geojson) ? geojson[0].features : geojson.features;
+            if (geojson.type === 'FeatureCollection') {
+              features = geojson.features || [];
+            } else if (geojson.type === 'Feature') {
+              features = [geojson];
+            } else {
+              // Handle other geometry types by wrapping in a feature
+              features = [{
+                type: 'Feature',
+                properties: {},
+                geometry: geojson
+              }];
+            }
             
-            if (features && features.length > 0) {
-              const list: BarangayData[] = features.map((f: GeoFeature) => ({
+            const customGeoJSON: CustomGeoJSON = {
+              type: 'FeatureCollection',
+              features: features.map((feature: any) => ({
+                type: feature.type,
+                properties: feature.properties || {},
+                geometry: feature.geometry
+              }))
+            };
+            setGeoData(customGeoJSON);
+            
+            const loadedFeatures = customGeoJSON.features || [];
+            
+            if (loadedFeatures && loadedFeatures.length > 0) {
+              const list: BarangayData[] = loadedFeatures.map((f: GeoFeature) => ({
                 name: f.properties.brgy || "Unknown",
                 pop: f.properties.Shape_Area ? Math.round(f.properties.Shape_Area / 100) : 0,
                 hh: f.properties.FID_case01 || 0,
@@ -104,7 +128,30 @@ const ViewerPortal = () => {
         
         try {
           const geojson = await shp(result as ArrayBuffer);
-          setGeoData(geojson);
+          let features: any[] = [];
+          
+          if (geojson.type === 'FeatureCollection') {
+            features = geojson.features || [];
+          } else if (geojson.type === 'Feature') {
+            features = [geojson];
+          } else {
+            // Handle other geometry types by wrapping in a feature
+            features = [{
+              type: 'Feature',
+              properties: {},
+              geometry: geojson
+            }];
+          }
+          
+          const customGeoJSON: CustomGeoJSON = {
+            type: 'FeatureCollection',
+            features: features.map((feature: any) => ({
+              type: feature.type,
+              properties: feature.properties || {},
+              geometry: feature.geometry
+            }))
+          };
+          setGeoData(customGeoJSON);
 
           // Save geojson data to Netlify Blobs
           try {
@@ -113,7 +160,7 @@ const ViewerPortal = () => {
               headers: {
                 'Content-Type': 'application/json',
               },
-              body: JSON.stringify(geojson),
+              body: JSON.stringify(customGeoJSON),
             });
             
             if (!response.ok) {
@@ -128,15 +175,15 @@ const ViewerPortal = () => {
           }
 
           // Map data to Dashboard format
-          const features = Array.isArray(geojson) ? geojson[0].features : geojson.features;
+          const mappedFeatures = customGeoJSON.features || [];
           
-          if (!features || features.length === 0) {
+          if (!mappedFeatures || mappedFeatures.length === 0) {
             console.warn("No features found in the shapefile");
             setError("No features found in the shapefile");
             return;
           }
         
-          const list: BarangayData[] = features.map((f: GeoFeature) => ({
+          const list: BarangayData[] = mappedFeatures.map((f: GeoFeature) => ({
             name: f.properties.brgy || "Unknown",
             pop: f.properties.Shape_Area ? Math.round(f.properties.Shape_Area / 100) : 0, // Mock calculation if pop field missing
             hh: f.properties.FID_case01 || 0,
