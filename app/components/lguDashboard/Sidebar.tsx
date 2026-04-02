@@ -66,25 +66,7 @@ const Sidebar = () => {
         })}
       </nav>
 
-      {/* High-Impact Quick Links Section */}
-      <div className="bg-[#BF7004] text-white rounded-2xl 
-        px-4 py-2 space-y-4 overflow-y-auto">
-        <SidebarSection 
-          title="DRRM" 
-          icon="/icons/valley.png" 
-          items={["Hazards", "Critical Facilities"]} 
-        />
-        <SidebarSection 
-          title="Land Use" 
-          icon="/icons/maps.png" 
-          items={["CLUP", "Zoning", "Basemaps"]} 
-        />
-        <SidebarSection 
-          title="Interactive Maps" 
-          icon="/icons/placeholder.png" 
-          items={["Leaflet Viewer"]} 
-        />
-      </div>
+   
 
       {/* High-Contrast Logout */}
       <div className="mt-auto">

@@ -2,6 +2,8 @@
 
 import React, { useEffect, useState } from 'react';
 import { motion, useSpring, useTransform } from 'framer-motion';
+import DataTablePopup from './DataTablePopup';
+import MapDataDashboard from './MapDataDashboard';
 
 interface StatData {
   title: string;
@@ -33,6 +35,12 @@ function Counter({ value }: { value: string | number }) {
 export default function Cards() {
   const [stats, setStats] = useState<StatData[]>([]);
   const [loading, setLoading] = useState(true);
+  const [popupState, setPopupState] = useState({
+    isOpen: false,
+    title: '',
+    endpoint: '',
+    columns: [] as { key: string; label: string; format?: 'date' | 'currency' | undefined }[]
+  });
 
   useEffect(() => {
     const fetchStats = async () => {
@@ -57,6 +65,70 @@ export default function Cards() {
 
     fetchStats();
   }, []);
+
+  const openPopup = (title: string) => {
+    const config = getPopupConfig(title);
+    setPopupState({
+      isOpen: true,
+      title,
+      endpoint: config.endpoint,
+      columns: config.columns
+    });
+  };
+
+  const closePopup = () => {
+    setPopupState(prev => ({ ...prev, isOpen: false }));
+  };
+
+  const getPopupConfig = (title: string): { endpoint: string; columns: { key: string; label: string; format?: 'date' | 'currency' | undefined }[] } => {
+    switch (title) {
+      case 'Total Tax Parcel':
+        return {
+          endpoint: '/api/stats/tax-parcels',
+          columns: [
+            { key: 'parcel_no', label: 'Parcel Number' },
+            { key: 'owner_name', label: 'Owner Name' },
+            { key: 'valuation', label: 'Valuation', format: 'currency' },
+            { key: 'created_at', label: 'Created At', format: 'date' }
+          ]
+        };
+      case 'CBMS Indicator':
+        return {
+          endpoint: '/api/stats/cbms-indicators',
+          columns: [
+            { key: 'indicator_code', label: 'Indicator Code' },
+            { key: 'indicator_value', label: 'Value' },
+            { key: 'status', label: 'Status' },
+            { key: 'updated_at', label: 'Updated At', format: 'date' }
+          ]
+        };
+      case 'Active Users':
+        return {
+          endpoint: '/api/stats/active-users',
+          columns: [
+            { key: 'username', label: 'Username' },
+            { key: 'email', label: 'Email' },
+            { key: 'role', label: 'Role' },
+            { key: 'created_at', label: 'Member Since', format: 'date' }
+          ]
+        };
+      case 'System Uptime':
+        return {
+          endpoint: '/api/stats/system-logs',
+          columns: [
+            { key: 'actor', label: 'User' },
+            { key: 'action', label: 'Action' },
+            { key: 'details', label: 'Details' },
+            { key: 'timestamp', label: 'Timestamp', format: 'date' }
+          ]
+        };
+      default:
+        return {
+          endpoint: '',
+          columns: []
+        };
+    }
+  };
 
   if (loading) {
     return (
@@ -83,7 +155,8 @@ export default function Cards() {
               initial={{ opacity: 0, y: 15 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: index * 0.1 }}
-              className="bg-gray-50 p-6 rounded-3xl shadow-sm border border-gray-100 hover:shadow-md transition-all duration-300"
+              className="bg-gray-50 p-6 rounded-3xl shadow-sm border border-gray-100 hover:shadow-md transition-all duration-300 cursor-pointer"
+              onClick={() => openPopup(title)}
             >
               <p className="text-black-500 text-md font-medium mb-2">{title}</p>
               <div className="flex items-end justify-between gap-2">
@@ -103,7 +176,8 @@ export default function Cards() {
               initial={{ opacity: 0, y: 15 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: index * 0.1 }}
-              className={`${stat.bgColor} p-6 rounded-3xl shadow-sm border border-gray-100 hover:shadow-md transition-all duration-300`}
+              className={`${stat.bgColor} p-6 rounded-3xl shadow-sm border border-gray-100 hover:shadow-md transition-all duration-300 cursor-pointer`}
+              onClick={() => openPopup(stat.title)}
             >
               <p className="text-black-500 text-md font-medium mb-2">{stat.title}</p>
               <div className="flex items-end justify-between gap-2">
@@ -120,6 +194,14 @@ export default function Cards() {
           ))
         )}
       </div>
+      
+      <DataTablePopup
+        isOpen={popupState.isOpen}
+        onClose={closePopup}
+        title={popupState.title}
+        endpoint={popupState.endpoint}
+        columns={popupState.columns}
+      />
     </div>
   );
 }

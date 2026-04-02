@@ -1,0 +1,24 @@
+# Email Configuration for GeoLokal
+# Copy these variables to your .env file and configure with your SMTP provider
+
+# SMTP Server Configuration
+SMTP_HOST=smtp.gmail.com
+SMTP_PORT=587
+SMTP_SECURE=false
+
+# SMTP Authentication
+SMTP_USER=your-email@gmail.com
+SMTP_PASS=your-app-password
+
+# Email Settings
+SMTP_FROM_EMAIL=noreply@geolokal.com
+
+# Application URL (used in email links)
+NEXT_PUBLIC_APP_URL=http://localhost:3000
+
+# Database Configuration (existing)
+DATABASE_URL=postgresql://username:password@localhost:5432/geolokal
+
+# NextAuth Configuration (existing)
+NEXTAUTH_SECRET=your-secret-key
+NEXTAUTH_URL=http://localhost:3000

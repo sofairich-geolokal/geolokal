@@ -56,6 +56,22 @@ export async function requireAuth() {
   return userId;
 }
 
+export async function requireLguRole() {
+  const userId = await getAuthUser();
+  
+  if (!userId) {
+    redirect('/lgu-login');
+  }
+  
+  const user = await getUserData(userId);
+  
+  if (!user || user.role.toLowerCase() === 'viewer') {
+    redirect('/lgu-login');
+  }
+  
+  return user;
+}
+
 export async function isAuthenticated() {
   const userId = await getAuthUser();
   return !!userId;

@@ -1,6 +1,6 @@
 import React from 'react';
 import Sidebar from '@/app/components/lguDashboard/Sidebar';
-import { requireAuth, getUserData } from '@/lib/auth';
+import { requireLguRole, getUserData } from '@/lib/auth';
 
 export const metadata = {
   title: 'LGU User Dashboard',
@@ -12,11 +12,8 @@ export default async function DashboardLayout({
 }: {
   children: React.ReactNode;
 }) {
-  // Check authentication - will redirect to login if not authenticated
-  const userId = await requireAuth();
-  
-  // Fetch user data
-  const userData = await getUserData(userId);
+  // Check authentication and enforce LGU role
+  const userData = await requireLguRole();
 
   return (
     <div className="flex h-screen bg-[#f3f4f9] overflow-hidden">

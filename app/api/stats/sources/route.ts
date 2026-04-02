@@ -3,13 +3,17 @@ import { query } from '@/lib/db';
 
 export async function GET() {
   try {
+    console.log('Starting API call to /api/stats/sources');
+    
     // 1. Fetch all counts in parallel
     const [osmRes, geoRes, cbmsRes, taxRes] = await Promise.all([
-      query("SELECT COUNT(*) FROM map_layers WHERE source = 'OSM'"),
-      query("SELECT COUNT(*) FROM map_layers WHERE source = 'Gov-PH'"),
-      query("SELECT COUNT(*) FROM cbms_indicators"),
-      query("SELECT COUNT(*) FROM tax_parcels")
+      query("SELECT COUNT(*)::int as count FROM map_layers WHERE source = 'OSM'"),
+      query("SELECT COUNT(*)::int as count FROM map_layers WHERE source = 'Gov-PH'"),
+      query("SELECT COUNT(*)::int as count FROM cbms_indicators"),
+      query("SELECT COUNT(*)::int as count FROM tax_parcels")
     ]);
+    
+    console.log('Database queries completed successfully');
 
     // 2. Parse results safely (handling potential nulls/undefined)
     const osmCount = parseInt(osmRes.rows[0]?.count || '0');
@@ -74,8 +78,14 @@ export async function GET() {
     console.log('API Response:', JSON.stringify(dynamicSourceData, null, 2));
 
     return NextResponse.json(dynamicSourceData);
-  } catch (error) {
-    console.error("API Error in stats/sources:", error);
-    return NextResponse.json({ error: "Data Fetch Failed" }, { status: 500 });
-  }
+  } 
+  catch (error: any) {
+   console.error("API Error in stats/sources:", error);
+   console.error("Error message:", error?.message);
+   console.error("Error stack:", error?.stack);
+    
+    // CRITICAL: Return an empty array [] instead of an object {}
+    // This allows your frontend .map() or Array.isArray() checks to pass.
+    return NextResponse.json([]);
+   }
 }
