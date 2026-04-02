@@ -23,7 +23,7 @@ function DataChartWrapper() {
   useEffect(() => {
     const fetchChartData = async () => {
       try {
-        const response = await fetch('/api/stats/sources');
+        const response = await fetch('/api/test');
         const data = await response.json();
         
         if (Array.isArray(data)) {
@@ -62,7 +62,7 @@ export default function Dashboard(){
         <div className="bg-white px-2">
         <Cards />
                 <div className="flex flex-col lg:flex-row gap-6 px-5 py-2">
-                    <div className="flex-1 rounded-2x1">
+                    <div className="flex-1 rounded-2xl">
                         <Projectschart />
                     </div>
                     <div className="flex-1 rounded-2xl">

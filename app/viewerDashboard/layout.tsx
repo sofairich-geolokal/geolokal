@@ -28,8 +28,8 @@ export default function DashboardLayout({
         <TopBar />
 
         {/* 4. Scrollable Page Content */}
-        <main className="flex-1 overflow-y-auto p-0">
-          <div className="max-w-[1600px] mx-auto">
+        <main className={`flex-1 overflow-y-auto p-0 ${pathname.includes('/map') ? 'p-0' : 'p-6'}`}>
+          <div className={`${pathname.includes('/map') ? 'h-full w-full' : 'max-w-[1600px] mx-auto'}`}>
             {children}
           </div>
         </main>

@@ -1,6 +1,7 @@
 import { query } from '@/lib/db';
 import { NextResponse } from 'next/server';
 import { getAuthUser } from '@/lib/auth';
+import { emailService } from '@/lib/email';
 
 export async function GET() {
   try {
@@ -68,7 +69,7 @@ export async function DELETE() {
 
 export async function POST(request: Request) {
   try {
-    const { username, email, password_hash } = await request.json();
+    const { username, email, password_hash, password } = await request.json();
     
     // Get logged-in user ID and info
     const userId = await getAuthUser();
@@ -98,6 +99,27 @@ export async function POST(request: Request) {
       'INSERT INTO audit_logs (actor, action, details, lgu_id) VALUES ($1, $2, $3, $4)',
       [creatorInfo.username, 'USER_CREATE', `Created viewer: ${username}`, creatorInfo.lgu_id]
     );
+
+    // Send email to the new viewer
+    try {
+      const viewerPortalLink = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
+      const emailSent = await emailService.sendViewerCreationEmail({
+        username,
+        email,
+        password: password || 'Password provided separately',
+        createdBy: creatorInfo.username,
+        viewerPortalLink
+      });
+
+      if (emailSent) {
+        console.log(`Viewer creation email sent to ${email}`);
+      } else {
+        console.warn(`Failed to send viewer creation email to ${email}`);
+      }
+    } catch (emailError) {
+      console.error('Email sending error:', emailError);
+      // Don't fail the request if email fails, but log it
+    }
 
     return NextResponse.json(newUserResult.rows[0]);
   } catch (error: any) {

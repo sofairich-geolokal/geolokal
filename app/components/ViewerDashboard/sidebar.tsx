@@ -2,28 +2,32 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation"; // Added useRouter
-import { useState } from "react";
+import { usePathname, useRouter } from "next/navigation";
+import { useState, useEffect } from "react";
 import { ChevronRight, ChevronDown } from "lucide-react";
+import { logout } from "@/app/actions/auth";
 
 const Sidebar = () => {
   const pathname = usePathname();
   const router = useRouter(); // Initialize router
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   const navItems = [
     { name: "Dashboard", href: "/viewerDashboard/dashboard", icon: "/icons/dashboard.png" },
     { name: "Data Tables", href: "/viewerDashboard/datatables", icon: "/icons/maintenance.png" },
-     { name: "Maps", href: "/viewerDashboard/map", icon: "/icons/map.png" },
+    { name: "Maps", href: "/viewerDashboard/dashboard/map", icon: "/icons/map.png" },
     //  { name: "Upload Files", href: "/viewerDashboard/upload", icon: "/icons/map.png" },
-    ];
+  ];
 
   // Logout handler
-  const handleLogout = () => {
-    // If you use cookies or local storage for auth, clear them here
-    // localStorage.removeItem('token'); 
-    // Redirect to login page
-    router.push("/viewerDashboard/viewerlogin"); 
+  const handleLogout = async () => {
+    await logout();
   };
+
   return (
     <aside className="w-[200px] bg-white text-black flex flex-col h-screen p-2 shrink-0 border-r border-gray-300">
       {/* LGU Circular Logo */}
@@ -86,6 +90,8 @@ const Sidebar = () => {
       {/* High-Contrast Logout */}
       <div className="mt-auto">
         <button 
+          key="logout-button"
+          suppressHydrationWarning={true}
           onClick={handleLogout} // Added click handler
           className="w-full bg-[#E53E3E] py-2 rounded-2xl text-sm text-white hover:bg-red-700 transition-colors active:scale-95"
         >

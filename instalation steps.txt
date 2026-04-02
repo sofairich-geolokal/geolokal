@@ -1,0 +1,14 @@
+1- git clone -b master https://github.com/sofairich-geolokal/geolokal.git
+
+2- cd geolokal
+   npm install
+
+3- [Optional]
+   3.1- To clear previous cache               npm cache clean --force
+   3.2- Increase Timeout and Retries          npm config set fetch-retries 5
+                                              npm config set fetch-retry-mintimeout 20000
+                                              npm config set fetch-retry-maxtimeout 120000
+   3.3- Use the Mirror Registry               npm install --registry=https://registry.npmjs.org/
+
+4- Install Database pkg                       npm install pg
+   Check the connection                       node test-connection.js

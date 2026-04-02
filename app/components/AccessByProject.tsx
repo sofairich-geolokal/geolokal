@@ -7,13 +7,26 @@ import { fetchAccessData } from '@/app/actions/getProjectData';
 const AccessByProject = () => {
   const [data, setData] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [maxValue, setMaxValue] = useState(10); // Dynamic max value
 
-  const maxValue = 30000; 
-  const gridLines = [0, 10000, 20000, 30000];
+  // Calculate grid lines based on max value
+  const getGridLines = (max: number) => {
+    if (max <= 5) return [0, 1, 2, 3, 4, 5];
+    if (max <= 10) return [0, 2, 4, 6, 8, 10];
+    if (max <= 20) return [0, 5, 10, 15, 20];
+    return [0, Math.ceil(max * 0.25), Math.ceil(max * 0.5), Math.ceil(max * 0.75), max];
+  };
+
+  const gridLines = getGridLines(maxValue);
 
   useEffect(() => {
     fetchAccessData().then(dbData => {
       setData(dbData);
+      // Set max value based on data (with some padding)
+      if (dbData.length > 0) {
+        const maxCount = Math.max(...dbData.map(item => item.value));
+        setMaxValue(Math.max(maxCount + 1, 5)); // At least 5, with padding
+      }
       setLoading(false);
     });
   }, []);
@@ -28,7 +41,7 @@ const AccessByProject = () => {
           {gridLines.map((line) => (
             <div key={line} className="relative w-full flex items-center">
               <span className="absolute -left-12 text-[14px] text-gray-400 font-medium">
-                {line === 0 ? '0' : `${line/1000}K`}
+                {line.toString()}
               </span>
               <div className="w-full border-t border-gray-100" />
             </div>

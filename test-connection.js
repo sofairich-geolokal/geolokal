@@ -1,61 +1,56 @@
+require('dotenv').config(); // This loads the .env file
 const { Pool } = require('pg');
+const { PrismaClient } = require('@prisma/client');
 
+// Test PG Pool connection
 const pool = new Pool({
-  user: 'postgres',
-  host: 'localhost',
-  database: 'postgres',
-  password: 'Rukhsar',
-  port: 5432,
+  user: process.env.DB_USER,
+  host: process.env.DB_HOST,
+  database: process.env.DB_NAME,
+  password: process.env.DB_PASSWORD,
+  port: process.env.DB_PORT,
+  ssl: {
+    rejectUnauthorized: false, // Required for Aiven
+  },
 });
 
-async function testConnection() {
+// Test Prisma connection
+const prisma = new PrismaClient({
+  datasources: {
+    db: {
+      url: process.env.DATABASE_URL,
+    },
+  },
+});
+
+async function testConnections() {
+  console.log('Testing database connections...\n');
+  
+  // Test PG Pool
   try {
-    console.log('Testing database connection...');
+    console.log('1. Testing PG Pool connection...');
     const result = await pool.query('SELECT NOW()');
-    console.log('✅ Connection successful:', result.rows[0].now);
-    
-    // Check if users table exists
-    const tableCheck = await pool.query(`
-      SELECT table_name FROM information_schema.tables 
-      WHERE table_schema = 'public' AND table_name = 'users'
-    `);
-    
-    if (tableCheck.rows.length === 0) {
-      console.log('❌ Users table does not exist. Creating it...');
-      
-      // Create users table
-      await pool.query(`
-        CREATE TABLE users (
-          id SERIAL PRIMARY KEY,
-          username VARCHAR(255) UNIQUE NOT NULL,
-          password_hash VARCHAR(255) NOT NULL,
-          lgu_id INTEGER,
-          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        )
-      `);
-      
-      console.log('✅ Users table created successfully');
-      
-      // Insert a test user
-      await pool.query(`
-        INSERT INTO users (username, password_hash, lgu_id) 
-        VALUES ($1, $2, $3)
-      `, ['admin', 'admin123', 1]);
-      
-      console.log('✅ Test user created (username: admin, password: admin123)');
-    } else {
-      console.log('✅ Users table exists');
-      
-      // Show existing users
-      const users = await pool.query('SELECT id, username, lgu_id FROM users');
-      console.log('Existing users:', users.rows);
-    }
-    
+    console.log('✅ PG Pool connection successful:', result.rows[0].now);
   } catch (error) {
-    console.error('❌ Database error:', error.message);
+    console.error('❌ PG Pool connection failed:', error.message);
   } finally {
     await pool.end();
   }
+
+  // Test Prisma
+  try {
+    console.log('\n2. Testing Prisma connection...');
+    await prisma.$connect();
+    console.log('✅ Prisma connection successful');
+    
+    // Test a simple query
+    const result = await prisma.$queryRaw`SELECT NOW()`;
+    console.log('✅ Prisma query successful:', result[0]);
+  } catch (error) {
+    console.error('❌ Prisma connection failed:', error.message);
+  } finally {
+    await prisma.$disconnect();
+  }
 }
 
-testConnection();
+testConnections();

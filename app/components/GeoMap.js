@@ -24,7 +24,7 @@ const GeoMap = () => {
         {/* Dynamic GeoServer Layers */}
         <Overlay checked name="Construction Areas">
           <WMSTileLayer
-            url="http://localhost:8080/geoserver/wms"
+            url={process.env.NEXT_PUBLIC_GEOSERVER_URL || "http://localhost:8080/geoserver/wms"}
             params={{
               layers: 'LGU:construction_sites', // Replace with your workspace:layer
               format: 'image/png',
@@ -36,7 +36,7 @@ const GeoMap = () => {
 
         <Overlay name="Built-up Areas">
           <WMSTileLayer
-            url="http://localhost:8080/geoserver/wms"
+            url={process.env.NEXT_PUBLIC_GEOSERVER_URL || "http://localhost:8080/geoserver/wms"}
             params={{
               layers: 'LGU:built_areas',
               format: 'image/png',

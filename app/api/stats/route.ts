@@ -77,8 +77,12 @@ export async function GET() {
     ];
 
     return NextResponse.json(dynamicData);
-  } catch (error) {
-    console.error("Database Error:", error);
-    return NextResponse.json({ error: "Failed to fetch DB stats" }, { status: 500 });
   }
+   catch (error: any) {
+    console.error("API Error in stats/sources:", error.message);
+    
+    // Return an empty array [] so the frontend doesn't show an error
+    return NextResponse.json([]); 
+  }
+  
 }

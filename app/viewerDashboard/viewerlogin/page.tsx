@@ -4,7 +4,6 @@ import Image from 'next/image';
 import { useState, useEffect } from 'react';
 import { Eye, EyeOff, Loader2 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
-import { login } from '@/app/actions/auth';
 
 export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false);
@@ -32,9 +31,38 @@ export default function LoginPage() {
         return;
       }
 
-      const result = await login(username, password, selectedCityId);
+      // Call API route instead of server action
+      const response = await fetch('/api/viewer/login', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          username,
+          password,
+          selectedCityId
+        })
+      });
+
+      const result = await response.json();
       
       if (result.success) {
+        // Save user data to localStorage for TopBar display
+        if (result.user) {
+          localStorage.setItem('loggedInUser', JSON.stringify(result.user));
+        }
+        
+        // Save location to localStorage for TopBar display
+        if (selectedCityId) {
+          const locationMap: { [key: string]: string } = {
+            '1': 'Ibaan, Batangas',
+            '2': 'Teresa, Rizal', 
+            '3': 'Binangonan, Rizal'
+          };
+          const locationName = locationMap[selectedCityId] || 'Ibaan, Batangas';
+          localStorage.setItem('userLocation', locationName);
+        }
+        
         // Clear sessionStorage after successful login
         sessionStorage.removeItem('selectedCityId');
         router.push('/viewerDashboard/dashboard');
@@ -62,7 +90,7 @@ export default function LoginPage() {
       </div>
 
       <div className="bg-white p-8 sm:p-12 rounded-[40px] shadow-2xl w-full max-w-md border border-gray-50">
-        <p className="text-gray-500 mb-2 font-medium">Welcome to IBAAN LGU</p>
+        <p className="text-gray-500 mb-2 font-medium">Welcome to GeoLokal Viewer Portal</p>
         <h1 className="text-5xl font-bold mb-10 text-black tracking-tight">Login</h1>
         <form className="space-y-6" onSubmit={handleLogin}>
           {error && (

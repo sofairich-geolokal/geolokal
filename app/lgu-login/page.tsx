@@ -23,9 +23,10 @@ export default function LoginPage() {
     setError(null);
 
     try {
-      const result = await login(username, password);
+      const result = await login(username, password, undefined, 'lgu');
       
       if (result.success) {
+        // Successful login redirects to dashboard
         router.push('/lgu-dashboard/dashboard');
         router.refresh();
       } else {
