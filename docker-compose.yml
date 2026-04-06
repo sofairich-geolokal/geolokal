@@ -1,0 +1,90 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgis/postgis:15-3.3
+    container_name: geolokal_postgres
+    environment:
+      POSTGRES_DB: geolokal
+      POSTGRES_USER: geolokal_user
+      POSTGRES_PASSWORD: geolokal_password
+      POSTGRES_INITDB_ARGS: "--encoding=UTF-8"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./database-schema.sql:/docker-entrypoint-initdb.d/01-schema.sql
+    ports:
+      - "5432:5432"
+    networks:
+      - geolokal_network
+    restart: unless-stopped
+
+  # GeoServer
+  geoserver:
+    image: kartoza/geoserver:2.23.2
+    container_name: geolokal_geoserver
+    environment:
+      - GEOSERVER_DATA_DIR=/opt/geoserver/data_dir
+      - INITIAL_MEMORY=2G
+      - MAXIMUM_MEMORY=4G
+      - GEOSERVER_ADMIN_USER=admin
+      - GEOSERVER_ADMIN_PASSWORD=geoserver
+      - GEOSERVER_CONTEXT_ROOT=geoserver
+    volumes:
+      - geoserver_data:/opt/geoserver/data_dir
+      - ./geoserver_data:/opt/geoserver/data_dir/workspaces
+    ports:
+      - "8080:8080"
+    depends_on:
+      - postgres
+    networks:
+      - geolokal_network
+    restart: unless-stopped
+
+  # GeoNode
+  geonode:
+    image: geonode/geonode:4.0.3
+    container_name: geolokal_geonode
+    environment:
+      - DATABASE_URL=postgres://geolokal_user:geolokal_password@postgres:5432/geolokal
+      - GEOSERVER_URL=http://geoserver:8080/geoserver
+      - GEONODE_ADMIN_USER=admin
+      - GEONODE_ADMIN_PASSWORD=geonode
+      - SITEURL=http://localhost:8000
+      - ALLOWED_HOSTS=localhost,127.0.0.1
+    volumes:
+      - geonode_data:/var/www/geonode
+      - ./geonode_data:/mnt/data
+    ports:
+      - "8000:8000"
+    depends_on:
+      - postgres
+      - geoserver
+    networks:
+      - geolokal_network
+    restart: unless-stopped
+
+  # Nginx Reverse Proxy (Optional)
+  nginx:
+    image: nginx:alpine
+    container_name: geolokal_nginx
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf
+    ports:
+      - "80:80"
+      - "443:443"
+    depends_on:
+      - geonode
+      - geoserver
+    networks:
+      - geolokal_network
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+  geoserver_data:
+  geonode_data:
+
+networks:
+  geolokal_network:
+    driver: bridge

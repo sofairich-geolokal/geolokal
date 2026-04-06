@@ -1,0 +1,324 @@
+generator client {
+  provider        = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model TaxParcel {
+  id         Int       @id @default(autoincrement())
+  parcel_no  String    @unique @db.VarChar(50)
+  owner_name String?   @db.VarChar(100)
+  valuation  Decimal?  @db.Decimal(15, 2)
+  createdAt  DateTime? @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@map("tax_parcels")
+}
+
+model CbmsIndicator {
+  id              Int       @id @default(autoincrement())
+  indicator_code  String    @db.VarChar(20)
+  indicator_value Decimal?  @db.Decimal(10, 2)
+  status          String?   @db.VarChar(20)
+  updated_at      DateTime? @default(now()) @db.Timestamptz(6)
+
+  @@map("cbms_indicators")
+}
+
+model User {
+  id               Int               @id @default(autoincrement())
+  username         String            @unique @db.VarChar(50)
+  email            String            @unique @db.VarChar(100)
+  password_hash    String
+  role             String?           @db.VarChar(20)
+  lgu_id           Int?
+  createdAt        DateTime?         @default(now()) @map("created_at") @db.Timestamp(6)
+  created_by       String?           @db.VarChar(50)
+  last_login       DateTime?         @default(now()) @db.Timestamptz(6)
+  is_active        Boolean?          @default(true)
+  audit_logs       AuditLog[]
+  map_layers       map_layers[]
+  city_muni_master city_muni_master? @relation(fields: [lgu_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  viewer_activities viewer_activity[]
+  layer_bookmarks   layer_bookmark[]
+  measurement_data  measurement_data[]
+  drawing_data      drawing_data[]
+  saved_maps        saved_maps[]
+  download_requests download_requests[]
+
+  @@map("users")
+}
+
+model AuditLog {
+  id               Int               @id @default(autoincrement())
+  timestamp        DateTime?         @default(now()) @db.Timestamp(6)
+  actor_id         Int?
+  action           String?           @db.VarChar(100)
+  details          String?
+  lgu_id           Int?
+  actor            String?
+  created_by       String?
+  users            User?             @relation(fields: [actor_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  city_muni_master city_muni_master? @relation(fields: [lgu_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@map("audit_logs")
+}
+
+model city_muni_master {
+  id         Int          @id @default(autoincrement())
+  name       String       @unique @db.VarChar(100)
+  province   String?      @db.VarChar(100)
+  created_at DateTime?    @default(now()) @db.Timestamp(6)
+  audit_logs AuditLog[]
+  map_layers map_layers[]
+  projects   projects[]
+  users      User[]
+}
+
+model map_layers {
+  id                 Int                      @id @default(autoincrement())
+  lgu_id             Int?
+  category_id        Int?
+  layer_name         String                   @db.VarChar(100)
+  geom               Unsupported("geometry")?
+  metadata           Json?
+  uploaded_by        Int?
+  created_at         DateTime?                @default(now()) @db.Timestamp(6)
+  is_visible         Boolean?                 @default(true)
+  is_downloadable    Boolean?                 @default(false)
+  layer_type         String?                  @db.VarChar(50) // 'vector', 'raster', 'wms', 'wfs'
+  style_config       Json?                    // Layer styling configuration
+  bbox               Json?                    // Bounding box coordinates
+  projection         String?                  @db.VarChar(50) @default("EPSG:4326")
+  min_zoom           Int?                     @default(0)
+  max_zoom           Int?                     @default(20)
+  attribution        String?                  @db.VarChar(255)
+  opacity            Float?                   @default(1.0)
+  z_index            Int?                     @default(0)
+  project_categories project_categories?      @relation(fields: [category_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  city_muni_master   city_muni_master?        @relation(fields: [lgu_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  users              User?                    @relation(fields: [uploaded_by], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  viewer_activities  viewer_activity[]
+  layer_bookmarks    layer_bookmark[]
+  download_requests  download_requests[]
+
+  @@index([geom], map: "idx_map_layers_geom", type: Gist)
+  @@index([is_visible])
+  @@index([layer_type])
+}
+
+model project_categories {
+  id         Int          @id @default(autoincrement())
+  name       String       @db.VarChar(100)
+  map_layers map_layers[]
+  projects   projects[]
+}
+
+model projects {
+  id                 Int                 @id @default(autoincrement())
+  lgu_id             Int?
+  category_id        Int?
+  project_name       String              @db.VarChar(255)
+  description        String?
+  status             String?             @db.VarChar(50)
+  created_at         DateTime?           @default(now()) @db.Timestamp(6)
+  project_categories project_categories? @relation(fields: [category_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  city_muni_master   city_muni_master?   @relation(fields: [lgu_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  source_links       project_source_links[]
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model spatial_ref_sys {
+  srid      Int     @id
+  auth_name String? @db.VarChar(256)
+  auth_srid Int?
+  srtext    String? @db.VarChar(2048)
+  proj4text String? @db.VarChar(2048)
+}
+
+model system_status {
+  id             Int       @id @default(autoincrement())
+  server_name    String?   @default("Main-Server") @db.VarChar(50)
+  last_reboot    DateTime? @default(dbgenerated("(CURRENT_TIMESTAMP - '156:00:00'::interval)")) @db.Timestamptz(6)
+  is_online      Boolean?  @default(true)
+  last_heartbeat DateTime? @default(now()) @db.Timestamptz(6)
+}
+
+model viewer_activity {
+  id               Int       @id @default(autoincrement())
+  user_id          Int?
+  session_id       String    @db.VarChar(255)
+  activity_type    String    @db.VarChar(50) // 'view', 'zoom', 'pan', 'layer_toggle', 'measurement', 'draw', 'download'
+  activity_data    Json?     // Detailed activity information
+  timestamp        DateTime? @default(now()) @db.Timestamptz(6)
+  ip_address       String?   @db.VarChar(45)
+  user_agent       String?   @db.VarChar(500)
+  map_bounds       Json?     // Current map view bounds
+  zoom_level       Float?
+  active_layers    Json?     // Array of active layer IDs
+  duration_ms      Int?      // Activity duration in milliseconds
+  layer_id         Int?
+  users            User?     @relation(fields: [user_id], references: [id], onDelete: SetNull)
+  map_layers       map_layers? @relation(fields: [layer_id], references: [id], onDelete: SetNull)
+
+  @@index([user_id])
+  @@index([session_id])
+  @@index([activity_type])
+  @@index([timestamp])
+}
+
+model layer_bookmark {
+  id          Int       @id @default(autoincrement())
+  user_id     Int?
+  layer_id    Int?
+  bookmark_name String  @db.VarChar(100)
+  bookmark_config Json? // Custom layer configuration
+  created_at  DateTime? @default(now()) @db.Timestamptz(6)
+  is_public   Boolean?  @default(false)
+  users       User?     @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  map_layers  map_layers? @relation(fields: [layer_id], references: [id], onDelete: Cascade)
+
+  @@index([user_id])
+  @@index([layer_id])
+  @@index([is_public])
+}
+
+model measurement_data {
+  id          Int       @id @default(autoincrement())
+  user_id     Int?
+  session_id  String    @db.VarChar(255)
+  measurement_type String @db.VarChar(50) // 'distance', 'area', 'coordinates'
+  geometry    Unsupported("geometry")?
+  measurement_value Float?
+  unit        String?   @db.VarChar(20)
+  coordinates Json?     // Measurement points
+  timestamp   DateTime? @default(now()) @db.Timestamptz(6)
+  layer_id    Int?
+  users       User?     @relation(fields: [user_id], references: [id], onDelete: SetNull)
+
+  @@index([user_id])
+  @@index([session_id])
+  @@index([measurement_type])
+}
+
+model drawing_data {
+  id          Int       @id @default(autoincrement())
+  user_id     Int?
+  session_id  String    @db.VarChar(255)
+  drawing_type String   @db.VarChar(50) // 'point', 'line', 'polygon', 'circle', 'rectangle'
+  geometry    Unsupported("geometry")?
+  properties  Json?     // Drawing properties and styling
+  timestamp   DateTime? @default(now()) @db.Timestamptz(6)
+  layer_id    Int?
+  is_saved    Boolean?  @default(false)
+  users       User?     @relation(fields: [user_id], references: [id], onDelete: SetNull)
+
+  @@index([user_id])
+  @@index([session_id])
+  @@index([drawing_type])
+}
+
+model export_request {
+  id                Int       @id @default(autoincrement())
+  user_id           Int?
+  layers            Json      // Array of layer IDs
+  format            String    @db.VarChar(20) // 'shapefile', 'geojson', 'kml', 'csv', 'geopackage'
+  bounds            Json?     // Bounding box coordinates
+  projection        String    @db.VarChar(50) @default("EPSG:4326")
+  include_attributes Boolean  @default(true)
+  email             String?   @db.VarChar(255)
+  status            String    @db.VarChar(20) @default("processing") // 'processing', 'completed', 'failed'
+  download_url      String?   @db.VarChar(500)
+  file_size_bytes   Int?
+  requested_at      DateTime  @default(now()) @db.Timestamptz(6)
+  completed_at      DateTime? @db.Timestamptz(6)
+  expires_at        DateTime? @db.Timestamptz(6)
+
+  @@index([user_id])
+  @@index([status])
+  @@index([requested_at])
+}
+
+model saved_maps {
+  id             Int       @id @default(autoincrement())
+  user_id        Int?
+  map_name       String    @db.VarChar(255)
+  map_description String?   @db.VarChar(500)
+  map_config     Json      // Complete map configuration
+  basemap        String    @db.VarChar(100) @default("Open Street Map")
+  center_lat     Float     @default(13.4124)
+  center_lng     Float     @default(122.5619)
+  zoom_level     Int       @default(6)
+  layers_config  Json?     // Layer configurations and styling
+  is_public      Boolean   @default(false)
+  created_at     DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updated_at     DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  users          User?     @relation(fields: [user_id], references: [id], onDelete: SetNull)
+
+  @@index([user_id])
+  @@index([is_public])
+  @@index([created_at])
+  @@map("saved_maps")
+}
+
+model source_types {
+  id          Int       @id @default(autoincrement())
+  name        String    @unique @db.VarChar(100)
+  description String?   @db.VarChar(500)
+  color       String?   @db.VarChar(7) @default("#3b82f6")
+  is_active   Boolean?  @default(true)
+  created_at  DateTime? @default(now()) @db.Timestamptz(6)
+  projects    project_source_links[]
+
+  @@map("source_types")
+}
+
+model project_source_links {
+  id            Int       @id @default(autoincrement())
+  project_id    Int
+  source_type_id Int
+  created_at    DateTime? @default(now()) @db.Timestamptz(6)
+  projects      projects?     @relation(fields: [project_id], references: [id], onDelete: Cascade)
+  source_types  source_types? @relation(fields: [source_type_id], references: [id], onDelete: Cascade)
+
+  @@unique([project_id, source_type_id])
+  @@map("project_source_links")
+}
+
+model download_requests {
+  id                 Int       @id @default(autoincrement())
+  user_id            Int?
+  layer_id           Int?
+  layer_name         String    @db.VarChar(255)
+  official_email     String    @db.VarChar(100)
+  client_name        String    @db.VarChar(100)
+  sex                String    @db.VarChar(20) @default("Not Specified")
+  address            String?   @db.VarChar(500)
+  office_agency      String?   @db.VarChar(255)
+  sector             String?   @db.VarChar(100)
+  purpose            String?   @db.VarChar(500)
+  official_contact_no String?   @db.VarChar(50)
+  agree_terms        Boolean   @default(false)
+  certify_info       Boolean   @default(false)
+  bbox               Json?     // Bounding box for download
+  map_extent         Json?     // Map extent coordinates
+  requested_format   String    @db.VarChar(50) @default("shapefile")
+  request_id         String    @unique @db.VarChar(50) // Unique request identifier
+  status             String    @db.VarChar(20) @default("pending") // 'pending', 'processing', 'completed', 'failed', 'expired'
+  download_link      String?   @db.VarChar(500)
+  created_at         DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  processed_at       DateTime? @map("processed_at") @db.Timestamptz(6)
+  expires_at         DateTime  @map("expires_at") @db.Timestamptz(6)
+  users              User?     @relation(fields: [user_id], references: [id], onDelete: SetNull)
+  map_layers         map_layers? @relation(fields: [layer_id], references: [id], onDelete: SetNull)
+
+  @@index([user_id])
+  @@index([layer_id])
+  @@index([request_id])
+  @@index([status])
+  @@index([created_at])
+  @@index([expires_at])
+  @@map("download_requests")
+}
