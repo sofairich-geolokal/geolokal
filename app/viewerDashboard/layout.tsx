@@ -1,6 +1,6 @@
 'use client';
 
-import React from 'react';
+import React, { useEffect } from 'react';
 import ViewerSidebar from '@/app/components/ViewerDashboard/sidebar';
 import { usePathname } from 'next/navigation';
 import TopBar from '../components/ViewerDashboard/topbar';
@@ -13,6 +13,10 @@ export default function DashboardLayout({
   const pathname = usePathname();
   const isLoginPage = pathname === '/viewerDashboard/viewerlogin';
   const isLocationSelectionPage = pathname === '/viewerDashboard/location-selection';
+
+  useEffect(() => {
+    document.title = 'Geolokal Viewer';
+  }, []);
 
   if (isLoginPage || isLocationSelectionPage) {
     return <>{children}</>;

@@ -40,7 +40,7 @@ export default function LocationSelection() {
         <div className="text-center">
           <div className="mb-8">
             <Image 
-              src="/logo.png" 
+              src="/images/logolg.png" 
               alt="GEOLOKAL Logo" 
               width={200} 
               height={80} 

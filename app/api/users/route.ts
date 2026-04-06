@@ -71,6 +71,13 @@ export async function POST(request: Request) {
   try {
     const { username, email, password_hash, password } = await request.json();
     
+    // Safely capture the password regardless of whether the frontend sends 'password' or 'password_hash'
+    const finalPassword = password_hash || password;
+
+    if (!finalPassword) {
+      return NextResponse.json({ error: 'Password is required' }, { status: 400 });
+    }
+    
     // Get logged-in user ID and info
     const userId = await getAuthUser();
     if (!userId) {
@@ -92,12 +99,13 @@ export async function POST(request: Request) {
       RETURNING username, email, password_hash, role, 
                 to_char(created_at, 'Mon DD, YYYY HH:MI AM') as created`;
     
-    const newUserResult = await query(userSql, [username, email, password_hash, creatorInfo.lgu_id, creatorInfo.username]);
+    // Pass finalPassword here so it is never null
+    const newUserResult = await query(userSql, [username, email, finalPassword, creatorInfo.lgu_id, creatorInfo.username]);
     
-    // Create Audit Log entry
+    // Create Audit Log entry (FIXED: Added table_name column and 'users' value)
     await query(
-      'INSERT INTO audit_logs (actor, action, details, lgu_id) VALUES ($1, $2, $3, $4)',
-      [creatorInfo.username, 'USER_CREATE', `Created viewer: ${username}`, creatorInfo.lgu_id]
+      'INSERT INTO audit_logs (actor, action, details, lgu_id, table_name) VALUES ($1, $2, $3, $4, $5)',
+      [creatorInfo.username, 'USER_CREATE', `Created viewer: ${username}`, creatorInfo.lgu_id, 'users']
     );
 
     // Send email to the new viewer
@@ -106,7 +114,7 @@ export async function POST(request: Request) {
       const emailSent = await emailService.sendViewerCreationEmail({
         username,
         email,
-        password: password || 'Password provided separately',
+        password: finalPassword, // Send the extracted password in the email
         createdBy: creatorInfo.username,
         viewerPortalLink
       });

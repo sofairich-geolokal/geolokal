@@ -43,7 +43,14 @@ export async function GET() {
     // Replace 'action' with your actual log column name
     const successLogsResult = await query("SELECT COUNT(*) as count FROM audit_logs WHERE action LIKE '%SUCCESS%'");
     const successCount = parseInt(successLogsResult.rows[0]?.count || '0');
-    const uptime = ((successCount / totalLogs) * 100).toFixed(1);
+    
+    // Fix NaN issue: handle division by zero
+    let uptime;
+    if (totalLogs === 0) {
+      uptime = "100.0"; // Default to 100% if no logs exist
+    } else {
+      uptime = ((successCount / totalLogs) * 100).toFixed(1);
+    }
 
     const dynamicData = [
       { 

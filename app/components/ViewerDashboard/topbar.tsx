@@ -75,7 +75,7 @@ const TopBar = () => {
 
   return (
     <header className="h-16 bg-white border-b border-gray-300 px-8 flex items-center justify-between">
-      <div className="text-sm font-semibold text-gray-500">
+      <div className="text-sm font-normal text-gray-900">
         Dashboard / User / Viewer
       </div>
       <div className="text-right">

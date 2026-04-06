@@ -23,7 +23,7 @@ function DataChartWrapper() {
   useEffect(() => {
     const fetchChartData = async () => {
       try {
-        const response = await fetch('/api/test');
+        const response = await fetch('/api/stats/sources');
         const data = await response.json();
         
         if (Array.isArray(data)) {

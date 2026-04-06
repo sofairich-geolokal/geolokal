@@ -12,6 +12,8 @@ interface SourceData {
   lastUpdated: string;
   source: string;
   description: string;
+  projectCount?: number;
+  linkedProjects?: boolean;
 }
 
 export default function SourceTypesChart({ data }: { data: SourceData[] }) {
@@ -103,6 +105,10 @@ export default function SourceTypesChart({ data }: { data: SourceData[] }) {
           <span>📈 Total Records: {data[hoveredIndex]?.value || 0}</span>
           <span>🔄 Status: {data[hoveredIndex]?.status || 'Unknown'}</span>
           <span>🗄️ Source: {data[hoveredIndex]?.source || 'Database'}</span>
+          <span>🔗 Linked Projects: {data[hoveredIndex]?.projectCount || 0}</span>
+          {data[hoveredIndex]?.linkedProjects && (
+            <span className="text-green-400">✓ Connected to Projects</span>
+          )}
           <span>⏰ Last Updated: {data[hoveredIndex]?.lastUpdated ? new Date(data[hoveredIndex].lastUpdated).toLocaleString() : 'Not available'}</span>
         </div>
       )}

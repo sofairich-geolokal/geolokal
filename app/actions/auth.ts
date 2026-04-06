@@ -4,7 +4,7 @@ import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
 import { query } from '@/lib/db';
 
-export async function login(username: string, password: string, selectedCityId?: string, targetDashboard?: 'lgu' | 'viewer') {
+export async function login(username: string, password: string, selectedCityId?: string, targetDashboard?: 'lgu' | 'viewer' | 'superadmin') {
   try {
     console.log(' LOGIN ATTEMPT:', { username, selectedCityId, targetDashboard });
     
@@ -35,6 +35,9 @@ export async function login(username: string, password: string, selectedCityId?:
       }
       if (targetDashboard === 'viewer' && user.role.toLowerCase() !== 'viewer') {
         return { success: false, error: 'Only viewer role can access viewer dashboard.' };
+      }
+      if (targetDashboard === 'superadmin' && user.role.toLowerCase() !== 'superadmin') {
+        return { success: false, error: 'Only superadmin role can access superadmin dashboard.' };
       }
     }
 
@@ -118,5 +121,15 @@ export async function logoutLgu() {
   } catch (error: any) {
     console.error('LOGOUT ERROR:', error.message);
   }
-  redirect('/lgu-login');
+  redirect('/lgu-dashboard/login');
+}
+
+export async function logoutSuperadmin() {
+  try {
+    const cookieStore = await cookies();
+    cookieStore.delete('auth_token');
+  } catch (error: any) {
+    console.error('LOGOUT ERROR:', error.message);
+  }
+  redirect('/superadmin/login');
 }

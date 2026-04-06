@@ -14,6 +14,14 @@ interface Project {
   accessLevel: string; 
   lastUpdated: string;
   status: 'In Progress' | 'Published' | 'Syncing' | 'Draft' | 'Failed';
+  sourceTypes?: SourceType[];
+}
+
+interface SourceType {
+  id: number;
+  name: string;
+  description?: string;
+  color: string;
 }
 
 const ProjectManagement = () => {
