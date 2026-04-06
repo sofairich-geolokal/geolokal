@@ -159,6 +159,34 @@ const MapContent: React.FC<MapContentProps> = ({ layers, selectedCategory }) => 
           isHighlighted={selectedCategory === 'waterways'}
         />
 
+        {/* Enhanced Layer Integration */}
+        {layers.boundary && (
+          <div className="absolute top-4 left-4 z-[1000] bg-white/95 backdrop-blur-md rounded-lg shadow-lg p-2 text-xs">
+            <div className="flex items-center gap-2">
+              <div className="w-3 h-1 bg-red-600"></div>
+              <span className="text-gray-700">Administrative Boundaries: Active</span>
+            </div>
+          </div>
+        )}
+        
+        {layers.roadNetworks && (
+          <div className="absolute top-4 left-4 z-[1000] bg-white/95 backdrop-blur-md rounded-lg shadow-lg p-2 text-xs mt-8">
+            <div className="flex items-center gap-2">
+              <div className="w-3 h-1 bg-gray-800"></div>
+              <span className="text-gray-700">Road Networks: Active (Dark)</span>
+            </div>
+          </div>
+        )}
+        
+        {layers.waterways && (
+          <div className="absolute top-4 left-4 z-[1000] bg-white/95 backdrop-blur-md rounded-lg shadow-lg p-2 text-xs mt-16">
+            <div className="flex items-center gap-2">
+              <div className="w-3 h-1 bg-sky-300"></div>
+              <span className="text-gray-700">Waterways: Active (Sky Blue)</span>
+            </div>
+          </div>
+        )}
+
         {/* Advanced Map Tools */}
         <AdvancedMapTools 
           map={map} 

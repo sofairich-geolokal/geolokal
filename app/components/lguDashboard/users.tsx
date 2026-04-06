@@ -15,11 +15,11 @@ const UserManagement = () => {
   const [formData, setFormData] = useState({ username: '', email: '' });
   const [loading, setLoading] = useState(true);
 
-  // Pagination State - Supporting User Journey Story 2 [cite: 168]
+  // Pagination State - Supporting User Journey Story 2
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 2;
 
-  // Function to generate a strong 10-character alphanumeric password [cite: 227]
+  // Function to generate a strong 10-character alphanumeric password
   const generateStrongPassword = () => {
     const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
     return Array.from({ length: 10 }, () => chars.charAt(Math.floor(Math.random() * chars.length))).join('');
@@ -59,15 +59,21 @@ const UserManagement = () => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           ...formData,
-          password_hash: strongPassword, // Changed from 'password' to 'password_hash'
-          role: 'Viewer' // Role is fixed to Viewer per prototype requirements [cite: 226]
+          password: strongPassword, // Reverted to 'password' for the API request payload
+          role: 'Viewer' // Role is fixed to Viewer per prototype requirements
         }),
       });
 
       const result = await response.json();
 
       if (!response.ok) {
-        alert(`Database Error: ${result.error || "Failed to create user"}`);
+        // Show user-friendly error instead of raw database error
+        const errorMsg = result.error || "Failed to create user";
+        if (errorMsg.includes("value too long") || errorMsg.includes("character varying")) {
+          alert("Unable to create viewer. Please contact system administrator.");
+        } else {
+          alert(`Error: ${errorMsg}`);
+        }
         return;
       }
 
@@ -80,7 +86,7 @@ const UserManagement = () => {
     }
   };
 
-  // Updated Clear Users function to delete from Database [cite: 236]
+  // Updated Clear Users function to delete from Database
   const clearUsers = async () => {
     const confirmDelete = window.confirm("Are you sure you want to delete all viewers from the database?");
     if (!confirmDelete) return;
@@ -139,7 +145,7 @@ const UserManagement = () => {
       md:items-center mb-4 gap-4">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">User Management</h1>
-          <p className="text-gray-500 text-sm italic">Authenticated via GeoLokal Data Tier[cite: 75].</p>
+          <p className="text-gray-500 text-sm italic">Authenticated via GeoLokal Data Tier.</p>
         </div>
         <div className="flex gap-3">
           <button onClick={exportToCSV} className="bg-[#cc7a00] hover:bg-[#b36b00] text-white px-6 py-2.5 rounded-lg font-bold transition-all">Export Users</button>

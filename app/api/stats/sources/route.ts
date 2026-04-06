@@ -5,87 +5,96 @@ export async function GET() {
   try {
     console.log('Starting API call to /api/stats/sources');
     
-    // 1. Fetch all counts in parallel
-    const [osmRes, geoRes, cbmsRes, taxRes] = await Promise.all([
-      query("SELECT COUNT(*)::int as count FROM map_layers WHERE source = 'OSM'"),
-      query("SELECT COUNT(*)::int as count FROM map_layers WHERE source = 'Gov-PH'"),
-      query("SELECT COUNT(*)::int as count FROM cbms_indicators"),
-      query("SELECT COUNT(*)::int as count FROM tax_parcels")
-    ]);
+    // Query to get source types with their actual data counts
+    const sourceQuery = `
+      SELECT 
+        st.id,
+        st.name,
+        st.description,
+        st.color,
+        st.is_active,
+        COALESCE(data_counts.record_count, 0) as record_count
+      FROM source_types st
+      LEFT JOIN (
+        SELECT 
+          source_type_id,
+          SUM(record_count) as record_count
+        FROM (
+          -- Map layers data
+          SELECT 
+            CASE 
+              WHEN source = 'OSM' THEN 1
+              WHEN source = 'Gov-PH' THEN 2
+            END as source_type_id,
+            COUNT(*) as record_count
+          FROM map_layers 
+          WHERE source IN ('OSM', 'Gov-PH')
+          GROUP BY source_type_id
+          
+          UNION ALL
+          
+          -- CBMS indicators data
+          SELECT 
+            3 as source_type_id,
+            COUNT(*) as record_count
+          FROM cbms_indicators
+          
+          UNION ALL
+          
+          -- Tax parcels data
+          SELECT 
+            4 as source_type_id,
+            COUNT(*) as record_count
+          FROM tax_parcels
+        ) all_data
+        GROUP BY source_type_id
+      ) data_counts ON st.id = data_counts.source_type_id
+      WHERE st.is_active = true
+      ORDER BY st.name;
+    `;
     
-    console.log('Database queries completed successfully');
+    const result = await query(sourceQuery);
+    console.log('Source types query completed successfully');
 
-    // 2. Parse results safely (handling potential nulls/undefined)
-    const osmCount = parseInt(osmRes.rows[0]?.count || '0');
-    const geoCount = parseInt(geoRes.rows[0]?.count || '0');
-    const cbmsCount = parseInt(cbmsRes.rows[0]?.count || '0');
-    const taxCount = parseInt(taxRes.rows[0]?.count || '0');
+    if (!result.rows || result.rows.length === 0) {
+      console.warn("No source types found, returning fallback data");
+      return NextResponse.json([]);
+    }
 
-    // 3. Calculate total for percentage logic
-    const total = osmCount + geoCount + cbmsCount + taxCount;
+    // Calculate total for percentage logic
+    const totalRecordCount = result.rows.reduce((sum, row) => sum + parseInt(row.record_count || '0'), 0);
 
-    // 4. Helper to calculate percentage (Returns 0 if total is 0)
+    // Helper to calculate percentage
     const calculatePct = (count: number) => {
-      if (total === 0) return 0;
-      return parseFloat(((count / total) * 100).toFixed(1));
+      if (totalRecordCount === 0) return 0;
+      return parseFloat(((count / totalRecordCount) * 100).toFixed(1));
     };
 
-    // 5. Final Data structure for the Chart
-    const dynamicSourceData = [
-      { 
-        label: 'Open Street Map (OSM)', 
-        percentage: calculatePct(osmCount), 
-        value: osmCount, 
-        color: '#1a1a1a',
-        status: osmCount > 0 ? 'Active' : 'Inactive',
-        lastUpdated: new Date().toISOString(),
-        source: 'GeoLokal Database',
-        description: 'Open source mapping data'
-      },
-      { 
-        label: 'Geo portal Gov-PH', 
-        percentage: calculatePct(geoCount), 
-        value: geoCount, 
-        color: '#f9a825',
-        status: geoCount > 0 ? 'Active' : 'Inactive',
-        lastUpdated: new Date().toISOString(),
-        source: 'GeoLokal Database',
-        description: 'Government geographic data'
-      },
-      { 
-        label: 'Community Monitoring System', 
-        percentage: calculatePct(cbmsCount), 
-        value: cbmsCount, 
-        color: '#4caf50',
-        status: cbmsCount > 0 ? 'Active' : 'Inactive',
-        lastUpdated: new Date().toISOString(),
-        source: 'GeoLokal Database',
-        description: 'CBMS indicators data'
-      },
-      { 
-        label: 'Tax Parcel Mapping', 
-        percentage: calculatePct(taxCount), 
-        value: taxCount, 
-        color: '#ef5350',
-        status: taxCount > 0 ? 'Active' : 'Inactive',
-        lastUpdated: new Date().toISOString(),
-        source: 'GeoLokal Database',
-        description: 'Tax parcel boundaries'
-      },
-    ];
+    // Transform data for the chart
+    const sourceData = result.rows.map((row) => ({
+      label: row.name,
+      percentage: calculatePct(parseInt(row.record_count || '0')),
+      value: parseInt(row.record_count || '0'),
+      color: row.color || '#3b82f6',
+      status: parseInt(row.record_count || '0') > 0 ? 'Active' : 'Inactive',
+      lastUpdated: new Date().toISOString(),
+      source: 'GeoLokal Database',
+      description: row.description || 'Data source',
+      projectCount: 0, // No project linking yet
+      linkedProjects: false
+    }));
 
     // Add debug logging
-    console.log('API Response:', JSON.stringify(dynamicSourceData, null, 2));
+    console.log('API Response:', JSON.stringify(sourceData, null, 2));
 
-    return NextResponse.json(dynamicSourceData);
+    return NextResponse.json(sourceData);
   } 
   catch (error: any) {
-   console.error("API Error in stats/sources:", error);
-   console.error("Error message:", error?.message);
-   console.error("Error stack:", error?.stack);
+    console.error("API Error in stats/sources:", error);
+    console.error("Error message:", error?.message);
+    console.error("Error stack:", error?.stack);
     
-    // CRITICAL: Return an empty array [] instead of an object {}
-    // This allows your frontend .map() or Array.isArray() checks to pass.
+    // Return empty array so the frontend doesn't crash
     return NextResponse.json([]);
-   }
+  }
 }

@@ -14,8 +14,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "LGU User Dashboard",
-  description: "Management system for Ibaan, Batangas",
+  title: "GeoLokal",
+  description: "Geospatial Management System",
 };
 
 export default function RootLayout({
@@ -25,18 +25,15 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" suppressHydrationWarning>
+      <head>
+        <link rel="icon" href="/favicon(2).ico" />
+        <link rel="shortcut icon" href="/favicon(2).ico" />
+      </head>
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
         suppressHydrationWarning
       >
-        <div className="flex h-screen w-full overflow-hidden">
-          
-
-          {/* Content Area */}
-          <div className="flex-1 flex flex-col min-w-0">
-            {children}
-          </div>
-        </div>
+        {children}
       </body>
     </html>
   );

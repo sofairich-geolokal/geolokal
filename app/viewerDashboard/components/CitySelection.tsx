@@ -45,7 +45,7 @@ export default function CitySelection() {
 
       {/* Logo */}
       <div className="absolute top-6 left-6 w-24 h-24">
-        <Image src="/images/logo.png" alt="GEOLOKAL" fill className="object-contain" priority />
+        <Image src="/images/logolg.png" alt="GEOLOKAL" fill className="object-contain" priority />
       </div>
 
       {/* City Selection Content */}

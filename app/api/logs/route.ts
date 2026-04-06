@@ -42,7 +42,7 @@ export async function GET() {
       return NextResponse.json({ error: 'audit_logs table does not exist' }, { status: 500 });
     }
 
-    // Fetch audit logs for the logged-in user's LGU
+    // Fetch ALL audit logs (show all actions to LGU users)
     const auditSql = `
       SELECT 
         to_char(created_at, 'Mon DD, YYYY HH:MI AM') as timestamp,
@@ -53,9 +53,9 @@ export async function GET() {
         id,
         'audit' as log_type
       FROM audit_logs 
-      WHERE lgu_id = $1`;
+      ORDER BY created_at DESC`;
       
-    const auditResult = await query(auditSql, [loggedInUser.lgu_id]);
+    const auditResult = await query(auditSql);
     console.log("Logs API: Found audit logs:", auditResult.rows.length);
 
     // Check if viewer_activity table exists

@@ -27,17 +27,17 @@ export async function getTopbarData(userId: number | string) {
     const result = await query(text, [userId]);
 
     if (result.rows.length === 0) {
-      return { username: 'Guest', lgu: 'N/A', role: 'Viewer' };
+      return { username: 'Guest', location: 'N/A', role: 'Viewer' };
     }
 
     const row = result.rows[0];
     return {
       username: row.username,
       role: row.role, 
-      lgu: row.location || 'Global Access',
+      location: row.location || 'Global Access',
     };
   } catch (error) {
     console.error("Database Error:", error);
-    return { username: 'Error', lgu: 'Database Fail', role: '' };
+    return { username: 'Error', location: 'Database Fail', role: '' };
   }
 }
