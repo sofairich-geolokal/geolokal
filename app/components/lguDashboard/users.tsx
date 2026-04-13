@@ -5,15 +5,31 @@ import React, { useState, useEffect } from 'react';
 interface User {
   username: string;
   email: string;
-  password_hash: string; // Changed from 'password' to 'password_hash'
+  password_hash: string; 
   role: string;
   created: string;
+}
+
+interface ViewerStats {
+  totalViewers: number;
+  activeViewers: number;
+  loggedInViewers: number;
+  removedViewers: number;
 }
 
 const UserManagement = () => {
   const [users, setUsers] = useState<User[]>([]);
   const [formData, setFormData] = useState({ username: '', email: '' });
   const [loading, setLoading] = useState(true);
+  const [stats, setStats] = useState<ViewerStats>({
+    totalViewers: 0,
+    activeViewers: 0,
+    loggedInViewers: 0,
+    removedViewers: 0,
+  });
+  const [showRemovedPopup, setShowRemovedPopup] = useState(false);
+  const [removedUsers, setRemovedUsers] = useState<User[]>([]);
+  const [removedLoading, setRemovedLoading] = useState(false);
 
   // Pagination State - Supporting User Journey Story 2
   const [currentPage, setCurrentPage] = useState(1);
@@ -39,8 +55,56 @@ const UserManagement = () => {
     }
   };
 
+  const fetchStats = async () => {
+    try {
+      console.log("Frontend - Fetching stats...");
+      // Use original stats endpoint with debugging
+      const response = await fetch('/api/users/stats');
+      console.log("Frontend - Stats response status:", response.status);
+      
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error("Frontend - Stats API error response:", errorText);
+        throw new Error("Stats Server Error");
+      }
+      
+      const data = await response.json();
+      console.log("Frontend - Stats data received:", data);
+      setStats({
+        totalViewers: data.totalViewers || 0,
+        activeViewers: data.activeViewers || 0,
+        loggedInViewers: data.loggedInViewers || 0,
+        removedViewers: data.removedViewers || 0,
+      });
+    } catch (err: unknown) {
+      console.error("Frontend - Stats fetch error:", err);
+      // Keep default values on error
+    }
+  };
+
+  const fetchRemovedUsers = async () => {
+    setRemovedLoading(true);
+    try {
+      const response = await fetch('/api/users/removed');
+      if (!response.ok) throw new Error("Server Error");
+      const data = await response.json();
+      setRemovedUsers(Array.isArray(data) ? data : []);
+    } catch (err: unknown) {
+      console.error("Error fetching removed users:", err);
+      setRemovedUsers([]);
+    } finally {
+      setRemovedLoading(false);
+    }
+  };
+
+  const handleOpenRemovedPopup = () => {
+    setShowRemovedPopup(true);
+    fetchRemovedUsers();
+  };
+
   useEffect(() => {
     fetchUsers();
+    fetchStats();
   }, []);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -80,6 +144,8 @@ const UserManagement = () => {
       setUsers((prev) => [result, ...prev]);
       setFormData({ username: '', email: '' });
       setCurrentPage(1);
+      // Refresh stats after creating a user
+      fetchStats();
     } catch (err: unknown) {
       console.error("Error creating user:", err);
       alert("Failed to reach server. Check your database connection.");
@@ -99,6 +165,8 @@ const UserManagement = () => {
       if (response.ok) {
         setUsers([]);
         setCurrentPage(1);
+        // Refresh stats after clearing users
+        fetchStats();
       } else {
         const result = await response.json();
         alert(`Deletion Error: ${result.error || "Failed to clear users"}`);
@@ -106,6 +174,30 @@ const UserManagement = () => {
     } catch (err: any) {
       console.error("Error clearing users:", err);
       alert("Failed to reach server to clear database.");
+    }
+  };
+
+  // Delete individual user
+  const deleteUser = async (username: string) => {
+    const confirmDelete = window.confirm(`Are you sure you want to delete viewer "${username}"?`);
+    if (!confirmDelete) return;
+
+    try {
+      const response = await fetch(`/api/users?username=${encodeURIComponent(username)}`, {
+        method: 'DELETE',
+      });
+
+      if (response.ok) {
+        setUsers((prev) => prev.filter((user) => user.username !== username));
+        // Refresh stats after deleting user
+        fetchStats();
+      } else {
+        const result = await response.json();
+        alert(`Deletion Error: ${result.error || "Failed to delete user"}`);
+      }
+    } catch (err: any) {
+      console.error("Error deleting user:", err);
+      alert("Failed to reach server to delete user.");
     }
   };
 
@@ -130,11 +222,11 @@ const UserManagement = () => {
   const currentUsers = users.slice(indexOfFirstItem, indexOfLastItem);
   const totalPages = Math.ceil(users.length / itemsPerPage);
 
-  const stats = [
-    { label: "Total Users", value: (users?.length || 0).toString(), color: "bg-[#f3a61f]" },
-    { label: "Active Users", value: (users?.length || 0).toString(), color: "bg-[#5ebf8c]" },
-    { label: "Offline Users", value: "0", color: "bg-[#555b5e]" },
-    { label: "Removed", value: "0", color: "bg-[#e84b4b]" },
+  const statsCards = [
+    { label: "Total Viewers", value: stats.totalViewers.toString(), color: "bg-[#f3a61f]" },
+    { label: "Active Viewers", value: stats.activeViewers.toString(), color: "bg-[#5ebf8c]" },
+    { label: "Loggedin Viewers", value: stats.loggedInViewers.toString(), color: "bg-[#555b5e]" },
+    { label: "Removed Viewers", value: stats.removedViewers.toString(), color: "bg-[#e84b4b]" },
   ];
 
   if (loading) return <div className="p-2 text-center font-bold">Initializing GeoLokal Access Control...</div>;
@@ -170,8 +262,12 @@ const UserManagement = () => {
         </div>
 
         <div className="lg:col-span-1 grid grid-cols-2 gap-4">
-          {stats.map((stat) => (
-            <div key={stat.label} className={`${stat.color} p-4 rounded-3xl text-white flex flex-col justify-center items-center shadow-md`}>
+          {statsCards.map((stat: { label: string; value: string; color: string }) => (
+            <div 
+              key={stat.label} 
+              className={`${stat.color} p-4 rounded-3xl text-white flex flex-col justify-center items-center shadow-md cursor-pointer hover:opacity-90 transition-opacity ${stat.label === 'Removed Viewers' ? 'hover:scale-105' : ''}`}
+              onClick={stat.label === 'Removed Viewers' ? handleOpenRemovedPopup : undefined}
+            >
               <span className="text-lg font-small mb-1">{stat.label}</span>
               <span className="text-4xl font-bold">{stat.value}</span>
             </div>
@@ -190,6 +286,7 @@ const UserManagement = () => {
                 <th className="px-6 py-2">Password</th>
                 <th className="px-6 py-2">Role</th>
                 <th className="px-6 py-2">Created</th>
+                <th className="px-6 py-2">Remove</th>
               </tr>
             </thead>
             <tbody className="text-[12px]">
@@ -207,11 +304,22 @@ const UserManagement = () => {
                       </span>
                     </td>
                     <td className="px-6 py-2 whitespace-nowrap italic">{user.created}</td>
+                    <td className="px-6 py-2">
+                      <button
+                        onClick={() => deleteUser(user.username)}
+                        className="text-red-500 hover:text-red-700 hover:bg-red-50 p-1 rounded transition-colors"
+                        title="Delete user"
+                      >
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                        </svg>
+                      </button>
+                    </td>
                   </tr>
                 ))
               ) : (
                 <tr>
-                  <td colSpan={5} className="px-6 py-10 text-center text-gray-400 italic">No users found.</td>
+                  <td colSpan={6} className="px-6 py-10 text-center text-gray-400 italic">No users found.</td>
                 </tr>
               )}
             </tbody>
@@ -251,6 +359,59 @@ const UserManagement = () => {
           </div>
         </div>
       </div>
+
+      {/* Removed Viewers Popup */}
+      {showRemovedPopup && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-2xl max-h-[80vh] overflow-hidden flex flex-col">
+            <div className="flex justify-between items-center p-4 border-b border-gray-200">
+              <h2 className="text-xl font-bold text-gray-900">Removed Viewers</h2>
+              <button
+                onClick={() => setShowRemovedPopup(false)}
+                className="text-gray-500 hover:text-gray-700 transition-colors"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            <div className="overflow-y-auto flex-grow p-4">
+              {removedLoading ? (
+                <div className="flex items-center justify-center h-40">
+                  <div className="w-6 h-6 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
+                </div>
+              ) : removedUsers.length > 0 ? (
+                <table className="w-full text-left border-collapse">
+                  <thead>
+                    <tr className="text-gray-800 font-bold text-[14px] bg-gray-50 border-b border-gray-200">
+                      <th className="px-4 py-2">Username</th>
+                      <th className="px-4 py-2">Email</th>
+                      <th className="px-4 py-2">Role</th>
+                      <th className="px-4 py-2">Created</th>
+                    </tr>
+                  </thead>
+                  <tbody className="text-[12px]">
+                    {removedUsers.map((user, index) => (
+                      <tr key={index} className={`${index % 2 === 0 ? 'bg-gray-50' : 'bg-white'} text-gray-700`}>
+                        <td className="px-4 py-2 font-medium">{user.username}</td>
+                        <td className="px-4 py-2">{user.email}</td>
+                        <td className="px-4 py-2">
+                          <span className="bg-red-100 px-2 py-1 rounded border border-red-200 uppercase text-[10px] font-bold text-red-700">
+                            {user.role}
+                          </span>
+                        </td>
+                        <td className="px-4 py-2 whitespace-nowrap italic">{user.created}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              ) : (
+                <div className="text-center py-10 text-gray-400 italic">No removed viewers found.</div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

@@ -5,6 +5,24 @@ const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
 });
 
+interface BoundaryLocation {
+  id?: number;
+  name: string;
+  description?: string;
+  latitude: number;
+  longitude: number;
+  location_type?: string;
+  boundary_type?: string;
+  is_active?: boolean;
+  created_at?: string;
+  updated_at?: string;
+}
+
+interface BoundaryData {
+  area: any;
+  locations: BoundaryLocation[];
+}
+
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
@@ -21,7 +39,7 @@ export async function GET(request: NextRequest) {
     
     const areaResult = await pool.query(areaQuery, [areaType]);
     
-    let boundaryData = {
+    let boundaryData: BoundaryData = {
       area: areaResult.rows[0] || null,
       locations: []
     };
@@ -35,7 +53,7 @@ export async function GET(request: NextRequest) {
       `;
       
       const locationsResult = await pool.query(locationsQuery, [areaType]);
-      boundaryData.locations = locationsResult.rows;
+      boundaryData.locations = locationsResult.rows as BoundaryLocation[];
     }
 
     return NextResponse.json(boundaryData);

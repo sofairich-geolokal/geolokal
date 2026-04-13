@@ -1,8 +1,8 @@
-import Dashboard from "../../components/superadmin/dashboard";
+import ActivityLogs from "../../../components/superadmin/activityLogs";
 export default function DashboardPage() {
 return(
   <div className=" h-auto h-full" >
-    <Dashboard />
+    <ActivityLogs />
   </div>
 )
 }

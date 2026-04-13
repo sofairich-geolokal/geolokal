@@ -1,4 +1,4 @@
-import UserManagement from "../../components/superadmin/users";
+import UserManagement from "../../../components/superadmin/users";
 import { requireAuth } from '@/lib/auth';
 
 export default async function DashboardPage() {

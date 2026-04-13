@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useEffect, useState } from 'react';
-import { Marker, Popup, Polyline } from 'react-leaflet';
+import { GeoJSON, Popup } from 'react-leaflet';
 import L from 'leaflet';
 
 interface RoadNetworksLayerProps {
@@ -150,118 +150,128 @@ const RoadNetworksLayer: React.FC<RoadNetworksLayerProps> = ({
   isVisible, 
   isHighlighted = false 
 }) => {
-  const [roads, setRoads] = useState(ibaRoadNetworks);
+  const [roadsData, setRoadsData] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
 
-  // Create road icon based on classification
-  const createRoadIcon = (type: string, highlighted: boolean) => {
-    let iconUrl = '/images/road-sign.png'; // Default road icon from public/images
-    
-    // Different icons for different road types using public/images
-    switch (type) {
-      case 'major_intersection':
-        iconUrl = '/images/intersection.png';
-        break;
-      case 'highway_point':
-        iconUrl = '/images/highway.png';
-        break;
-      case 'provincial_junction':
-        iconUrl = '/images/junction.png';
-        break;
-      default:
-        iconUrl = '/images/road-sign.png';
+  // Fetch roads data from database (same as superadmin)
+  useEffect(() => {
+    const fetchRoadsData = async () => {
+      try {
+        setLoading(true);
+        let rData = null;
+        
+        // Try to fetch from database first
+        try {
+          const rRes = await fetch('/api/roads');
+          if (rRes.ok) {
+            const result = await rRes.json();
+            if (result.success && result.data && result.data.features) {
+              rData = result.data;
+            }
+          }
+        } catch (e) { 
+          console.log("Roads DB route not ready, trying local file..."); 
+        }
+
+        // Fallback to local file if database fails
+        if (!rData) {
+          try {
+            const lRes = await fetch('/data/Ibaan_roadnetworks.json');
+            rData = await lRes.json();
+          } catch (e) { 
+            console.log("No local road data found."); 
+          }
+        }
+        
+        setRoadsData(rData);
+      } catch (error) {
+        console.error('Error fetching roads data:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    if (isVisible) {
+      fetchRoadsData();
     }
+  }, [isVisible]);
 
-    return L.icon({
-      iconUrl: iconUrl,
-      iconSize: [20, 20],
-      iconAnchor: [10, 10],
-      popupAnchor: [0, -10],
-      className: highlighted ? 'road-marker-highlighted' : 'road-marker'
+  // Transform road coordinates from PRS92 to WGS84 (same as superadmin)
+  const transformRoadCoordinates = (geoData: any) => {
+    try {
+      if (!geoData || !geoData.features || !Array.isArray(geoData.features)) return null;
+      const transformedData = {
+        ...geoData,
+        type: "FeatureCollection",
+        features: geoData.features.filter((feature: any) => feature && feature.geometry && feature.geometry.coordinates).map((feature: any) => {
+          const transformPt = (coord: any) => {
+            const x = coord[0], y = coord[1];
+            if (x < 180 && x > -180) return [x, y];
+            return [(x - 500000) / 100000 + 121.0, (y - 1520000) / 100000 + 13.8];
+          };
+
+          let newCoords = feature.geometry.coordinates;
+          if (feature.geometry.type === 'Polygon') {
+            newCoords = feature.geometry.coordinates[0].map(transformPt);
+            return { ...feature, geometry: { type: 'LineString', coordinates: newCoords }};
+          }
+          if (feature.geometry.type === 'MultiPolygon') {
+            newCoords = feature.geometry.coordinates.map((polygon: any) => polygon[0].map(transformPt));
+            return { ...feature, geometry: { type: 'MultiLineString', coordinates: newCoords }};
+          }
+          if (feature.geometry.type === 'LineString') {
+            newCoords = feature.geometry.coordinates.map(transformPt);
+          } else if (feature.geometry.type === 'MultiLineString') {
+            newCoords = feature.geometry.coordinates.map((ring: any) => ring.map(transformPt));
+          }
+          return { ...feature, geometry: { ...feature.geometry, coordinates: newCoords }};
+        })
+      };
+      return transformedData;
+    } catch (error) { return null; }
+  };
+
+  // Road styling (same as superadmin)
+  const geoPortalRoadStyle = () => ({ color: '#06a506ee', weight: 3, opacity: 0.9 });
+
+  // Handle road feature interactions (same as superadmin)
+  const onEachRoadFeature = (feature: any, layer: any) => {
+    layer.on({
+      mouseover: (e: any) => { 
+        e.target.setStyle({ weight: 5, color: '#eab308' }); 
+      },
+      mouseout: (e: any) => { 
+        e.target.setStyle(geoPortalRoadStyle()); 
+      },
+      click: (e: any) => {
+        const props = feature.properties || {};
+        const content = `<div class="p-3 min-w-[200px] text-xs">
+          <h4 class="font-bold mb-2">Road Details</h4>
+          ${props.Name ? `<div><b>Name:</b> ${props.Name}</div>` : ''}
+          ${props.Type ? `<div><b>Type:</b> ${props.Type}</div>` : ''}
+          <div><b>Geometry:</b> ${feature.geometry.type}</div>
+        </div>`;
+        layer.bindPopup(content).openPopup();
+      }
     });
   };
 
-  // Get style for road lines based on classification
-  const getRoadStyle = (classification: string, highlighted: boolean) => {
-    const baseColor = highlighted ? '#FFD700' : '#000000'; // Gold when highlighted, black when normal
-    
-    switch (classification) {
-      case 'primary': // National highways
-        return {
-          color: baseColor,
-          weight: highlighted ? 6 : 5,
-          opacity: highlighted ? 1 : 0.95,
-          dashArray: ''
-        };
-      case 'secondary': // Provincial roads
-        return {
-          color: baseColor,
-          weight: highlighted ? 4 : 3,
-          opacity: highlighted ? 1 : 0.9,
-          dashArray: ''
-        };
-      case 'tertiary': // Municipal and farm-to-market roads
-        return {
-          color: baseColor,
-          weight: highlighted ? 3 : 2,
-          opacity: highlighted ? 1 : 0.8,
-          dashArray: ''
-        };
-      case 'local': // Barangay roads
-        return {
-          color: baseColor,
-          weight: highlighted ? 2 : 1,
-          opacity: highlighted ? 1 : 0.7,
-          dashArray: '5,3'
-        };
-      default:
-        return {
-          color: baseColor,
-          weight: 2,
-          opacity: 0.8
-        };
-    }
-  };
+  if (!isVisible || loading || !roadsData) {
+    return null;
+  }
 
-  if (!isVisible) {
+  const transformedRoadsData = transformRoadCoordinates(roadsData);
+  if (!transformedRoadsData) {
     return null;
   }
 
   return (
-    <>
-      {/* Road network lines */}
-      {roads.map((road) => (
-        <Polyline
-          key={road.id}
-          positions={road.points}
-          pathOptions={getRoadStyle(road.classification, isHighlighted)}
-        />
-      ))}
-      
-      {/* Road intersection and landmark markers */}
-      {roadMarkers.map((marker) => (
-        <Marker
-          key={marker.id}
-          position={[marker.lat, marker.lng]}
-          icon={createRoadIcon(marker.type, isHighlighted)}
-        >
-          <Popup>
-            <div className="text-sm">
-              <h3 className="font-semibold text-gray-800">{marker.name}</h3>
-              <p className="text-gray-600">{marker.description}</p>
-              <p className="text-gray-500 text-xs">
-                Type: {marker.type.replace('_', ' ').toUpperCase()}
-              </p>
-              <p className="text-gray-500 text-xs">
-                Coordinates: {marker.lat.toFixed(4)}°N, {marker.lng.toFixed(4)}°E
-              </p>
-              <p className="text-gray-400 text-xs mt-1">
-                CRS: PRS92 Philippines Zone III
-              </p>
-            </div>
-          </Popup>
-        </Marker>
-      ))}
-    </>
+    <GeoJSON 
+      key={`roads-${roadsData.features.length}`}
+      data={transformedRoadsData}
+      style={geoPortalRoadStyle}
+      onEachFeature={onEachRoadFeature}
+    />
   );
 };
 

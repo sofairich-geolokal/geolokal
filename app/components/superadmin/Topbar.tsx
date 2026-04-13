@@ -14,7 +14,11 @@ export default function Topbar() {
         if (currentUserId) {
           setUserId(Number(currentUserId));
           const result = await getTopbarData(currentUserId);
-          setData(result);
+          setData({
+            username: result.username || 'Unknown',
+            lgu: result.location || 'System Administration',
+            role: result.role || 'Superadmin'
+          });
         } else {
           setData({ username: 'Guest', lgu: 'N/A', role: 'Viewer' });
         }
@@ -37,14 +41,14 @@ export default function Topbar() {
   };
 
   return (
-    <header className="bg-[#1A1A1A] text-white py-4 px-8 flex justify-between items-center border-b border-gray-800">
+    <header className="bg-[#112E57] text-white py-4 px-8 flex justify-between items-center border-b border-gray-800">
       {/* Dynamic Breadcrumbs with Role */}
       <div className="flex items-center gap-2 text-sm text-gray-400">
         <span>Dashboard</span>
         <ChevronRight size={14} />
-        <span>User</span>
+        <span>Admin</span>
         <ChevronRight size={14} />
-        <span className="text-white font-medium capitalize">{data.role || 'Superadmin'}</span> 
+        <span className="text-white font-medium capitalize">Super Admin</span> 
       </div>
 
       {/* User Info on Right Side */}
@@ -52,7 +56,7 @@ export default function Topbar() {
         <div style={{ display: 'inline-block' }}>
           <p className="text-sm text-white" 
           style={{ display: 'inline', marginRight: '8px' }}>
-            <b>User: </b>{data.username}
+            <b>Username: </b>{data.username}
           </p>
           <p 
             className="text-sm text-white"

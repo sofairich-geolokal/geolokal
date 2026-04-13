@@ -11,7 +11,7 @@ export async function GET() {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    // Fetch only users created by the logged-in LGU user
+    // Fetch only active users created by the logged-in LGU user
     const result = await query(`
       SELECT u.username, u.email, u.password_hash, u.role, 
              to_char(u.created_at, 'Mon DD, YYYY HH:MI AM') as created,
@@ -19,7 +19,7 @@ export async function GET() {
       FROM users u
       WHERE u.created_by = (
         SELECT username FROM users WHERE id = $1
-      )
+      ) AND u.is_active = true
       ORDER BY u.created_at DESC
     `, [userId]);
     
@@ -30,7 +30,7 @@ export async function GET() {
   }
 }
 
-export async function DELETE() {
+export async function DELETE(request: Request) {
   try {
     // Get logged-in user ID from auth token
     const userId = await getAuthUser();
@@ -39,29 +39,57 @@ export async function DELETE() {
     }
 
     // Get username of logged-in user
-    const creatorResult = await query('SELECT username FROM users WHERE id = $1', [userId]);
+    const creatorResult = await query('SELECT username, lgu_id FROM users WHERE id = $1', [userId]);
     const loggedInUser = creatorResult.rows[0]?.username;
+    const lguId = creatorResult.rows[0]?.lgu_id;
 
     if (!loggedInUser) {
       return NextResponse.json({ error: 'User not found' }, { status: 404 });
     }
 
-    // Delete only users with 'Viewer' role created by the logged-in LGU user
-    const result = await query(`
-      DELETE FROM users 
-      WHERE role = 'Viewer' AND created_by = $1
-    `, [loggedInUser]);
-    
-    console.log(`Deleted ${result.rowCount} viewer users created by ${loggedInUser}`);
-    
-    return NextResponse.json({ 
-      message: 'Viewer users cleared successfully',
-      deletedCount: result.rowCount 
-    });
+    // Check if deleting a specific user or all users
+    const { searchParams } = new URL(request.url);
+    const usernameToDelete = searchParams.get('username');
+
+    if (usernameToDelete) {
+      // Soft delete specific user by username (set is_active = false)
+      const result = await query(`
+        UPDATE users 
+        SET is_active = false
+        WHERE username = $1 AND role = 'Viewer' AND created_by = $2
+      `, [usernameToDelete, loggedInUser]);
+      
+      console.log(`Soft deleted user ${usernameToDelete} by ${loggedInUser}`);
+      
+      // Create Audit Log entry
+      await query(
+        'INSERT INTO audit_logs (actor, action, details, lgu_id, table_name) VALUES ($1, $2, $3, $4, $5)',
+        [loggedInUser, 'USER_DELETE', `Deleted viewer: ${usernameToDelete}`, lguId, 'users']
+      );
+      
+      return NextResponse.json({ 
+        message: 'User deleted successfully',
+        deletedCount: result.rowCount 
+      });
+    } else {
+      // Soft delete all users with 'Viewer' role created by the logged-in LGU user
+      const result = await query(`
+        UPDATE users 
+        SET is_active = false
+        WHERE role = 'Viewer' AND created_by = $1
+      `, [loggedInUser]);
+      
+      console.log(`Soft deleted ${result.rowCount} viewer users created by ${loggedInUser}`);
+      
+      return NextResponse.json({ 
+        message: 'Viewer users cleared successfully',
+        deletedCount: result.rowCount 
+      });
+    }
   } catch (error: any) {
     console.error("Delete Users Error:", error.message);
     return NextResponse.json(
-      { error: 'Failed to clear viewer users' }, 
+      { error: 'Failed to delete viewer users' }, 
       { status: 500 }
     );
   }

@@ -11,3 +11,6 @@ export default function SuperadminLoginLayout({
     </div>
   );
 }
+
+// This layout overrides the parent layout to prevent authentication check
+export const runtime = 'nodejs';

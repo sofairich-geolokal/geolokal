@@ -25,11 +25,11 @@ const ProjectCards = () => {
 
         // Calculate counts based on database status
         const total = projects.length;
-        const failed = projects.filter((p: any) => p.status === 'Failed').length;
-        const inProgress = projects.filter((p: any) => p.status === 'In Progress').length;
-        const published = projects.filter((p: any) => p.status === 'Published').length;
-         const draft = projects.filter((p: any) => p.status === 'Draft').length;
-        const syncing = projects.filter((p: any) => p.status === 'Syncing').length;
+        const failed = projects.filter((p: any) => p["Current Status"] === 'Failed').length;
+        const inProgress = projects.filter((p: any) => p["Current Status"] === 'In Progress').length;
+        const published = projects.filter((p: any) => p["Current Status"] === 'Published').length;
+        const draft = projects.filter((p: any) => p["Current Status"] === 'Draft').length;
+        const syncing = projects.filter((p: any) => p["Current Status"] === 'Syncing').length;
         setStats([
           { label: "Total Projects", value: total.toLocaleString(), color: "bg-[#555b5e]" },
           { label: "Failed", value: failed.toLocaleString(), color: "bg-[#ff3b3b]" },

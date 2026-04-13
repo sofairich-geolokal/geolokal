@@ -2,29 +2,34 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { useState } from "react";
 import { ChevronRight, ChevronDown } from "lucide-react";
-import SuperadminLogout from "./logout";
 
 const Sidebar = () => {
   const pathname = usePathname();
+  const router = useRouter();
 
   const navItems = [
     { name: "Dashboard", href: "/superadmin/dashboard", icon: "/icons/dashboard.png" },
     { name: "Users Management", href: "/superadmin/users", icon: "/icons/maintenance.png" },
     { name: "Audit Logs", href: "/superadmin/audit", icon: "/icons/audit.png" },
-    { name: "Projects", href: "/superadmin/projects", icon: "/icons/spatial.png" },
-    { name: "Maps", href: "/superadmin/maps", icon: "/icons/map.png" },
+    //{ name: "Projects", href: "/superadmin/projects", icon: "/icons/spatial.png" },
+    //{ name: "Maps", href: "/superadmin/maps", icon: "/icons/map.png" },
   ];
 
+  // Logout handler
+  const handleLogout = () => {
+    router.push("/superadmin/login"); 
+  };
+
   return (
-    <aside className="w-[200px] bg-black text-white flex flex-col h-screen p-2 shrink-0">
-      {/* LGU Circular Logo */}
+    <aside className="w-[200px] bg-[#112E57] text-white flex flex-col h-screen p-2 shrink-0">
+      {/* Superadmin Circular Logo */}
       <div className="flex justify-center pt-2 pb-4">
         <div className="w-20 h-20 relative">
           <Image 
-            src="/logo.png" 
+            src="/images/logolg.png" 
             alt="Ibaan LGU Logo" 
             fill 
             className="object-contain"
@@ -57,11 +62,14 @@ const Sidebar = () => {
         })}
       </nav>
 
-   
-
       {/* High-Contrast Logout */}
       <div className="mt-auto">
-        <SuperadminLogout />
+        <button 
+          onClick={handleLogout}
+          className="w-full bg-[#E53E3E] py-2 rounded-2xl text-sm text-white hover:bg-red-700 transition-colors active:scale-95"
+        >
+          Logout
+        </button>
       </div>
     </aside>
   );

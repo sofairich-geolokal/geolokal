@@ -61,7 +61,7 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
     const {
-      layer_name,
+      layer_name, // Received from frontend
       lgu_id,
       category_id,
       layer_type,
@@ -78,24 +78,35 @@ export async function POST(request: NextRequest) {
       is_downloadable,
     } = body;
 
+    const data: any = {
+      name: layer_name, // Fixed: mapping frontend 'layer_name' to DB 'name'
+      layer_type,
+      metadata,
+      style_config,
+      projection: projection || 'EPSG:4326',
+      min_zoom: min_zoom ? parseInt(min_zoom) : 0,
+      max_zoom: max_zoom ? parseInt(max_zoom) : 20,
+      opacity: opacity ? parseFloat(opacity) : 1.0,
+      z_index: z_index ? parseInt(z_index) : 0,
+      is_visible: is_visible !== undefined ? is_visible : true,
+      is_downloadable: is_downloadable !== undefined ? is_downloadable : false,
+    };
+
+    if (lgu_id !== undefined && lgu_id !== null && lgu_id !== '') {
+      data.lgu_id = parseInt(lgu_id);
+    }
+    if (category_id !== undefined && category_id !== null && category_id !== '') {
+      data.category_id = parseInt(category_id);
+    }
+    if (bbox) {
+      data.bbox = bbox;
+    }
+    if (attribution) {
+      data.attribution = attribution;
+    }
+
     const layer = await prisma.map_layers.create({
-      data: {
-        layer_name,
-        lgu_id: lgu_id ? parseInt(lgu_id) : null,
-        category_id: category_id ? parseInt(category_id) : null,
-        layer_type,
-        metadata,
-        style_config,
-        bbox,
-        projection: projection || 'EPSG:4326',
-        min_zoom: min_zoom ? parseInt(min_zoom) : 0,
-        max_zoom: max_zoom ? parseInt(max_zoom) : 20,
-        attribution,
-        opacity: opacity ? parseFloat(opacity) : 1.0,
-        z_index: z_index ? parseInt(z_index) : 0,
-        is_visible: is_visible !== undefined ? is_visible : true,
-        is_downloadable: is_downloadable !== undefined ? is_downloadable : false,
-      },
+      data,
       include: {
         project_categories: true,
         city_muni_master: true,
@@ -109,7 +120,7 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     console.error('Error creating layer:', error);
     return NextResponse.json(
-      { success: false, error: 'Failed to create layer' },
+      { success: false, error: 'Failed to create layer', details: error instanceof Error ? error.message : String(error) },
       { status: 500 }
     );
   }
@@ -118,7 +129,7 @@ export async function POST(request: NextRequest) {
 export async function PUT(request: NextRequest) {
   try {
     const body = await request.json();
-    const { id, ...updateData } = body;
+    const { id, layer_name, ...updateData } = body;
 
     if (!id) {
       return NextResponse.json(
@@ -127,7 +138,11 @@ export async function PUT(request: NextRequest) {
       );
     }
 
-    // Convert numeric fields
+    // Map layer_name if provided
+    if (layer_name) {
+      (updateData as any).layer_name = layer_name;
+    }
+
     if (updateData.lgu_id) updateData.lgu_id = parseInt(updateData.lgu_id);
     if (updateData.category_id) updateData.category_id = parseInt(updateData.category_id);
     if (updateData.min_zoom) updateData.min_zoom = parseInt(updateData.min_zoom);

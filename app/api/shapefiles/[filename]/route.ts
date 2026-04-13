@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { readFile } from 'fs/promises';
 import { join } from 'path';
+import { existsSync } from 'fs';
 import shp from 'shpjs';
 
 export async function GET(
@@ -10,22 +11,29 @@ export async function GET(
   try {
     const { filename } = await context.params;
     
-    // Security check - only allow specific filenames
-    const allowedFiles = ['Ibaan_boundary', 'Ibaan_roadnetworks', 'Ibaan_waterways'];
-    if (!allowedFiles.includes(filename)) {
-      return NextResponse.json({ error: 'File not allowed' }, { status: 403 });
-    }
+    // Security check - sanitize filename to prevent path traversal
+    const sanitizedFilename = filename.replace(/[^a-zA-Z0-9_-]/g, '');
 
     const filesDir = join(process.cwd(), 'Files');
     
-    // Read all shapefile components
-    const [shpBuffer, dbfBuffer] = await Promise.all([
-      readFile(join(filesDir, `${filename}.shp`)),
-      readFile(join(filesDir, `${filename}.dbf`))
-    ]);
-
-    // Combine buffers for shpjs
-    const combinedBuffer = Buffer.concat([shpBuffer, dbfBuffer]);
+    // Check if .shp file exists
+    const shpPath = join(filesDir, `${sanitizedFilename}.shp`);
+    const dbfPath = join(filesDir, `${sanitizedFilename}.dbf`);
+    
+    if (!existsSync(shpPath)) {
+      return NextResponse.json({ error: 'Shapefile not found' }, { status: 404 });
+    }
+    
+    // Read shapefile components
+    const shpBuffer = await readFile(shpPath);
+    
+    let combinedBuffer: Buffer;
+    if (existsSync(dbfPath)) {
+      const dbfBuffer = await readFile(dbfPath);
+      combinedBuffer = Buffer.concat([shpBuffer, dbfBuffer]);
+    } else {
+      combinedBuffer = shpBuffer;
+    }
     
     // Parse shapefile
     const geojson = await shp(combinedBuffer);
@@ -39,8 +47,9 @@ export async function GET(
     
   } catch (error) {
     console.error('Error serving shapefile:', error);
+    console.error('Error details:', error instanceof Error ? error.message : String(error));
     return NextResponse.json(
-      { error: 'Failed to load shapefile' },
+      { error: 'Failed to load shapefile', details: error instanceof Error ? error.message : String(error) },
       { status: 500 }
     );
   }

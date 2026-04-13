@@ -179,7 +179,7 @@ const ActivityLogs = () => {
             onClick={clearLogs}
             className="flex-1 sm:flex-none bg-red-600 hover:bg-red-700 text-white text-sm font-semibold py-2 px-4 md:px-6 rounded-lg transition-colors"
           >
-            Clear All
+            Delete All
           </button>
         </div>
       </div>

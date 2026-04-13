@@ -1,373 +1,192 @@
 "use client";
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import dynamic from 'next/dynamic';
-import 'leaflet/dist/leaflet.css';
+import { Layers, Globe, Ruler, CircleDot, ChevronRight, X } from 'lucide-react';
 
-// DYNAMICALLY IMPORT ALL LEAFLET COMPONENTS
-const MapContainer = dynamic(() => import('react-leaflet').then((mod) => mod.MapContainer), { ssr: false });
-const TileLayer = dynamic(() => import('react-leaflet').then((mod) => mod.TileLayer), { ssr: false });
-const Circle = dynamic(() => import('react-leaflet').then((mod) => mod.Circle), { ssr: false });
-const Rectangle = dynamic(() => import('react-leaflet').then((mod) => mod.Rectangle), { ssr: false });
-const Marker = dynamic(() => import('react-leaflet').then((mod) => mod.Marker), { ssr: false });
-const Popup = dynamic(() => import('react-leaflet').then((mod) => mod.Popup), { ssr: false });
-const GeoJSON = dynamic(() => import('react-leaflet').then((mod) => mod.GeoJSON), { ssr: false });
+const MapRenderer = dynamic(() => import('@/app/components/ViewerDashboard/MapRenderer').then(mod => ({ default: mod.default })), { 
+  ssr: false, 
+  loading: () => <div className="h-full w-full bg-gray-800 flex items-center justify-center text-white">Initializing...</div> 
+});
 
-const MapsDashboard = () => {
-  const [isMounted, setIsMounted] = useState(false);
-  const [leafletReady, setLeafletReady] = useState(false);
+export default function MapsDashboard() {
+  const brandColor = "#318855";
+  const [activeRightPanel, setActiveRightPanel] = useState<string | null>(null);
+  const [mapType, setMapType] = useState('osm');
   
-  // THE FIX: Unique key to prevent Leaflet container reuse bugs during Hot Reloads
-  const [mapKey, setMapKey] = useState<string>(''); 
-
-  const [mapType, setMapType] = useState('satellite');
-  const [customIcon, setCustomIcon] = useState<any>(null);
-  
+  // Layer visibility state matching viewer dashboard
   const [layers, setLayers] = useState({
     adminBoundary: true,
     evacuationCenter: true,
     hazardArea: true,
     roadNetworks: true,
     rivers: true,
-    riverBoundary: true, 
+    riverBoundary: true,
   });
-  
-  const [boundaryLocations, setBoundaryLocations] = useState<any[]>([]);
-  const [waterwaysData, setWaterwaysData] = useState<any>(null);
-  const [roadsData, setRoadsData] = useState<any>(null);
-  const [boundariesData, setBoundariesData] = useState<any>(null); // NEW: State for Boundary Layer
-  const [selectedBoundaryId, setSelectedBoundaryId] = useState<number | null>(null); // NEW: Selection highlight
-  const [loading, setLoading] = useState(true);
 
-  const centerPosition: [number, number] = [13.8242, 121.1311]; 
+  const [mapView, setMapView] = useState<{ lat: number; lng: number; zoom: number } | null>(null);
+  const [bufferData, setBufferData] = useState<any>(null);
+  const [legendsOpen, setLegendsOpen] = useState(true);
+  const [savedLayers, setSavedLayers] = useState<any[]>([]);
+  const mapContainerRef = useRef<HTMLDivElement>(null);
 
-  const indicators = [
-    { label: "Admin boundary", color: "bg-green-500" },
-    { label: "Evacuation Centers", color: "bg-blue-500" },
-    { label: "Road Networks", color: "bg-[#00ff00]" }, 
-    { label: "Rivers", color: "bg-blue-600" },
-    { label: "River Boundary", color: "bg-sky-300" },
-    { label: "Hazard Areas", color: "bg-orange-500" },
-  ];
-
-  const sidebarCategories = [
-    { title: "DRRM", desc: "Data fetched from another portal" },
-    { title: "Land Use", desc: "Local datasets and GeoNode Group" },
-    { title: "Real Property and Revenue", desc: "Integration with existing portal (development)" },
-    { title: "Socioeconomic & Development", desc: "Local + CBMS / Utilities layers" },
-    { title: "Smart City and Environmental", desc: "Possible external data (Geo-portal)" },
-  ];
-
-  useEffect(() => {
-    setIsMounted(true);
-    setMapKey(Date.now().toString() + Math.random().toString());
-
-    const initLeaflet = async () => {
-      const L = (await import('leaflet')).default;
-      const icon = L.divIcon({
-        className: 'custom-pin',
-        html: `
-          <div style="position: relative; display: flex; justify-content: center; align-items: center; filter: drop-shadow(0px 2px 4px rgba(0,0,0,0.3));">
-            <svg width="30" height="42" viewBox="0 0 30 42" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <path d="M15 0C6.71573 0 0 6.71573 0 15C0 26.25 15 42 15 42C15 42 30 26.25 30 15C30 6.71573 23.2843 0 15 0Z" fill="#F59E0B"/>
-              <circle cx="15" cy="15" r="5" fill="white"/>
-            </svg>
-          </div>`,
-        iconSize: [30, 42],
-        iconAnchor: [15, 42]
-      });
-      setCustomIcon(icon);
-      setLeafletReady(true);
-    };
-    initLeaflet();
-  }, []);
-
-  useEffect(() => {
-    const fetchMapData = async () => {
-      try {
-        setLoading(true);
-        
-        // Fetch locations
-        fetch('/api/boundary-locations')
-          .then(res => res.json())
-          .then(result => {
-            if (result.success && result.data) {
-              setBoundaryLocations(Object.values(result.data).flat());
-            }
-          }).catch(err => console.error(err));
-
-        // Fetch Waterways
-        let geoData = null;
-        try {
-          const dbResponse = await fetch('/api/waterways');
-          if (dbResponse.ok) {
-            const result = await dbResponse.json();
-            if (result.success && result.data && result.data.features) {
-                geoData = result.data;
-            }
-          }
-        } catch (e) { console.log("DB route not ready, trying local file..."); }
-
-        if (!geoData) {
-          const localResponse = await fetch('/data/Ibaan_waterways.json');
-          geoData = await localResponse.json();
-        }
-        setWaterwaysData(geoData);
-
-        // Fetch Road Networks
-        let rData = null;
-        try {
-          const rRes = await fetch('/api/roads');
-          if (rRes.ok) {
-            const result = await rRes.json();
-            if (result.success && result.data && result.data.features) {
-              rData = result.data;
-            }
-          }
-        } catch (e) { console.log("Roads DB route not ready, trying local file..."); }
-
-        if (!rData) {
-          try {
-            const lRes = await fetch('/data/Ibaan_roadnetworks.json');
-            rData = await lRes.json();
-          } catch (e) { console.log("No local road data found."); }
-        }
-        setRoadsData(rData);
-
-        // NEW: Fetch Admin Boundaries
-        let bData = null;
-        try {
-          const bRes = await fetch('/api/boundaries');
-          if (bRes.ok) {
-            const result = await bRes.json();
-            if (result.success && result.data && result.data.features) {
-              bData = result.data;
-            }
-          }
-        } catch (e) { console.log("Boundaries DB route not ready."); }
-        setBoundariesData(bData);
-
-      } catch (error) {
-        console.error('Error fetching map data:', error);
-      } finally {
-        setLoading(false); 
-      }
-    };
-    fetchMapData();
-  }, []);
-
-  const calculateRiverBounds = (geoData: any): [[number, number], [number, number]] | null => {
-    if (!geoData || !geoData.features) return null;
-    let minLng = Infinity, maxLng = -Infinity, minLat = Infinity, maxLat = -Infinity;
-    geoData.features.forEach((feature: any) => {
-      if (feature.geometry?.type === 'Polygon' && feature.geometry?.coordinates) {
-        feature.geometry.coordinates.forEach((ring: any) => {
-          ring.forEach((coord: any) => {
-            const x = coord[0], y = coord[1];
-            const lng = (x - 500000) / 100000 + 121.0;
-            const lat = (y - 1520000) / 100000 + 13.8;
-            minLng = Math.min(minLng, lng); maxLng = Math.max(maxLng, lng);
-            minLat = Math.min(minLat, lat); maxLat = Math.max(maxLat, lat);
-          });
-        });
-      }
-    });
-    if (minLng === Infinity) return null;
-    const buffer = 0.02;
-    return [[minLat - buffer, minLng - buffer], [maxLat + buffer, maxLng + buffer]];
-  };
-
-  const transformCoordinates = (geoData: any) => {
-    if (!geoData || !geoData.features) return geoData;
-    return {
-      ...geoData,
-      features: geoData.features.map((feature: any) => {
-        if ((feature.geometry?.type === 'Polygon' || feature.geometry?.type === 'MultiPolygon') && feature.geometry?.coordinates) {
-          const transformRing = (ring: any) => ring.map((coord: any) => {
-            const x = coord[0], y = coord[1];
-            if (x < 180 && x > -180) return [x, y];
-            return [(x - 500000) / 100000 + 121.0, (y - 1520000) / 100000 + 13.8];
-          });
-
-          let newCoords;
-          if (feature.geometry.type === 'Polygon') {
-            newCoords = feature.geometry.coordinates.map(transformRing);
-          } else {
-            newCoords = feature.geometry.coordinates.map((poly: any) => poly.map(transformRing));
-          }
-
-          return { ...feature, geometry: { ...feature.geometry, coordinates: newCoords }};
-        }
-        return feature;
-      })
-    };
-  };
-
-  const transformRoadCoordinates = (geoData: any) => {
-    try {
-      if (!geoData || !geoData.features || !Array.isArray(geoData.features)) return null;
-      const transformedData = {
-        ...geoData,
-        type: "FeatureCollection",
-        features: geoData.features.filter((feature: any) => feature && feature.geometry && feature.geometry.coordinates).map((feature: any) => {
-          const transformPt = (coord: any) => {
-            const x = coord[0], y = coord[1];
-            if (x < 180 && x > -180) return [x, y];
-            return [(x - 500000) / 100000 + 121.0, (y - 1520000) / 100000 + 13.8];
-          };
-
-          let newCoords = feature.geometry.coordinates;
-          if (feature.geometry.type === 'Polygon') {
-            newCoords = feature.geometry.coordinates[0].map(transformPt);
-            return { ...feature, geometry: { type: 'LineString', coordinates: newCoords }};
-          }
-          if (feature.geometry.type === 'MultiPolygon') {
-            newCoords = feature.geometry.coordinates.map((polygon: any) => polygon[0].map(transformPt));
-            return { ...feature, geometry: { type: 'MultiLineString', coordinates: newCoords }};
-          }
-          if (feature.geometry.type === 'LineString') {
-            newCoords = feature.geometry.coordinates.map(transformPt);
-          } else if (feature.geometry.type === 'MultiLineString') {
-            newCoords = feature.geometry.coordinates.map((ring: any) => ring.map(transformPt));
-          }
-          return { ...feature, geometry: { ...feature.geometry, coordinates: newCoords }};
-        })
-      };
-      return transformedData;
-    } catch (error) { return null; }
-  };
-
-  const geoPortalWaterwayStyle = (feature: any) => {
-    if (feature.geometry?.type?.includes('Polygon')) {
-      return { color: '#7dd3fc', weight: 2, fillColor: '#38bdf8', fillOpacity: 0.35 };
+  const [xyInput, setXyInput] = useState({ lat: '', lng: '' });
+  const [bufferInput, setBufferInput] = useState({ type: 'Point', distance: '', unit: 'Kilometers' });
+  const [measureInput, setMeasureInput] = useState<{ 
+    startPoint: string; 
+    endPoint: string; 
+    distance: string;
+    isMeasuring: boolean;
+    clickMode: string;
+    visualElements: {
+      lines: never[];
+      markers: never[]
     }
-    return { color: '#2563eb', weight: 3, opacity: 0.9 };
-  };
+  }>({ 
+    startPoint: '', 
+    endPoint: '', 
+    distance: '0.00 km',
+    isMeasuring: false,
+    clickMode: 'start',
+    visualElements: {
+      lines: [],
+      markers: []
+    }
+  });
 
-  const geoPortalRoadStyle = () => ({ color: '#06a506ee', weight: 3, opacity: 0.9 });
-
-  const adminBoundaryStyle = (feature: any) => {
-    const isSelected = feature.id === selectedBoundaryId;
-    const hasCompleteData = feature.properties && feature.properties.brgy; // Check if 'brgy' property exists
-
-    return {
-      color: isSelected ? '#3b82f6' : 'rgb(24, 49, 88)', // Blue when selected, green when not
-      weight: isSelected ? 4 : 2,
-      fillColor: '#5432ff99', // Always blue fill color
-      fillOpacity: hasCompleteData ? (isSelected ? 0.2 : 0.15) : 0, // Fill only if data is complete
-      dashArray: isSelected ? '' : '5, 10', // Solid when selected, dotted when not
-    };
-  };
-
-  const onEachWaterwayFeature = (feature: any, layer: any) => {
-    layer.on({
-      mouseover: (e: any) => { e.target.setStyle({ weight: 5, color: '#f97316', fillOpacity: 0.7 }); },
-      mouseout: (e: any) => { e.target.setStyle(geoPortalWaterwayStyle(feature)); }
-    });
-    layer.bindPopup(`<h4 class="font-bold">${feature.properties?.Name || 'Waterway'}</h4>`);
-  };
-
-  const onEachRoadFeature = (feature: any, layer: any) => {
-    layer.on({
-      mouseover: (e: any) => { e.target.setStyle({ weight: 5, color: '#eab308' }); },
-      mouseout: (e: any) => { e.target.setStyle(geoPortalRoadStyle()); },
-      click: (e: any) => {
-        const props = feature.properties || {};
-        const content = `<div class="p-3 min-w-[200px] text-xs">
-          <h4 class="font-bold mb-2">Road Details</h4>
-          ${props.Name ? `<div><b>Name:</b> ${props.Name}</div>` : ''}
-          ${props.Type ? `<div><b>Type:</b> ${props.Type}</div>` : ''}
-          <div><b>Geometry:</b> ${feature.geometry.type}</div>
-        </div>`;
-        layer.bindPopup(content).openPopup();
-      }
-    });
-  };
-
-  const onEachBoundaryFeature = (feature: any, layer: any) => {
-    layer.on({
-      click: (e: any) => {
-        setSelectedBoundaryId(feature.id);
-        e.target._map.fitBounds(e.target.getBounds());
-        
-        // Show detailed popup with complete boundary information
-        const props = feature.properties || {};
-        const content = `<div class="p-3 min-w-[250px] text-xs">
-          <h4 class="font-bold text-blue-700 mb-2">Administrative Boundary Details</h4>
-          
-          ${props.brgy ? `<div class="mb-2"><span class="font-semibold">Barangay:</span> ${props.brgy}</div>` : ''}
-          ${props.lotno ? `<div><span class="font-semibold">Lot Number:</span> ${props.lotno}</div>` : ''}
-          ${props.layer ? `<div><span class="font-semibold">Layer:</span> ${props.layer}</div>` : ''}
-          ${props.SHAPE_Leng ? `<div><span class="font-semibold">Perimeter:</span> ${props.SHAPE_Leng.toFixed(2)} meters</div>` : ''}
-          ${props.Shape_Area ? `<div><span class="font-semibold">Area:</span> ${(props.Shape_Area / 10000).toFixed(2)} hectares</div>` : ''}
-          ${props.Shape_Le_1 ? `<div><span class="font-semibold">Secondary Perimeter:</span> ${props.Shape_Le_1.toFixed(2)} meters</div>` : ''}
-          
-          <div class="mt-2 pt-2 border-t border-gray-200">
-            <div class="text-gray-600"><span class="font-semibold">Boundary ID:</span> ${feature.id}</div>
-            <div class="text-gray-600"><span class="font-semibold">Geometry Type:</span> ${feature.geometry?.type || 'Polygon'}</div>
-            ${props.path ? `<div class="text-gray-600"><span class="font-semibold">Source File:</span> ${props.path.split('\\').pop()}</div>` : ''}
-          </div>
-          
-          <div class="mt-2 text-xs text-gray-500">
-            <div>📍 Administrative Boundary of Ibaan, Batangas</div>
-            <div>📐 CRS: PRS92 Philippines Zone III</div>
-          </div>
-        </div>`;
-        
-        layer.bindPopup(content).openPopup();
-      },
-      mouseover: (e: any) => {
-        // Highlight on hover
-        e.target.setStyle({ 
-          weight: 4, 
-          color: '#3b82f6', 
-          fillOpacity: 0.2,
-          dashArray: ''
-        });
-      },
-      mouseout: (e: any) => {
-        // Reset style on mouseout
-        const isSelected = feature.id === selectedBoundaryId;
-        e.target.setStyle(adminBoundaryStyle(feature));
-      }
-    });
+  // Handle map click for measurement
+  const handleMapClick = (lat: number, lng: number) => {
+    if (activeRightPanel !== 'measure' || !measureInput.isMeasuring) return;
     
-    // Default popup for when not clicked
-    layer.bindPopup(`<h4 class="font-bold text-blue-700">${feature.properties?.brgy || 'Administrative Boundary'}</h4>
-      <div class="text-xs text-gray-600">
-        ${feature.properties?.brgy ? `Barangay: ${feature.properties.brgy}` : 'Boundary Area'}
-      </div>`);
+    const coordString = `${lat.toFixed(6)}, ${lng.toFixed(6)}`;
+    
+    if (measureInput.clickMode === 'start') {
+      handleMeasurePointChange('startPoint', coordString);
+      setMeasureInput(prev => ({ ...prev, clickMode: 'end' }));
+    } else {
+      handleMeasurePointChange('endPoint', coordString);
+      setMeasureInput(prev => ({ ...prev, clickMode: 'start' }));
+    }
   };
 
-  const getFilteredLocations = () => {
-    let filtered = [...boundaryLocations];
-    if (!layers.evacuationCenter) filtered = filtered.filter(loc => loc.type !== 'evacuation_center' && loc.type !== 'healthcare');
-    if (!layers.adminBoundary) filtered = filtered.filter(loc => loc.type !== 'government' && loc.type !== 'barangay');
-    return filtered;
+  // Toggle measurement mode
+  const toggleMeasurementMode = () => {
+    setMeasureInput(prev => ({
+      ...prev,
+      isMeasuring: !prev.isMeasuring,
+      clickMode: 'start'
+    }));
   };
 
-  if (!isMounted || !mapKey || !leafletReady) return null;
+  const handleGotoXY = () => {
+    const lat = parseFloat(xyInput.lat);
+    const lng = parseFloat(xyInput.lng);
+    if (!isNaN(lat) && !isNaN(lng)) {
+      setMapView({ lat, lng, zoom: 15 });
+    }
+  };
+
+  // Calculate distance between two points using Haversine formula
+  const calculateDistance = (startPoint: string, endPoint: string) => {
+    try {
+      const startCoords = startPoint.split(',').map(coord => parseFloat(coord.trim()));
+      const endCoords = endPoint.split(',').map(coord => parseFloat(coord.trim()));
+      
+      if (startCoords.length !== 2 || endCoords.length !== 2) {
+        return '0.00 km';
+      }
+      
+      const [startLat, startLng] = startCoords;
+      const [endLat, endLng] = endCoords;
+      
+      if (isNaN(startLat) || isNaN(startLng) || isNaN(endLat) || isNaN(endLng)) {
+        return '0.00 km';
+      }
+      
+      const R = 6371;
+      const dLat = (endLat - startLat) * Math.PI / 180;
+      const dLng = (endLng - startLng) * Math.PI / 180;
+      const a = 
+        Math.sin(dLat/2) * Math.sin(dLat/2) +
+        Math.cos(startLat * Math.PI / 180) * Math.cos(endLat * Math.PI / 180) * 
+        Math.sin(dLng/2) * Math.sin(dLng/2);
+      const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+      const distance = R * c;
+      
+      return `${distance.toFixed(2)} km`;
+    } catch (error) {
+      return '0.00 km';
+    }
+  };
+
+  const handleMeasurePointChange = (field: 'startPoint' | 'endPoint', value: string) => {
+    const newMeasureInput = { ...measureInput, [field]: value };
+    const distance = calculateDistance(newMeasureInput.startPoint, newMeasureInput.endPoint);
+    setMeasureInput({ ...newMeasureInput, distance, visualElements: measureInput.visualElements });
+  };
+
+  const handleClearMeasurement = () => {
+    setMeasureInput({
+      startPoint: '',
+      endPoint: '',
+      distance: '0.00 km',
+      isMeasuring: false,
+      clickMode: 'start',
+      visualElements: {
+        lines: [],
+        markers: []
+      }
+    });
+  };
+
+  useEffect(() => {
+    const fetchSavedLayers = async () => {
+      try {
+        const response = await fetch('/api/layers');
+        if (response.ok) {
+          const result = await response.json();
+          const layers = result.data
+            .filter((layer: any) => layer.metadata?.geojson)
+            .map((layer: any) => ({
+              id: layer.id.toString(),
+              title: layer.layer_name,
+              name: layer.layer_name,
+              geometry: layer.metadata.geojson,
+              color: layer.metadata.color || layer.style_config?.color || '#333333',
+              visible: layer.is_visible !== false,
+              layer_type: layer.layer_type || 'vector',
+              agency: 'Uploaded Shapefile',
+              category: 'Custom Layer',
+              is_downloadable: layer.is_downloadable || false
+            }));
+          setSavedLayers(layers);
+        }
+      } catch (err) {
+        console.error('Error fetching saved layers:', err);
+      }
+    };
+
+    fetchSavedLayers();
+  }, []);
 
   return (
-    <div className="flex flex-col lg:flex-row gap-8 p-4 bg-white font-sans">
-      <div className="relative flex-1 h-[650px] rounded-[32px] overflow-hidden shadow-2xl border border-gray-200">
+    <div className="relative h-screen w-full bg-[#f8f9fa] overflow-hidden flex flex-col font-sans">
+      <main className="flex-1 relative overflow-hidden">
         
-        {loading && (
-          <div className="absolute inset-0 z-[2000] bg-white/60 backdrop-blur-sm flex flex-col items-center justify-center">
-            <div className="w-12 h-12 border-4 border-orange-200 border-t-orange-500 rounded-full animate-spin"></div>
-            <p className="mt-4 font-bold text-gray-700">Loading spatial data...</p>
-          </div>
-        )}
-
+        {/* Layer Control Panel - Top Left (matching viewer dashboard) */}
         <div className="absolute top-6 left-6 z-[1000] bg-white rounded-2xl shadow-lg p-5 w-60 border border-gray-100">
           <div className="space-y-3">
             <label className="flex items-center gap-3 cursor-pointer">
               <input type="radio" name="mapType" checked={mapType === 'osm'} onChange={() => setMapType('osm')} className="w-4 h-4 accent-gray-600" />
-              <span className="text-sm font-medium text-gray-700">Open Street Map</span>
+              <span className="text-sm font-medium text-gray-700">Street Map</span>
             </label>
             <label className="flex items-center gap-3 cursor-pointer">
               <input type="radio" name="mapType" checked={mapType === 'satellite'} onChange={() => setMapType('satellite')} className="w-4 h-4 accent-orange-500" />
-              <span className="text-sm font-medium text-gray-700">Satellite (Esri)</span>
+              <span className="text-sm font-medium text-gray-700">Satellite</span>
+            </label>
+            <label className="flex items-center gap-3 cursor-pointer">
+              <input type="radio" name="mapType" checked={mapType === 'terrain'} onChange={() => setMapType('terrain')} className="w-4 h-4 accent-orange-500" />
+              <span className="text-sm font-medium text-gray-700">Terrain</span>
             </label>
             <div className="h-px bg-gray-100 my-2" />
             {Object.entries(layers).map(([key, value]) => (
@@ -379,75 +198,210 @@ const MapsDashboard = () => {
           </div>
         </div>
 
-        <MapContainer key={mapKey} center={centerPosition} zoom={13} className="h-full w-full">
-          <TileLayer 
-            key={mapType}
-            url={mapType === 'osm' 
-              ? "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" 
-              : "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"
-            } 
+        <div className="w-full h-full z-0" ref={mapContainerRef}>
+          <MapRenderer 
+            layers={savedLayers} 
+            mapView={mapView} 
+            bufferData={bufferData} 
+            basemap={mapType}
+            onMapClick={handleMapClick}
+            isMeasuring={measureInput.isMeasuring}
+            measureVisualElements={measureInput.visualElements}
+            boundaryLayerVisible={layers.adminBoundary}
+            boundaryLayerHighlighted={false}
+            roadNetworkLayerVisible={layers.roadNetworks}
+            roadNetworkLayerHighlighted={false}
+            waterwaysLayerVisible={layers.rivers}
+            waterwaysLayerHighlighted={false}
           />
+        </div>
 
-          {layers.hazardArea && <Circle center={centerPosition} radius={500} pathOptions={{ color: '#ea580c', weight: 3, fillOpacity: 0.15, fillColor: '#ea580c' }} />}
-
-          {/* ADMIN BOUNDARY LAYER */}
-          {layers.adminBoundary && boundariesData && (
-             <GeoJSON 
-               key={`admin-layer-${selectedBoundaryId}-${boundariesData.features.length}`}
-               data={transformCoordinates(boundariesData)}
-               style={adminBoundaryStyle}
-               onEachFeature={onEachBoundaryFeature}
-             />
-          )}
-
-          {layers.riverBoundary && waterwaysData && (
-             <Rectangle 
-               bounds={calculateRiverBounds(waterwaysData) || [[13.70, 121.00], [13.90, 121.30]]}
-               pathOptions={{ color: '#87CEEB', weight: 2, fillOpacity: 0.25, dashArray: '8, 4' }}
-             />
-          )}
-
-          {layers.rivers && waterwaysData && waterwaysData.features && (
-             <GeoJSON 
-               key={`river-${waterwaysData.features.length}`}
-               data={transformCoordinates(waterwaysData)}
-               style={geoPortalWaterwayStyle}
-               onEachFeature={onEachWaterwayFeature}
-             />
-          )}
-
-          {layers.roadNetworks && roadsData && roadsData.features && transformRoadCoordinates(roadsData) && (
-             <GeoJSON 
-               key={`roads-${roadsData.features.length}`}
-               data={transformRoadCoordinates(roadsData)!}
-               style={geoPortalRoadStyle}
-               onEachFeature={onEachRoadFeature}
-             />
-          )}
-
-          {layers.evacuationCenter && customIcon && getFilteredLocations().map((location: any) => (
-            <Marker key={location.id} position={[location.latitude, location.longitude]} icon={customIcon}>
-              <Popup>
-                <div className="p-2">
-                  <h4 className="font-bold text-sm">{location.name}</h4>
-                  <p className="text-xs text-gray-600">{location.address}</p>
-                </div>
-              </Popup>
-            </Marker>
-          ))}
-        </MapContainer>
-      </div>
-
-      <div className="w-full lg:w-[400px] flex flex-col gap-4">
-        {sidebarCategories.map((cat, i) => (
-          <div key={i} className="p-5 bg-white rounded-[24px] border border-gray-100 shadow-sm hover:shadow-md hover:border-orange-200 transition-all cursor-pointer">
-            <h3 className="text-lg font-bold text-gray-900">{cat.title}</h3>
-            <p className="text-sm text-gray-500 mt-2">{cat.desc}</p>
+        {/* Legends Box - Right Side */}
+        <div className="absolute top-50 right-4 z-[1000] bg-white shadow-lg border border-gray-200 rounded-lg p-3 max-w-xs">
+          <div className="flex items-center justify-between mb-2">
+            <h3 className="text-xs font-bold text-gray-700 flex items-center">
+              <Layers size={12} className="mr-1" />
+              Map Legends
+            </h3>
+            <button 
+              onClick={() => setLegendsOpen(!legendsOpen)}
+              className="text-gray-500 hover:text-gray-700"
+            >
+              {legendsOpen ? <X size={14} /> : <ChevronRight size={14} />}
+            </button>
           </div>
-        ))}
-      </div>
+          
+          {legendsOpen && (
+            <div className="space-y-2 max-h-48 overflow-y-auto">
+              {Object.entries(layers).map(([key, _]) => (
+                <div key={key} className="flex items-center space-x-2 text-xs">
+                  {key === 'adminBoundary' && (
+                    <div className="w-4 h-4 border-2 rounded-sm" style={{ 
+                      borderColor: '#3b82f6', 
+                      backgroundColor: 'rgba(59, 130, 246, 0.2)' 
+                    }}></div>
+                  )}
+                  {key === 'evacuationCenter' && (
+                    <div className="w-4 h-4 rounded-full flex items-center justify-center" style={{ 
+                      backgroundColor: '#3b82f6',
+                      border: '2px solid #1e40af'
+                    }}>
+                      <div className="w-1.5 h-1.5 bg-white rounded-full"></div>
+                    </div>
+                  )}
+                  {key === 'hazardArea' && (
+                    <div className="w-4 h-4 rounded-full" style={{ 
+                      backgroundColor: 'rgba(234, 88, 12, 0.3)',
+                      border: '2px solid #ea580c'
+                    }}></div>
+                  )}
+                  {key === 'roadNetworks' && (
+                    <div className="w-4 h-0.5" style={{ 
+                      backgroundColor: '#06a506',
+                      height: '3px'
+                    }}></div>
+                  )}
+                  {key === 'rivers' && (
+                    <div className="w-4 h-0.5" style={{ 
+                      backgroundColor: '#2563eb',
+                      height: '3px'
+                    }}></div>
+                  )}
+                  {key === 'riverBoundary' && (
+                    <div className="w-4 h-4 border-2 border-dashed rounded-sm" style={{ 
+                      borderColor: '#87CEEB',
+                      backgroundColor: 'rgba(135, 206, 235, 0.2)'
+                    }}></div>
+                  )}
+                  <div className="flex-1">
+                    <div className="font-medium text-gray-700 capitalize">{key.replace(/([A-Z])/g, ' $1').trim()}</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Right Toolbar */}
+        <div className="absolute top-4 right-4 z-[1000] flex flex-col space-y-1">
+          <ToolIcon active={activeRightPanel === 'basemap'} onClick={() => setActiveRightPanel('basemap')} icon={<Globe size={18} />} brandColor={brandColor} />
+          <ToolIcon active={activeRightPanel === 'measure'} onClick={() => setActiveRightPanel('measure')} icon={<Ruler size={18} />} brandColor={brandColor} />
+          <ToolIcon active={activeRightPanel === 'xy'} onClick={() => setActiveRightPanel('xy')} label="XY" brandColor={brandColor} />
+          <ToolIcon active={activeRightPanel === 'buffer'} onClick={() => setActiveRightPanel('buffer')} icon={<CircleDot size={18} />} brandColor={brandColor} />
+        </div>
+
+        {/* Right Panel Body */}
+        {activeRightPanel && (
+          <div className="absolute top-4 right-16 z-[1000] w-64 bg-[#333] text-white shadow-2xl border border-gray-600">
+            <div style={{ backgroundColor: brandColor }} className="text-white px-3 py-1.5 flex items-center justify-between font-bold text-xs uppercase">
+              <div className="flex items-center"><ChevronRight size={14} className="mr-1 stroke-[3px]" /> {activeRightPanel}</div>
+              <button onClick={() => setActiveRightPanel(null)}><X size={18} /></button>
+            </div>
+
+            <div className="p-4 space-y-4 text-xs">
+              {activeRightPanel === 'basemap' && (
+                <div className="space-y-2">
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input type="radio" name="basemap" checked={mapType === 'osm'} onChange={() => setMapType('osm')} className="accent-white" />
+                    <span>Open Street Map</span>
+                  </label>
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input type="radio" name="basemap" checked={mapType === 'satellite'} onChange={() => setMapType('satellite')} className="accent-white" />
+                    <span>Satellite (Esri)</span>
+                  </label>
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input type="radio" name="basemap" checked={mapType === 'terrain'} onChange={() => setMapType('terrain')} className="accent-white" />
+                    <span>Terrain Map</span>
+                  </label>
+                </div>
+              )}
+
+              {activeRightPanel === 'xy' && (
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between"><label>Latitude</label><input type="text" value={xyInput.lat} onChange={(e) => setXyInput({...xyInput, lat: e.target.value})} className="w-32 text-white p-1 rounded bg-gray-700" /></div>
+                  <div className="flex items-center justify-between"><label>Longitude</label><input type="text" value={xyInput.lng} onChange={(e) => setXyInput({...xyInput, lng: e.target.value})} className="w-32 text-white p-1 rounded bg-gray-700" /></div>
+                  <button onClick={handleGotoXY} style={{ backgroundColor: brandColor }} className="w-full text-white font-bold py-2 mt-2 rounded">Go</button>
+                </div>
+              )}
+
+              {activeRightPanel === 'buffer' && (
+                <div className="space-y-3">
+                  <input type="text" placeholder="Distance" value={bufferInput.distance} onChange={(e) => setBufferInput({...bufferInput, distance: e.target.value})} className="w-full text-white p-2 rounded bg-gray-700" />
+                  <button onClick={() => setBufferData(bufferInput)} style={{ backgroundColor: brandColor }} className="w-full text-white font-bold py-2 rounded">Go</button>
+                </div>
+              )}
+
+              {activeRightPanel === 'measure' && (
+                <div className="space-y-3">
+                  <div className="text-center text-white mb-2">
+                    {measureInput.isMeasuring 
+                      ? `Click on map to set ${measureInput.clickMode === 'start' ? 'start' : 'end'} point` 
+                      : 'Click toggle to enable map measurement'
+                    }
+                  </div>
+                  <button 
+                    onClick={toggleMeasurementMode}
+                    style={{ backgroundColor: measureInput.isMeasuring ? brandColor : '#666' }} 
+                    className="w-full text-white font-bold py-2 rounded mb-3"
+                  >
+                    {measureInput.isMeasuring ? 'Stop Map Measurement' : 'Start Map Measurement'}
+                  </button>
+                  <div className="flex items-center justify-between">
+                    <label>Start Point:</label>
+                    <input 
+                      type="text" 
+                      placeholder="lat, lng" 
+                      value={measureInput.startPoint}
+                      onChange={(e) => handleMeasurePointChange('startPoint', e.target.value)}
+                      className="w-24 text-white p-1 rounded bg-gray-700 text-xs" 
+                    />
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <label>End Point:</label>
+                    <input 
+                      type="text" 
+                      placeholder="lat, lng" 
+                      value={measureInput.endPoint}
+                      onChange={(e) => handleMeasurePointChange('endPoint', e.target.value)}
+                      className="w-24 text-white p-1 rounded bg-gray-700 text-xs" 
+                    />
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <label>Distance:</label>
+                    <input 
+                      type="text" 
+                      value={measureInput.distance} 
+                      readOnly 
+                      className="w-24 text-white p-1 rounded bg-gray-700 text-xs" 
+                    />
+                  </div>
+                  <button 
+                    onClick={handleClearMeasurement} 
+                    style={{ backgroundColor: brandColor }} 
+                    className="w-full text-white font-bold py-2 rounded"
+                  >
+                    Clear Measurement
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+      </main>
     </div>
   );
-};
+}
 
-export default MapsDashboard;
+function ToolIcon({ active, onClick, icon, label, brandColor }: any) {
+  return (
+    <button 
+      key={`tool-${label || 'icon'}`}
+      suppressHydrationWarning={true}
+      onClick={onClick} 
+      style={active ? { backgroundColor: brandColor } : { backgroundColor: '#333' }} 
+      className={`w-10 h-10 flex items-center justify-center border-b border-gray-600 text-white shadow-sm`}
+    >
+      {icon || <span className="font-bold text-xs">{label}</span>}
+    </button>
+  );
+}
