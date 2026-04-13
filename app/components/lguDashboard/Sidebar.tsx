@@ -16,6 +16,7 @@ const Sidebar = () => {
     { name: "Audit Logs", href: "/lgu-dashboard/audit", icon: "/icons/audit.png" },
     { name: "Projects", href: "/lgu-dashboard/projects", icon: "/icons/spatial.png" },
     { name: "Maps", href: "/lgu-dashboard/maps", icon: "/icons/map.png" },
+    { name: "Upload Shapefiles", href: "/lgu-dashboard/upload", icon: "/icons/placeholder.png" },
   ];
 
   // Logout handler

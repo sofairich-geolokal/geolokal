@@ -5,8 +5,13 @@ import dynamic from 'next/dynamic';
 import { 
   Menu, Layers, Globe, Ruler, CircleDot, 
   Download, ExternalLink, ChevronRight, 
-  ChevronLeft, X, MoveUp, Save
+  ChevronLeft, X, MoveUp, Save, Eye
 } from 'lucide-react';
+
+// Import the layer components
+import BoundaryLayer from './BoundaryLayer';
+import RoadNetworksLayer from './RoadNetworksLayer';
+import WaterwaysLayer from './WaterwaysLayer';
 
 const MapRenderer = dynamic(() => import('./MapRenderer'), { 
   ssr: false, 
@@ -25,26 +30,86 @@ export default function ViewerMap() {
   const [availableLayers, setAvailableLayers] = useState<any[]>([]);
   const [loadingLayers, setLoadingLayers] = useState(false);
 
-  // Generate sample geometry for different regions
-  const generateSampleGeometry = (index: number) => {
-    const baseCoords = [
-      { center: [13.4124, 122.5619], offset: 0.5 },  // Manila area
-      { center: [14.5995, 120.9842], offset: 0.4 },  // Batangas area  
-      { center: [15.1570, 120.6344], offset: 0.3 },  // Bulacan area
-      { center: [10.3157, 123.8854], offset: 0.6 }   // Cebu area
-    ];
-    
-    const coord = baseCoords[index % baseCoords.length];
-    const size = 0.3 + (index * 0.1);
-    
-    return [
-      [coord.center[1] - size, coord.center[0] - size],
-      [coord.center[1] + size, coord.center[0] - size],
-      [coord.center[1] + size, coord.center[0] + size],
-      [coord.center[1] - size, coord.center[0] + size],
-      [coord.center[1] - size, coord.center[0] - size]
-    ];
-  };
+  // State for managing boundary, road network, and waterways layers
+  const [boundaryLayerVisible, setBoundaryLayerVisible] = useState(false);
+  const [boundaryLayerHighlighted, setBoundaryLayerHighlighted] = useState(false);
+  const [roadNetworkLayerVisible, setRoadNetworkLayerVisible] = useState(false);
+  const [roadNetworkLayerHighlighted, setRoadNetworkLayerHighlighted] = useState(false);
+  const [waterwaysLayerVisible, setWaterwaysLayerVisible] = useState(false);
+  const [waterwaysLayerHighlighted, setWaterwaysLayerHighlighted] = useState(false);
+
+  // Three main layers that should always be available (same as superadmin)
+  const mainLayers = [
+    {
+      id: 10001,
+      title: 'Administrative Boundaries',
+      agency: 'Geolokal',
+      description: 'City and barangay boundaries from database',
+      geometry: [
+        [13.7421, 121.1089],
+        [13.7421, 121.1412],
+        [13.7756, 121.1412],
+        [13.7756, 121.1089],
+        [13.7421, 121.1089]
+      ],
+      layer_type: 'boundary',
+      opacity: 0.8,
+      category: 'DRRM',
+      is_main_layer: true // Flag to identify main layers
+    },
+    {
+      id: 10002,
+      title: 'Road Networks',
+      agency: 'DPWH',
+      description: 'Road networks and transportation infrastructure',
+      geometry: (() => {
+        const baseCoords = [
+          { center: [14.5995, 120.9842], offset: 0.4 },  // Batangas area  
+          { center: [15.1570, 120.6344], offset: 0.3 },  // Bulacan area
+          { center: [10.3157, 123.8854], offset: 0.6 }   // Cebu area
+        ];
+        
+        const coord = baseCoords[101 % baseCoords.length];
+        const size = 0.3 + (101 * 0.1);
+        
+        return [
+          [coord.center[1] - size, coord.center[0] - size],
+          [coord.center[1] + size, coord.center[0] - size],
+          [coord.center[1] + size, coord.center[0] + size],
+          [coord.center[1] - size, coord.center[0] - size]
+        ];
+      })(),
+      layer_type: 'road',
+      opacity: 0.9,
+      category: 'Infrastructure',
+      is_main_layer: true
+    },
+    {
+      id: 10003,
+      title: 'Waterways',
+      agency: 'DENR',
+      description: 'Rivers, streams, and water bodies',
+      geometry: [
+        { center: [13.4124, 122.5619], offset: 0.5 },  // Manila area
+        { center: [14.5995, 120.9842], offset: 0.4 },  // Batangas area  
+        { center: [15.1570, 120.6344], offset: 0.3 },  // Bulacan area
+        { center: [10.3157, 123.8854], offset: 0.6 }   // Cebu area
+      ].map((coord, index) => {
+        const size = 0.3 + (102 * 0.1);
+        
+        return [
+          [coord.center[1] - size, coord.center[0] - size],
+          [coord.center[1] + size, coord.center[0] - size],
+          [coord.center[1] + size, coord.center[0] + size],
+          [coord.center[1] - size, coord.center[0] - size]
+        ];
+      })[0],
+      layer_type: 'waterway',
+      opacity: 0.7,
+      category: 'Environmental',
+      is_main_layer: true
+    }
+  ];
 
   // Check GeoServer status
   const checkGeoServerStatus = async () => {
@@ -88,7 +153,7 @@ export default function ViewerMap() {
     }
   };
 
-  // Fetch real layers from Philippine GeoPortal API
+  // Fetch real layers from Philippine GeoPortal API and database
   useEffect(() => {
     const fetchGeoPortalLayers = async () => {
       setLoadingLayers(true);
@@ -97,11 +162,117 @@ export default function ViewerMap() {
         const geoServerRunning = await checkGeoServerStatus();
         console.log('GeoServer Status:', geoServerRunning ? 'Running' : 'Not Running');
         
-        // Fetch available layers from GeoPortal with timeout
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
+        // Fetch dynamic layers from database
+        const dbResponse = await fetch('/api/layers?visible=true');
+        let dbLayers = [];
         
+        if (dbResponse.ok) {
+          const dbResult = await dbResponse.json();
+          if (dbResult.success && dbResult.data) {
+            dbLayers = dbResult.data.map((layer: any) => ({
+              id: layer.id,
+              title: layer.layer_name,
+              agency: layer.city_muni_master?.name || 'Database',
+              description: layer.metadata?.description || `Dynamic layer: ${layer.layer_name}`,
+              geometry: layer.metadata?.sample_geometry || (() => {
+                const baseCoords = [
+                  { center: [13.4124, 122.5619], offset: 0.5 },  // Manila area
+                  { center: [14.5995, 120.9842], offset: 0.4 },  // Batangas area  
+                  { center: [15.1570, 120.6344], offset: 0.3 },  // Bulacan area
+                  { center: [10.3157, 123.8854], offset: 0.6 }   // Cebu area
+                ];
+                
+                const coord = baseCoords[layer.id % baseCoords.length];
+                const size = 0.3 + (layer.id * 0.1);
+                
+                return [
+                  [coord.center[1] - size, coord.center[0] - size],
+                  [coord.center[1] + size, coord.center[0] - size],
+                  [coord.center[1] + size, coord.center[0] + size],
+                  [coord.center[1] - size, coord.center[0] - size]
+                ];
+              })(),
+              layer_type: layer.layer_type,
+              style_config: layer.style_config,
+              opacity: layer.opacity || 0.7,
+              is_downloadable: layer.is_downloadable,
+              category: layer.project_categories?.name || 'General',
+              metadata: layer.metadata
+            }));
+            console.log('Successfully loaded database layers:', dbLayers.length);
+          }
+        }
+
+        // Add the three main layers that should always be available (same as superadmin)
+        const mainLayers = [
+          {
+            id: 10001,
+            title: 'Administrative Boundaries',
+            agency: 'NAMRIA',
+            description: 'City and barangay boundaries from database',
+            geometry: [
+              [13.7421, 121.1089],
+              [13.7421, 121.1412],
+              [13.7756, 121.1412],
+              [13.7756, 121.1089],
+              [13.7421, 121.1089]
+            ],
+            layer_type: 'boundary',
+            opacity: 0.8,
+            category: 'DRRM',
+            is_main_layer: true // Flag to identify main layers
+          },
+          {
+            id: 10002,
+            title: 'Road Networks',
+            agency: 'DPWH',
+            description: 'Road networks and transportation infrastructure',
+            geometry: [
+              [14.5995, 120.9842],
+              [14.5995, 121.1412],
+              [14.5995, 121.1089],
+              [14.5995, 120.9842]
+            ],
+            layer_type: 'road',
+            opacity: 0.9,
+            category: 'Infrastructure',
+            is_main_layer: true
+          },
+          {
+            id: 10003,
+            title: 'Waterways',
+            agency: 'DENR',
+            description: 'Rivers, streams, and water bodies',
+            geometry: [
+              { center: [13.4124, 122.5619], offset: 0.5 },  // Manila area
+              { center: [14.5995, 120.9842], offset: 0.4 },  // Batangas area  
+              { center: [15.1570, 120.6344], offset: 0.3 },  // Bulacan area
+              { center: [10.3157, 123.8854], offset: 0.6 }   // Cebu area
+            ].map((coord, index) => {
+              const size = 0.3 + (102 * 0.1);
+              
+              return [
+                [coord.center[1] - size, coord.center[0] - size],
+                [coord.center[1] + size, coord.center[0] - size],
+                [coord.center[1] + size, coord.center[0] + size],
+                [coord.center[1] - size, coord.center[0] - size]
+              ];
+            })[0],
+            layer_type: 'waterway',
+            opacity: 0.7,
+            category: 'Environmental',
+            is_main_layer: true
+          }
+        ];
+
+        // Combine database layers with main layers
+        const allLayers = [...mainLayers, ...dbLayers];
+
+        // Also try GeoPortal API for additional layers
         try {
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => controller.abort(), 5000); // 5 second timeout
+          
           const response = await fetch('https://geoportal.gov.ph/api/v2/layers', {
             signal: controller.signal,
             headers: {
@@ -115,67 +286,90 @@ export default function ViewerMap() {
             const data = await response.json();
             
             // Transform GeoPortal data to our layer format
-            const transformedLayers = data.slice(0, 4).map((layer: any, index: number) => ({
-              id: index + 1,
-              title: layer.title || layer.name || `Layer ${index + 1}`,
+            const geoPortalLayers = data.slice(0, 2).map((layer: any, index: number) => ({
+              id: 2000 + index, // Use high IDs to avoid conflicts with main layers
+              title: layer.title || layer.name || `GeoPortal Layer ${index + 1}`,
               agency: layer.organization || 'GeoPortal PH',
               description: layer.description || layer.abstract || 'Philippine geographic data layer',
-              geometry: generateSampleGeometry(index) // Use sample geometry for demo
+              geometry: (() => {
+                const baseCoords = [
+                  { center: [13.4124, 122.5619], offset: 0.5 },  // Manila area
+                  { center: [14.5995, 120.9842], offset: 0.4 },  // Batangas area  
+                  { center: [15.1570, 120.6344], offset: 0.3 },  // Bulacan area
+                  { center: [10.3157, 123.8854], offset: 0.6 }   // Cebu area
+                ];
+                
+                const coord = baseCoords[(index + 10) % baseCoords.length];
+                const size = 0.3 + ((index + 10) * 0.1);
+                
+                return [
+                  [coord.center[1] - size, coord.center[0] - size],
+                  [coord.center[1] + size, coord.center[0] - size],
+                  [coord.center[1] + size, coord.center[0] + size],
+                  [coord.center[1] - size, coord.center[0] - size]
+                ];
+              })(),
+              is_geoportal: true
             }));
             
-            setAvailableLayers(transformedLayers);
-            console.log('Successfully loaded GeoPortal layers:', transformedLayers.length);
+            // Combine all layers
+            setAvailableLayers([...allLayers, ...geoPortalLayers]);
+            console.log('Total layers loaded:', allLayers.length + geoPortalLayers.length);
           } else {
             throw new Error(`GeoPortal API responded with status: ${response.status}`);
           }
         } catch (fetchError) {
-          clearTimeout(timeoutId);
-          console.log('GeoPortal API fetch failed, using fallback layers:', fetchError instanceof Error ? fetchError.message : 'Unknown error');
-          
-          // Fallback to sample layers if API fails
+          console.log('GeoPortal API fetch failed, using only main layers:', fetchError instanceof Error ? fetchError.message : 'Unknown error');
+          // Use only main layers if API fails
+          setAvailableLayers(mainLayers);
+        }
+        
+      } catch (error) {
+        console.error('Error in fetchGeoPortalLayers:', error);
+        // Ensure we always have some layers available
+        if (mainLayers.length === 0) {
           setAvailableLayers([
             { 
               id: 1, 
               title: 'Administrative Boundaries', 
               agency: 'NAMRIA', 
               description: 'City and barangay boundaries',
-              geometry: generateSampleGeometry(0)
+              geometry: [
+                [13.7421, 121.1089],
+                [13.7421, 121.1412],
+                [13.7756, 121.1412],
+                [13.7756, 121.1089],
+                [13.7421, 121.1089]
+              ]
             },
             { 
               id: 2, 
               title: 'Land Use', 
               agency: 'DENR', 
               description: 'Current land use classification',
-              geometry: generateSampleGeometry(1)
+              geometry: [
+                [14.5995, 120.9842],
+                [14.5995, 121.1412],
+                [14.5995, 121.1089],
+                [14.5995, 120.9842]
+              ]
             },
             { 
               id: 3, 
               title: 'Population Density', 
               agency: 'PSA', 
               description: 'Population distribution by area',
-              geometry: generateSampleGeometry(2)
-            },
-            { 
-              id: 4, 
-              title: 'Transportation Network', 
-              agency: 'DPWH', 
-              description: 'Roads and highways',
-              geometry: generateSampleGeometry(3)
+              geometry: [
+                [15.1570, 120.6344],
+                [15.1570, 120.9644],
+                [15.1570, 120.8344],
+                [15.1570, 120.6344]
+              ]
             }
           ]);
+        } else {
+          setAvailableLayers(availableLayers);
         }
-      } catch (error) {
-        console.error('Error in fetchGeoPortalLayers:', error);
-        // Ensure we always have some layers available
-        setAvailableLayers([
-          { 
-            id: 1, 
-            title: 'Administrative Boundaries', 
-            agency: 'NAMRIA', 
-            description: 'City and barangay boundaries',
-            geometry: generateSampleGeometry(0)
-          }
-        ]);
       } finally {
         setLoadingLayers(false);
       }
@@ -188,6 +382,9 @@ export default function ViewerMap() {
   const [mapView, setMapView] = useState<{ lat: number; lng: number; zoom: number } | null>(null);
   const [bufferData, setBufferData] = useState<any>(null);
   const [basemap, setBasemap] = useState('Open Street Map');
+  const [legendsOpen, setLegendsOpen] = useState(true);
+  const [isMeasuring, setIsMeasuring] = useState(false);
+  const [measuredArea, setMeasuredArea] = useState<number | null>(null);
   const [savedMaps, setSavedMaps] = useState<any[]>([]);
   const [mapNameInput, setMapNameInput] = useState('');
   const [showSaveDialog, setShowSaveDialog] = useState(false);
@@ -206,13 +403,11 @@ export default function ViewerMap() {
     certify_info: false
   });
 
-  // Available basemaps including GeoNode
+  // Available basemaps
   const availableBasemaps = [
     'Open Street Map',
     'Satellite Map', 
-    'Terrain Map',
-    'GeoNode Streets',
-    'GeoNode Satellite'
+    'Terrain Map'
   ];
 
   const [xyInput, setXyInput] = useState({ lat: '', lng: '' });
@@ -221,8 +416,17 @@ export default function ViewerMap() {
     startPoint: '', 
     endPoint: '', 
     distance: '0.00 km',
+    area: '0.00 km²',
+    bearing: '0.00°',
+    perimeter: '0.00 km',
     isMeasuring: false,
-    clickMode: 'start'
+    clickMode: 'start',
+    measureType: 'distance' as 'distance' | 'area' | 'bearing' | 'perimeter',
+    points: [] as [number, number][],
+    visualElements: {
+      lines: [] as [number, number][][],
+      markers: [] as [number, number][]
+    }
   });
 
   // Handle map click for measurement
@@ -230,13 +434,71 @@ export default function ViewerMap() {
     if (activeRightPanel !== 'measure' || !measureInput.isMeasuring) return;
     
     const coordString = `${lat.toFixed(6)}, ${lng.toFixed(6)}`;
+    const newPoint: [number, number] = [lat, lng];
     
-    if (measureInput.clickMode === 'start') {
-      handleMeasurePointChange('startPoint', coordString);
-      setMeasureInput(prev => ({ ...prev, clickMode: 'end' }));
+    if (measureInput.measureType === 'distance' || measureInput.measureType === 'bearing') {
+      // Distance and Bearing measurement logic (2 points)
+      if (measureInput.clickMode === 'start') {
+        handleMeasurePointChange('startPoint', coordString);
+        // Add marker for start point
+        setMeasureInput(prev => ({
+          ...prev,
+          clickMode: 'end',
+          visualElements: {
+            ...prev.visualElements,
+            markers: [newPoint],
+            lines: []
+          }
+        }));
+      } else {
+        handleMeasurePointChange('endPoint', coordString);
+        // Add marker for end point and create line between points
+        const startPoint = measureInput.visualElements.markers[0];
+        const bearing = measureInput.measureType === 'bearing' 
+          ? calculateBearing(startPoint, newPoint)
+          : measureInput.bearing;
+        
+        setMeasureInput(prev => ({
+          ...prev,
+          clickMode: 'start',
+          bearing,
+          visualElements: {
+            markers: [startPoint, newPoint],
+            lines: [[startPoint, newPoint]]
+          }
+        }));
+      }
     } else {
-      handleMeasurePointChange('endPoint', coordString);
-      setMeasureInput(prev => ({ ...prev, clickMode: 'start' }));
+      // Area and Perimeter measurement logic (multiple points)
+      const newPoints = [...measureInput.points, newPoint];
+      const newMarkers = [...measureInput.visualElements.markers, newPoint];
+      
+      // Create lines between consecutive points
+      let newLines: [number, number][][] = [];
+      if (newPoints.length > 1) {
+        for (let i = 0; i < newPoints.length - 1; i++) {
+          newLines.push([newPoints[i], newPoints[i + 1]]);
+        }
+        // Close the polygon if we have 3+ points
+        if (newPoints.length >= 3) {
+          newLines.push([newPoints[newPoints.length - 1], newPoints[0]]);
+        }
+      }
+      
+      // Calculate area and perimeter
+      const area = newPoints.length >= 3 ? calculateArea(newPoints) : measureInput.area;
+      const perimeter = newPoints.length >= 2 ? calculatePerimeter(newPoints) : measureInput.perimeter;
+      
+      setMeasureInput(prev => ({ 
+        ...prev, 
+        points: newPoints,
+        area,
+        perimeter,
+        visualElements: {
+          markers: newMarkers,
+          lines: newLines
+        }
+      }));
     }
   };
 
@@ -254,11 +516,39 @@ export default function ViewerMap() {
       // Generate unique color per layer
       const randomColor = `#${Math.floor(Math.random()*16777215).toString(16).padStart(6, '0')}`;
       setLoadedLayers([{ ...layer, visible: true, opacity: 0.7, color: randomColor }, ...loadedLayers]);
+      
+      // Automatically enable corresponding layer visibility for main layers
+      if (layer.title.includes('Administrative') || layer.title.includes('Boundary')) {
+        setBoundaryLayerVisible(true);
+      } else if (layer.title.includes('Road') || layer.title.includes('Network')) {
+        setRoadNetworkLayerVisible(true);
+      } else if (layer.title.includes('Water') || layer.title.includes('River') || layer.title.includes('Waterway')) {
+        setWaterwaysLayerVisible(true);
+      }
     }
   };
 
   const removeLayer = (id: number) => {
+    // Find the layer being removed to check if it's a main layer
+    const removedLayer = loadedLayers.find(l => l.id === id);
+    
+    // Hide corresponding layer visibility for main layers
+    if (removedLayer) {
+      if (removedLayer.title.includes('Administrative') || removedLayer.title.includes('Boundary')) {
+        setBoundaryLayerVisible(false);
+      } else if (removedLayer.title.includes('Road') || removedLayer.title.includes('Network')) {
+        setRoadNetworkLayerVisible(false);
+      } else if (removedLayer.title.includes('Water') || removedLayer.title.includes('River') || removedLayer.title.includes('Waterway')) {
+        setWaterwaysLayerVisible(false);
+      }
+    }
+    
     setLoadedLayers(loadedLayers.filter(l => l.id !== id));
+  };
+
+  // Remove Administrative Boundaries layer specifically
+  const removeAdministrativeBoundaries = () => {
+    setLoadedLayers(loadedLayers.filter(l => l.id !== 1));
   };
 
   const updateLayerOpacity = (id: number, opacity: number) => {
@@ -277,7 +567,16 @@ export default function ViewerMap() {
     return loadedLayers.some(l => l.id === layerId);
   };
 
-  // Save map configuration
+  // Check if user is logged in
+  const isLoggedIn = () => {
+    if (typeof window !== 'undefined') {
+      const user = localStorage.getItem('loggedInUser');
+      return user !== null && user !== undefined;
+    }
+    return false;
+  };
+
+  // Save map configuration (works without login)
   const saveMap = async () => {
     if (!mapNameInput.trim()) {
       alert('Please enter a map name');
@@ -292,21 +591,18 @@ export default function ViewerMap() {
         timestamp: new Date().toISOString()
       };
 
+      // Save map without requiring login - use guest user ID or no user ID
       const response = await fetch('/api/saved-maps', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          user_id: 1, // TODO: Get actual user ID from auth
+          user_id: null, // Allow guest users to save maps
           map_name: mapNameInput,
           map_description: `Custom map with ${loadedLayers.length} layers`,
           map_config: mapConfig,
-          basemap,
-          center_lat: mapView?.lat || 13.4124,
-          center_lng: mapView?.lng || 122.5619,
-          zoom_level: mapView?.zoom || 6,
-          layers_config: loadedLayers,
+          is_guest: !isLoggedIn() // Mark as guest save if not logged in
         }),
       });
 
@@ -314,8 +610,8 @@ export default function ViewerMap() {
       
       if (result.success) {
         alert('Map saved successfully!');
-        setShowSaveDialog(false);
         setMapNameInput('');
+        setShowSaveDialog(false);
         // Refresh saved maps
         fetchSavedMaps();
       } else {
@@ -364,8 +660,14 @@ export default function ViewerMap() {
     }
   };
 
-  // Submit download request
+  // Submit download request (requires login)
   const submitDownloadRequest = async () => {
+    // Check if user is logged in
+    if (!isLoggedIn()) {
+      alert('Please login first to request downloads. Click on the profile icon to login.');
+      return;
+    }
+
     if (!downloadForm.official_email || !downloadForm.client_name) {
       alert('Email and name are required');
       return;
@@ -382,13 +684,17 @@ export default function ViewerMap() {
     }
 
     try {
+      // Get user data from localStorage
+      const userData = localStorage.getItem('loggedInUser');
+      const user = userData ? JSON.parse(userData) : null;
+      
       const response = await fetch('/api/download-requests', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          user_id: 1, // TODO: Get actual user ID from auth
+          user_id: user?.id || null,
           layer_id: selectedDownloadLayer.id,
           layer_name: selectedDownloadLayer.title,
           ...downloadForm,
@@ -427,6 +733,8 @@ export default function ViewerMap() {
   // Initialize saved maps
   useEffect(() => {
     fetchSavedMaps();
+    // Remove Administrative Boundaries layer on component mount
+    removeAdministrativeBoundaries();
   }, []);
 
   const handleGotoXY = () => {
@@ -470,6 +778,82 @@ export default function ViewerMap() {
     }
   };
 
+  const calculateArea = (points: [number, number][]): string => {
+    try {
+      if (points.length < 3) return '0.00 km²';
+      
+      // Using Shoelace formula for area calculation
+      let area = 0;
+      const n = points.length;
+      
+      for (let i = 0; i < n; i++) {
+        const j = (i + 1) % n;
+        area += points[i][0] * points[j][1];
+        area -= points[j][0] * points[i][1];
+      }
+      
+      area = Math.abs(area) / 2;
+      
+      // Convert to approximate square kilometers (rough conversion)
+      // This is a simplified calculation - for more accuracy, use geodesic calculations
+      const areaKm2 = area * 111 * 111; // Approximate conversion from degrees² to km²
+      
+      return `${areaKm2.toFixed(4)} km²`;
+    } catch (error) {
+      return '0.00 km²';
+    }
+  };
+
+  const calculateBearing = (startPoint: [number, number], endPoint: [number, number]): string => {
+    try {
+      const [lat1, lon1] = startPoint;
+      const [lat2, lon2] = endPoint;
+      
+      const lat1Rad = lat1 * Math.PI / 180;
+      const lat2Rad = lat2 * Math.PI / 180;
+      const deltaLonRad = (lon2 - lon1) * Math.PI / 180;
+      
+      const y = Math.sin(deltaLonRad) * Math.cos(lat2Rad);
+      const x = Math.cos(lat1Rad) * Math.sin(lat2Rad) - 
+                Math.sin(lat1Rad) * Math.cos(lat2Rad) * Math.cos(deltaLonRad);
+      
+      const bearingRad = Math.atan2(y, x);
+      const bearingDeg = (bearingRad * 180 / Math.PI + 360) % 360;
+      
+      return `${bearingDeg.toFixed(2)}°`;
+    } catch (error) {
+      return '0.00°';
+    }
+  };
+
+  const calculatePerimeter = (points: [number, number][]): string => {
+    try {
+      if (points.length < 2) return '0.00 km';
+      
+      let perimeter = 0;
+      const R = 6371; // Earth's radius in kilometers
+      
+      for (let i = 0; i < points.length; i++) {
+        const j = (i + 1) % points.length;
+        const [lat1, lon1] = points[i];
+        const [lat2, lon2] = points[j];
+        
+        const dLat = (lat2 - lat1) * Math.PI / 180;
+        const dLon = (lon2 - lon1) * Math.PI / 180;
+        const a = 
+          Math.sin(dLat/2) * Math.sin(dLat/2) +
+          Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * 
+          Math.sin(dLon/2) * Math.sin(dLon/2);
+        const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+        perimeter += R * c;
+      }
+      
+      return `${perimeter.toFixed(2)} km`;
+    } catch (error) {
+      return '0.00 km';
+    }
+  };
+
   const handleMeasurePointChange = (field: 'startPoint' | 'endPoint', value: string) => {
     const newMeasureInput = { ...measureInput, [field]: value };
     const distance = calculateDistance(newMeasureInput.startPoint, newMeasureInput.endPoint);
@@ -481,8 +865,36 @@ export default function ViewerMap() {
       startPoint: '',
       endPoint: '',
       distance: '0.00 km',
+      area: '0.00 km²',
+      bearing: '0.00°',
+      perimeter: '0.00 km',
       isMeasuring: false,
-      clickMode: 'start'
+      clickMode: 'start',
+      measureType: measureInput.measureType, // Keep the current measurement type
+      points: [],
+      visualElements: {
+        lines: [],
+        markers: []
+      }
+    });
+  };
+
+  const handleMeasureTypeChange = (type: 'distance' | 'area' | 'bearing' | 'perimeter') => {
+    setMeasureInput({
+      startPoint: '',
+      endPoint: '',
+      distance: '0.00 km',
+      area: '0.00 km²',
+      bearing: '0.00°',
+      perimeter: '0.00 km',
+      isMeasuring: false,
+      clickMode: 'start',
+      measureType: type,
+      points: [],
+      visualElements: {
+        lines: [],
+        markers: []
+      }
     });
   };
 
@@ -505,6 +917,7 @@ export default function ViewerMap() {
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="flex-1 h-8 px-2 text-md rounded text-white outline-none"
+              suppressHydrationWarning={true}
             />
             <button onClick={() => setLeftPanelOpen(false)} className="ml-1 p-1 hover:bg-black/10 rounded">
               <ChevronLeft size={18} />
@@ -527,19 +940,18 @@ export default function ViewerMap() {
           </div>
 
           <div className="flex-1 overflow-y-auto p-2 bg-gray-50 max-h-[50vh]">
-            {!loadingLayers && availableLayers.length > 0 && (
+            {/* {!loadingLayers && availableLayers.length > 0 && (
               <div className="mb-2 p-2 bg-blue-50 border border-blue-200 rounded text-xs">
-                <div className="flex items-center gap-2">
-                  <div className="w-2 h-2 bg-green-500 rounded-full"></div>
-                  <span className="text-blue-700">✓ Connected to GeoPortal PH</span>
-                </div>
-                <div className="text-blue-600 mt-1">Real Philippine geographic data</div>
               </div>
-            )}
+            )} */}
             
             <ul className="space-y-1">
               {availableLayers.filter(l => l.title.toLowerCase().includes(searchQuery.toLowerCase())).map(layer => {
                 const isLoaded = isLayerLoaded(layer.id);
+                const isMainLayer = layer.title.includes('Administrative') || layer.title.includes('Boundary') || 
+                                  layer.title.includes('Road') || layer.title.includes('Network') || 
+                                  layer.title.includes('Water') || layer.title.includes('River') || layer.title.includes('Waterway');
+                
                 return (
                   <li 
                     key={layer.id} 
@@ -547,12 +959,17 @@ export default function ViewerMap() {
                     className={`p-2 border rounded text-xs group transition-colors ${
                       isLoaded 
                         ? 'bg-green-50 border-green-300 cursor-not-allowed' 
-                        : 'bg-white hover:border-[#318855] cursor-pointer'
+                        : isMainLayer
+                          ? 'bg-blue-50 border-blue-300 hover:border-blue-500 cursor-pointer hover:bg-blue-100'
+                          : 'bg-white hover:border-[#318855] cursor-pointer'
                     }`}
                   >
                     <div className="flex justify-between items-start mb-1">
-                      <span className={`font-medium ${isLoaded ? 'text-green-700' : 'text-gray-700'}`}>
+                      <span className={`font-medium ${isLoaded ? 'text-green-700' : isMainLayer ? 'text-blue-700' : 'text-gray-700'}`}>
                         {layer.title}
+                        {isMainLayer && !isLoaded && (
+                          <span className="ml-2 text-xs bg-blue-200 text-blue-800 px-1 rounded">Click to Apply</span>
+                        )}
                       </span>
                       {!isLoaded && (
                         <button 
@@ -567,16 +984,25 @@ export default function ViewerMap() {
                         </button>
                       )}
                       {isLoaded && (
-                        <span className="text-green-600 font-bold text-xs">✓ Added</span>
+                        <span className="text-green-600 font-bold text-xs">Applied</span>
                       )}
                     </div>
-                    <div className={`text-xs ${isLoaded ? 'text-green-600' : 'text-gray-500'}`}>
+                    <div className={`text-xs ${isLoaded ? 'text-green-600' : isMainLayer ? 'text-blue-600' : 'text-gray-500'}`}>
                       {layer.description}
                     </div>
-                    <div className={`text-xs mt-1 flex items-center gap-1 ${isLoaded ? 'text-green-500' : 'text-gray-400'}`}>
+                    <div className={`text-xs mt-1 flex items-center gap-1 ${isLoaded ? 'text-green-500' : isMainLayer ? 'text-blue-500' : 'text-gray-400'}`}>
                       <span>{layer.agency}</span>
-                      {layer.agency === 'GeoPortal PH' && (
-                        <span className="text-xs bg-blue-100 text-blue-700 px-1 rounded">API</span>
+                      {layer.category && (
+                        <span className="text-xs bg-blue-100 text-blue-700 px-1 rounded">{layer.category}</span>
+                      )}
+                      {layer.layer_type && (
+                        <span className="text-xs bg-gray-100 text-gray-700 px-1 rounded">{layer.layer_type}</span>
+                      )}
+                      {layer.is_downloadable && (
+                        <span className="text-xs bg-green-100 text-green-700 px-1 rounded">Downloadable</span>
+                      )}
+                      {layer.is_geoportal && (
+                        <span className="text-xs bg-purple-100 text-purple-700 px-1 rounded">GeoPortal</span>
                       )}
                     </div>
                   </li>
@@ -617,23 +1043,180 @@ export default function ViewerMap() {
 
         <div className="w-full h-full z-0">
           <MapRenderer 
+            key="viewer-map-instance"
             layers={loadedLayers} 
             mapView={mapView} 
             bufferData={bufferData} 
             basemap={basemap}
             onMapClick={handleMapClick}
             isMeasuring={measureInput.isMeasuring}
+            measureVisualElements={measureInput.visualElements}
+            boundaryLayerVisible={boundaryLayerVisible}
+            boundaryLayerHighlighted={boundaryLayerHighlighted}
+            roadNetworkLayerVisible={roadNetworkLayerVisible}
+            roadNetworkLayerHighlighted={roadNetworkLayerHighlighted}
+            waterwaysLayerVisible={waterwaysLayerVisible}
+            waterwaysLayerHighlighted={waterwaysLayerHighlighted}
           />
         </div>
 
         {/* Right Toolbar - Limited for viewers */}
         <div className="absolute top-4 right-4 z-[1000] flex flex-col space-y-1">
+          <ToolIcon active={activeRightPanel === 'layers'} onClick={() => setActiveRightPanel('layers')} icon={<Layers size={18} />} brandColor={brandColor} />
           <ToolIcon active={activeRightPanel === 'basemap'} onClick={() => setActiveRightPanel('basemap')} icon={<Globe size={18} />} brandColor={brandColor} />
-          <ToolIcon active={activeRightPanel === 'save'} onClick={() => setActiveRightPanel('save')} icon={<Save size={18} />} brandColor={brandColor} />
-          <ToolIcon active={activeRightPanel === 'download'} onClick={() => setActiveRightPanel('download')} icon={<Download size={18} />} brandColor={brandColor} />
           <ToolIcon active={activeRightPanel === 'measure'} onClick={() => setActiveRightPanel('measure')} icon={<Ruler size={18} />} brandColor={brandColor} />
           <ToolIcon active={activeRightPanel === 'xy'} onClick={() => setActiveRightPanel('xy')} label="XY" brandColor={brandColor} />
         </div>
+
+        {/* Legends Box - Right Side */}
+        {(true) && (
+          <div className="absolute top-50 right-4 z-[1000] bg-white shadow-lg border border-gray-200 rounded-lg max-w-xs">
+            <div style={{ backgroundColor: brandColor }} className="px-3 py-2 flex items-center justify-between rounded-t-lg">
+              <h3 className="text-xs font-bold text-white flex items-center">
+                <Layers size={12} className="mr-1" />
+                Legends
+              </h3>
+              <button 
+                onClick={() => setLegendsOpen(!legendsOpen)}
+                className="text-white hover:text-gray-200"
+              >
+                {legendsOpen ? <X size={14} /> : <ChevronRight size={14} />}
+              </button>
+            </div>
+            <div className="p-2">
+              {legendsOpen && (
+                <div className="space-y-2 max-h-48 overflow-y-auto">
+                  {true ? (
+                    <>
+                      {[
+                        { id: 1, title: 'Administrative Boundaries', agency: 'NAMRIA', layer_type: 'boundary', opacity: 0.5 },
+                        { id: 2, title: 'Road Networks', agency: 'DPWH', layer_type: 'road', opacity: 0.5 },
+                        { id: 3, title: 'Waterways', agency: 'DENR', layer_type: 'waterway', opacity: 0.5 }
+                      ].map((layer) => {
+                    // Get the actual layer color from the map renderer style logic
+                    const getLayerLegendStyle = (layer: any) => {
+                      if (layer.layer_type === 'boundary' || layer.title.includes('Administrative') || layer.title.includes('Boundary')) {
+                        return {
+                          color: '#3b82f6',
+                          shape: 'polygon'
+                        };
+                      } else if (layer.layer_type === 'road' || layer.title.includes('Road') || layer.title.includes('Network')) {
+                        return {
+                          color: '#16a34a',
+                          shape: 'line'
+                        };
+                      } else if (layer.layer_type === 'waterway' || layer.title.includes('River') || layer.title.includes('Water')) {
+                        return {
+                          color: '#0ea5e9',
+                          shape: 'water'
+                        };
+                      } else if (layer.layer_type === 'hazard' || layer.title.includes('Hazard') || layer.title.includes('Risk')) {
+                        return {
+                          color: '#dc2626',
+                          shape: 'diamond'
+                        };
+                      } else if (layer.layer_type === 'landuse' || layer.title.includes('Land Use')) {
+                        return {
+                          color: '#86efac',
+                          shape: 'square'
+                        };
+                      } else if (layer.layer_type === 'population' || layer.title.includes('Population')) {
+                        return {
+                          color: '#fca5a5',
+                          shape: 'circle'
+                        };
+                      } else if (layer.title.includes('Infrastructure')) {
+                        return {
+                          color: '#c084fc',
+                          shape: 'square'
+                        };
+                      } else {
+                        return {
+                          color: layer.color || '#d1d5db',
+                          shape: 'square'
+                        };
+                      }
+                    };
+
+                    const legendStyle = getLayerLegendStyle(layer);
+
+                    return (
+                      <div key={layer.id} className="flex items-center space-x-2 text-xs">
+                        {/* Layer Color/Shape Indicator */}
+                        <div className="flex items-center space-x-1">
+                          {legendStyle.shape === 'polygon' ? (
+                            <div className="w-4 h-4 border-2" style={{ 
+                              borderColor: legendStyle.color, 
+                              backgroundColor: 'rgba(59, 130, 246, 0.1)' 
+                            }}></div>
+                          ) : legendStyle.shape === 'line' ? (
+                            <div className="w-4 h-0.5" style={{ 
+                              backgroundColor: legendStyle.color,
+                              height: '3px'
+                            }}></div>
+                          ) : legendStyle.shape === 'water' ? (
+                            <div className="w-4 h-4 relative">
+                              <div className="absolute inset-0 flex items-center justify-center">
+                                <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                                  <path d="M2 8 Q 8 2, 14 8 Q 8 14, 2 8" 
+                                        stroke={legendStyle.color} 
+                                        strokeWidth="1.5" 
+                                        fill="none"/>
+                                  <path d="M4 8 Q 8 5, 12 8 Q 8 11, 4 8" 
+                                        stroke={legendStyle.color} 
+                                        strokeWidth="1" 
+                                        fill="none" 
+                                        opacity="0.6"/>
+                                </svg>
+                              </div>
+                            </div>
+                          ) : legendStyle.shape === 'diamond' ? (
+                            <div className="w-4 h-4" style={{ 
+                              backgroundColor: legendStyle.color,
+                              clipPath: 'polygon(50% 0%, 100% 50%, 50% 100%, 0% 50%)'
+                            }}></div>
+                          ) : legendStyle.shape === 'circle' ? (
+                            <div className="w-4 h-4 rounded-full" style={{ 
+                              backgroundColor: legendStyle.color,
+                              border: `1px solid ${legendStyle.color}`
+                            }}></div>
+                          ) : (
+                            <div className="w-4 h-4 rounded-sm" style={{ 
+                              backgroundColor: legendStyle.color,
+                              border: `1px solid ${legendStyle.color}`
+                            }}></div>
+                          )}
+                        </div>
+                        
+                        {/* Layer Title */}
+                        <div className="flex-1">
+                          <div className="font-medium text-gray-700 truncate">{layer.title}</div>
+                          <div className="text-gray-500 text-[10px]">{layer.agency || 'Unknown'}</div>
+                        </div>
+                        
+                        {/* Opacity Indicator */}
+                        <div className="text-gray-400 text-[10px]">
+                          {Math.round((layer.opacity || 0.5) * 100)}%
+                        </div>
+                      </div>
+                    );
+                  })}
+                  
+                  
+                  
+                </>
+              ) : (
+                    <div className="text-gray-500 text-xs text-center py-4">
+                      <div className="mb-2">🗺️</div>
+                      {/* <div>No layers loaded</div> */}
+                      <div className="text-gray-400 mt-1">Add layers from the left panel</div>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
 
         {/* Right Panel Body */}
         {activeRightPanel && (
@@ -644,6 +1227,64 @@ export default function ViewerMap() {
             </div>
 
             <div className="p-4 space-y-4 text-xs">
+              {activeRightPanel === 'layers' && (
+                <div className="space-y-3">
+                  <div className="text-center text-white mb-2">
+                    <div className="font-semibold">Geographic Layers</div>
+                    <div className="text-gray-400">Data from database</div>
+                  </div>
+                  
+                  {/* Boundary Layer Control */}
+                  <div className="flex items-center justify-between p-2 bg-gray-700 rounded">
+                    <div className="flex items-center gap-2">
+                      <div className="w-3 h-3 rounded-full" style={{ backgroundColor: 'rgb(24, 49, 88)' }}></div>
+                      <span className="text-white">Administrative Boundaries</span>
+                    </div>
+                    <input 
+                      type="checkbox" 
+                      checked={boundaryLayerVisible} 
+                      onChange={(e) => setBoundaryLayerVisible(e.target.checked)}
+                      className="w-4 h-4 accent-blue-600"
+                    />
+                  </div>
+
+                  {/* Road Networks Layer Control */}
+                  <div className="flex items-center justify-between p-2 bg-gray-700 rounded">
+                    <div className="flex items-center gap-2">
+                      <div className="w-3 h-3 rounded-full" style={{ backgroundColor: '#06a506ee' }}></div>
+                      <span className="text-white">Road Networks</span>
+                    </div>
+                    <input 
+                      type="checkbox" 
+                      checked={roadNetworkLayerVisible} 
+                      onChange={(e) => setRoadNetworkLayerVisible(e.target.checked)}
+                      className="w-4 h-4 accent-green-600"
+                    />
+                  </div>
+
+                  {/* Waterways Layer Control */}
+                  <div className="flex items-center justify-between p-2 bg-gray-700 rounded">
+                    <div className="flex items-center gap-2">
+                      <div className="w-3 h-3 rounded-full" style={{ backgroundColor: '#2563eb' }}></div>
+                      <span className="text-white">Waterways</span>
+                    </div>
+                    <input 
+                      type="checkbox" 
+                      checked={waterwaysLayerVisible} 
+                      onChange={(e) => setWaterwaysLayerVisible(e.target.checked)}
+                      className="w-4 h-4 accent-blue-500"
+                    />
+                  </div>
+
+                  <div className="border-t border-gray-600 pt-3">
+                    <div className="text-gray-400 text-xs">
+                      <div> Layers are fetched dynamically from</div>
+                      <div> the database with real geographic data</div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
               {activeRightPanel === 'basemap' && (
                 <select value={basemap} onChange={(e) => setBasemap(e.target.value)} className="w-full bg-white text-black p-2 rounded">
                   {availableBasemaps.map(basemap => (
@@ -660,138 +1301,221 @@ export default function ViewerMap() {
                 </div>
               )}
 
-              {activeRightPanel === 'save' && (
+              
+              {activeRightPanel === 'measure' && (
                 <div className="space-y-3">
+                  {/* Measurement Type Selection - 4 Options */}
                   <div className="space-y-2">
-                    <label className="text-xs">Map Name:</label>
-                    <input 
-                      type="text" 
-                      value={mapNameInput}
-                      onChange={(e) => setMapNameInput(e.target.value)}
-                      placeholder="Enter map name"
-                      className="w-full text-white p-2 rounded bg-gray-700 text-xs"
-                    />
+                    <label className="text-white text-xs font-medium">Measurement Type</label>
+                    <div className="grid grid-cols-2 gap-2">
+                      <button
+                        onClick={() => handleMeasureTypeChange('distance')}
+                        className={`px-2 py-1 rounded text-xs font-medium transition-colors ${
+                          measureInput.measureType === 'distance' 
+                            ? 'bg-white text-gray-800' 
+                            : 'bg-gray-600 text-white hover:bg-gray-500'
+                        }`}
+                      >
+                        Distance
+                      </button>
+                      <button
+                        onClick={() => handleMeasureTypeChange('area')}
+                        className={`px-2 py-1 rounded text-xs font-medium transition-colors ${
+                          measureInput.measureType === 'area' 
+                            ? 'bg-white text-gray-800' 
+                            : 'bg-gray-600 text-white hover:bg-gray-500'
+                        }`}
+                      >
+                        Area
+                      </button>
+                      <button
+                        onClick={() => handleMeasureTypeChange('bearing')}
+                        className={`px-2 py-1 rounded text-xs font-medium transition-colors ${
+                          measureInput.measureType === 'bearing' 
+                            ? 'bg-white text-gray-800' 
+                            : 'bg-gray-600 text-white hover:bg-gray-500'
+                        }`}
+                      >
+                        Bearing
+                      </button>
+                      <button
+                        onClick={() => handleMeasureTypeChange('perimeter')}
+                        className={`px-2 py-1 rounded text-xs font-medium transition-colors ${
+                          measureInput.measureType === 'perimeter' 
+                            ? 'bg-white text-gray-800' 
+                            : 'bg-gray-600 text-white hover:bg-gray-500'
+                        }`}
+                      >
+                        Perimeter
+                      </button>
+                    </div>
                   </div>
+
+                  <div className="text-center text-white mb-2">
+                    {measureInput.isMeasuring 
+                      ? (measureInput.measureType === 'distance' || measureInput.measureType === 'bearing')
+                        ? `Click on map to set ${measureInput.clickMode === 'start' ? 'start' : 'end'} point` 
+                        : `Click on map to add points (${measureInput.points.length} points)`
+                      : 'Click toggle to enable map measurement'
+                    }
+                  </div>
+                  
                   <button 
-                    onClick={saveMap}
-                    style={{ backgroundColor: brandColor }}
+                    onClick={toggleMeasurementMode}
+                    style={{ backgroundColor: measureInput.isMeasuring ? brandColor : '#666' }} 
                     className="w-full text-white font-bold py-2 rounded"
                   >
-                    Save Map
+                    {measureInput.isMeasuring ? 'Stop Measurement' : 'Start Measurement'}
+                  </button>
+
+                  {/* Distance Measurement Fields */}
+                  {measureInput.measureType === 'distance' && (
+                    <>
+                      <div className="flex items-center justify-between">
+                        <label className="text-white text-xs">Start Point:</label>
+                        <input 
+                          type="text" 
+                          placeholder="lat, lng" 
+                          value={measureInput.startPoint}
+                          onChange={(e) => handleMeasurePointChange('startPoint', e.target.value)}
+                          className="w-24 text-white p-1 rounded bg-gray-700 text-xs" 
+                        />
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <label className="text-white text-xs">End Point:</label>
+                        <input 
+                          type="text" 
+                          placeholder="lat, lng" 
+                          value={measureInput.endPoint}
+                          onChange={(e) => handleMeasurePointChange('endPoint', e.target.value)}
+                          className="w-24 text-white p-1 rounded bg-gray-700 text-xs" 
+                        />
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <label className="text-white text-xs">Distance:</label>
+                        <input 
+                          type="text" 
+                          value={measureInput.distance} 
+                          readOnly 
+                          className="w-24 text-white p-1 rounded bg-gray-800 text-xs font-bold" 
+                        />
+                      </div>
+                    </>
+                  )}
+
+                  {/* Area Measurement Fields */}
+                  {measureInput.measureType === 'area' && (
+                    <>
+                      <div className="flex items-center justify-between">
+                        <label className="text-white text-xs">Points:</label>
+                        <span className="text-white text-xs">{measureInput.points.length} points</span>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <label className="text-white text-xs">Area:</label>
+                        <input 
+                          type="text" 
+                          value={measureInput.area} 
+                          readOnly 
+                          className="w-24 text-white p-1 rounded bg-gray-800 text-xs font-bold" 
+                        />
+                      </div>
+                      {measureInput.points.length > 0 && (
+                        <div className="text-white text-xs bg-gray-700 rounded p-2">
+                          <div className="font-medium mb-1">Points:</div>
+                          {measureInput.points.map((point, index) => (
+                            <div key={index} className="text-xs">
+                              {index + 1}: {point[0].toFixed(6)}, {point[1].toFixed(6)}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </>
+                  )}
+
+                  {/* Bearing Measurement Fields */}
+                  {measureInput.measureType === 'bearing' && (
+                    <>
+                      <div className="flex items-center justify-between">
+                        <label className="text-white text-xs">Start Point:</label>
+                        <input 
+                          type="text" 
+                          placeholder="lat, lng" 
+                          value={measureInput.startPoint}
+                          onChange={(e) => handleMeasurePointChange('startPoint', e.target.value)}
+                          className="w-24 text-white p-1 rounded bg-gray-700 text-xs" 
+                        />
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <label className="text-white text-xs">End Point:</label>
+                        <input 
+                          type="text" 
+                          placeholder="lat, lng" 
+                          value={measureInput.endPoint}
+                          onChange={(e) => handleMeasurePointChange('endPoint', e.target.value)}
+                          className="w-24 text-white p-1 rounded bg-gray-700 text-xs" 
+                        />
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <label className="text-white text-xs">Bearing:</label>
+                        <input 
+                          type="text" 
+                          value={measureInput.bearing} 
+                          readOnly 
+                          className="w-24 text-white p-1 rounded bg-gray-800 text-xs font-bold" 
+                        />
+                      </div>
+                    </>
+                  )}
+
+                  {/* Perimeter Measurement Fields */}
+                  {measureInput.measureType === 'perimeter' && (
+                    <>
+                      <div className="flex items-center justify-between">
+                        <label className="text-white text-xs">Points:</label>
+                        <span className="text-white text-xs">{measureInput.points.length} points</span>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <label className="text-white text-xs">Perimeter:</label>
+                        <input 
+                          type="text" 
+                          value={measureInput.perimeter} 
+                          readOnly 
+                          className="w-24 text-white p-1 rounded bg-gray-800 text-xs font-bold" 
+                        />
+                      </div>
+                      {measureInput.points.length > 0 && (
+                        <div className="text-white text-xs bg-gray-700 rounded p-2">
+                          <div className="font-medium mb-1">Points:</div>
+                          {measureInput.points.map((point, index) => (
+                            <div key={index} className="text-xs">
+                              {index + 1}: {point[0].toFixed(6)}, {point[1].toFixed(6)}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </>
+                  )}
+
+                  <button 
+                    onClick={handleClearMeasurement} 
+                    style={{ backgroundColor: brandColor }} 
+                    className="w-full text-white font-bold py-2 rounded"
+                  >
+                    Clear Measurement
                   </button>
                   
                   <div className="border-t border-gray-600 pt-3">
-                    <label className="text-xs font-bold">Saved Maps:</label>
-                    <div className="space-y-1 max-h-32 overflow-y-auto">
-                      {savedMaps.length === 0 ? (
-                        <div className="text-gray-400 text-xs">No saved maps</div>
-                      ) : (
-                        savedMaps.map((savedMap) => (
-                          <div key={savedMap.id} className="flex items-center justify-between p-1 bg-gray-700 rounded">
-                            <span className="text-xs truncate flex-1">{savedMap.map_name}</span>
-                            <button 
-                              onClick={() => loadSavedMap(savedMap)}
-                              className="text-xs bg-blue-600 px-1 rounded"
-                            >
-                              Load
-                            </button>
-                          </div>
-                        ))
-                      )}
+                    <div className="text-gray-400 text-xs">
+                      <div>Click on map to measure</div>
+                      <div>
+                        {measureInput.measureType === 'distance' && 'Distance: 2 points'}
+                        {measureInput.measureType === 'area' && 'Area: 3+ points'}
+                        {measureInput.measureType === 'bearing' && 'Bearing: 2 points'}
+                        {measureInput.measureType === 'perimeter' && 'Perimeter: 2+ points'}
+                      </div>
                     </div>
                   </div>
                 </div>
-              )}
-
-              {activeRightPanel === 'download' && (
-                <div className="space-y-3">
-                  <div className="space-y-2">
-                    <label className="text-xs">Select Layer:</label>
-                    <select 
-                      value={selectedDownloadLayer?.id || ''}
-                      onChange={(e) => {
-                        const layer = loadedLayers.find(l => l.id === parseInt(e.target.value));
-                        setSelectedDownloadLayer(layer);
-                      }}
-                      className="w-full text-black p-2 rounded text-xs"
-                    >
-                      <option value="">Select a layer</option>
-                      {loadedLayers.map((layer) => (
-                        <option key={layer.id} value={layer.id}>{layer.title}</option>
-                      ))}
-                    </select>
-                  </div>
-                  
-                  {selectedDownloadLayer && (
-                    <button 
-                      onClick={() => setShowDownloadDialog(true)}
-                      style={{ backgroundColor: brandColor }}
-                      className="w-full text-white font-bold py-2 rounded"
-                    >
-                      Request Download
-                    </button>
-                  )}
-                  
-                  {!selectedDownloadLayer && (
-                    <div className="text-gray-400 text-xs text-center">
-                      Load a layer first to request download
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {activeRightPanel === 'measure' && (
-                <div className="space-y-3">
-                   <div className="text-center text-white mb-2">
-                     {measureInput.isMeasuring 
-                       ? `Click on map to set ${measureInput.clickMode === 'start' ? 'start' : 'end'} point` 
-                       : 'Click toggle to enable map measurement'
-                     }
-                   </div>
-                   <button 
-                     onClick={toggleMeasurementMode}
-                     style={{ backgroundColor: measureInput.isMeasuring ? brandColor : '#666' }} 
-                     className="w-full text-white font-bold py-2 rounded mb-3"
-                   >
-                     {measureInput.isMeasuring ? 'Stop Measurement' : 'Start Measurement'}
-                   </button>
-                   <div className="flex items-center justify-between">
-                     <label>Start Point:</label>
-                     <input 
-                       type="text" 
-                       placeholder="lat, lng" 
-                       value={measureInput.startPoint}
-                       onChange={(e) => handleMeasurePointChange('startPoint', e.target.value)}
-                       className="w-24 text-white p-1 rounded bg-gray-700 text-xs" 
-                     />
-                   </div>
-                   <div className="flex items-center justify-between">
-                     <label>End Point:</label>
-                     <input 
-                       type="text" 
-                       placeholder="lat, lng" 
-                       value={measureInput.endPoint}
-                       onChange={(e) => handleMeasurePointChange('endPoint', e.target.value)}
-                       className="w-24 text-white p-1 rounded bg-gray-700 text-xs" 
-                     />
-                   </div>
-                   <div className="flex items-center justify-between">
-                     <label>Distance:</label>
-                     <input 
-                       type="text" 
-                       value={measureInput.distance} 
-                       readOnly 
-                       className="w-24 text-white p-1 rounded bg-gray-700 text-xs" 
-                     />
-                   </div>
-                   <button 
-                     onClick={handleClearMeasurement} 
-                     style={{ backgroundColor: brandColor }} 
-                     className="w-full text-white font-bold py-2 rounded"
-                   >
-                     Clear Measurement
-                   </button>
-                 </div>
               )}
             </div>
           </div>

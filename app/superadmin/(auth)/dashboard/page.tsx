@@ -1,8 +1,8 @@
-import ProjectManagement from "../../components/superadmin/projects";
+import Dashboard from "../../../components/superadmin/dashboard";
 export default function DashboardPage() {
 return(
   <div className=" h-auto h-full" >
-    <ProjectManagement />
+    <Dashboard />
   </div>
 )
 }

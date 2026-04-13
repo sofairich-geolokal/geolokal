@@ -1,9 +1,14 @@
-import { Sidebar } from "lucide-react";
+'use client';
 
-export default function LGUDashboard() {
-  return (
-    <div className="flex">
-      <Sidebar />
-    </div>
-  );
+import { useEffect } from 'react';
+import { useRouter } from 'next/navigation';
+
+export default function SuperadminRoot() {
+  const router = useRouter();
+
+  useEffect(() => {
+    router.replace('/superadmin/dashboard');
+  }, [router]);
+
+  return null;
 }

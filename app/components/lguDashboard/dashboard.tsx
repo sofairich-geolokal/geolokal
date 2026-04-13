@@ -3,6 +3,7 @@
 import Cards from "../cards";
 import SourceTypesChart from "../SourceTypesChart";
 import Projectschart from "../projectschart";
+import ProjectCountByCategory from "../ProjectCountByCategory";
 import React, { useEffect, useState } from 'react';
 
 interface SourceData {
@@ -63,7 +64,7 @@ export default function Dashboard(){
         <Cards />
                 <div className="flex flex-col lg:flex-row gap-6 px-5 py-2">
                     <div className="flex-1 rounded-2xl">
-                        <Projectschart />
+                        <ProjectCountByCategory />
                     </div>
                     <div className="flex-1 rounded-2xl">
                         <DataChartWrapper />

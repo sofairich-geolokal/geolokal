@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useEffect, useState } from 'react';
-import { Marker, Popup, Polyline } from 'react-leaflet';
+import { GeoJSON, Popup, Rectangle } from 'react-leaflet';
 import L from 'leaflet';
 
 interface WaterwaysLayerProps {
@@ -167,140 +167,131 @@ const WaterwaysLayer: React.FC<WaterwaysLayerProps> = ({
   isVisible, 
   isHighlighted = false 
 }) => {
-  const [waterways, setWaterways] = useState(ibaWaterways);
+  const [waterwaysData, setWaterwaysData] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
 
-  // Create waterway icon based on type
-  const createWaterwayIcon = (type: string, highlighted: boolean) => {
-    let iconUrl = '/images/water-drop.png'; // Default water icon from public/images
-    
-    // Different icons for different waterway types using public/images
-    switch (type) {
-      case 'river_crossing':
-        iconUrl = '/images/bridge.png';
-        break;
-      case 'confluence':
-        iconUrl = '/images/confluence.png';
-        break;
-      case 'river_access':
-        iconUrl = '/images/river-access.png';
-        break;
-      case 'stream_source':
-        iconUrl = '/images/source.png';
-        break;
-      case 'irrigation_head':
-        iconUrl = '/images/irrigation.png';
-        break;
-      case 'drainage_outlet':
-        iconUrl = '/images/drainage.png';
-        break;
-      default:
-        iconUrl = '/images/water-drop.png';
+  // Fetch waterways data from database (same as superadmin)
+  useEffect(() => {
+    const fetchWaterwaysData = async () => {
+      try {
+        setLoading(true);
+        let geoData = null;
+        
+        // Try to fetch from database first
+        try {
+          const dbResponse = await fetch('/api/waterways');
+          if (dbResponse.ok) {
+            const result = await dbResponse.json();
+            if (result.success && result.data && result.data.features) {
+                geoData = result.data;
+            }
+          }
+        } catch (e) { 
+          console.log("DB route not ready, trying local file..."); 
+        }
+
+        // Fallback to local file if database fails
+        if (!geoData) {
+          const localResponse = await fetch('/data/Ibaan_waterways.json');
+          geoData = await localResponse.json();
+        }
+        
+        setWaterwaysData(geoData);
+      } catch (error) {
+        console.error('Error fetching waterways data:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    if (isVisible) {
+      fetchWaterwaysData();
     }
+  }, [isVisible]);
 
-    return L.icon({
-      iconUrl: iconUrl,
-      iconSize: [24, 24],
-      iconAnchor: [12, 12],
-      popupAnchor: [0, -12],
-      className: highlighted ? 'waterway-marker-highlighted' : 'waterway-marker'
+  // Transform coordinates from PRS92 to WGS84 (same as superadmin)
+  const transformCoordinates = (geoData: any) => {
+    if (!geoData || !geoData.features) return geoData;
+    return {
+      ...geoData,
+      features: geoData.features.map((feature: any) => {
+        if ((feature.geometry?.type === 'Polygon' || feature.geometry?.type === 'MultiPolygon') && feature.geometry?.coordinates) {
+          const transformRing = (ring: any) => ring.map((coord: any) => {
+            const x = coord[0], y = coord[1];
+            if (x < 180 && x > -180) return [x, y];
+            return [(x - 500000) / 100000 + 121.0, (y - 1520000) / 100000 + 13.8];
+          });
+
+          let newCoords;
+          if (feature.geometry.type === 'Polygon') {
+            newCoords = feature.geometry.coordinates.map(transformRing);
+          } else {
+            newCoords = feature.geometry.coordinates.map((poly: any) => poly.map(transformRing));
+          }
+
+          return { ...feature, geometry: { ...feature.geometry, coordinates: newCoords }};
+        }
+        return feature;
+      })
+    };
+  };
+
+  // Calculate river bounds for boundary rectangle (same as superadmin)
+  const calculateRiverBounds = (geoData: any): [[number, number], [number, number]] | null => {
+    if (!geoData || !geoData.features) return null;
+    let minLng = Infinity, maxLng = -Infinity, minLat = Infinity, maxLat = -Infinity;
+    geoData.features.forEach((feature: any) => {
+      if (feature.geometry?.type === 'Polygon' && feature.geometry?.coordinates) {
+        feature.geometry.coordinates.forEach((ring: any) => {
+          ring.forEach((coord: any) => {
+            const x = coord[0], y = coord[1];
+            const lng = (x - 500000) / 100000 + 121.0;
+            const lat = (y - 1520000) / 100000 + 13.8;
+            minLng = Math.min(minLng, lng); maxLng = Math.max(maxLng, lng);
+            minLat = Math.min(minLat, lat); maxLat = Math.max(maxLat, lat);
+          });
+        });
+      }
     });
+    if (minLng === Infinity) return null;
+    const buffer = 0.02;
+    return [[minLat - buffer, minLng - buffer], [maxLat + buffer, maxLng + buffer]];
   };
 
-  // Get style for waterway lines based on classification
-  const getWaterwayStyle = (classification: string, highlighted: boolean) => {
-    const baseColor = highlighted ? '#FFD700' : '#1e40af'; // Gold when highlighted, blue when normal
-    
-    switch (classification) {
-      case 'primary': // Main rivers
-        return {
-          color: baseColor,
-          weight: highlighted ? 5 : 4,
-          opacity: highlighted ? 1 : 0.9,
-          fillColor: baseColor,
-          fillOpacity: 0.2,
-          dashArray: ''
-        };
-      case 'secondary': // Creeks and tributaries
-        return {
-          color: baseColor,
-          weight: highlighted ? 3 : 2,
-          opacity: highlighted ? 1 : 0.8,
-          fillColor: baseColor,
-          fillOpacity: 0.15,
-          dashArray: ''
-        };
-      case 'tertiary': // Streams and irrigation canals
-        return {
-          color: baseColor,
-          weight: highlighted ? 2 : 1.5,
-          opacity: highlighted ? 1 : 0.7,
-          fillColor: baseColor,
-          fillOpacity: 0.1,
-          dashArray: ''
-        };
-      case 'local': // Drainage channels
-        return {
-          color: baseColor,
-          weight: highlighted ? 1.5 : 1,
-          opacity: highlighted ? 1 : 0.6,
-          fillColor: baseColor,
-          fillOpacity: 0.1,
-          dashArray: '3,2'
-        };
-      default:
-        return {
-          color: baseColor,
-          weight: 2,
-          opacity: 0.8,
-          fillOpacity: 0.1
-        };
+  // Waterway styling (same as superadmin)
+  const geoPortalWaterwayStyle = (feature: any) => {
+    if (feature.geometry?.type?.includes('Polygon')) {
+      return { color: '#7dd3fc', weight: 2, fillColor: '#38bdf8', fillOpacity: 0.35 };
     }
+    return { color: '#2563eb', weight: 3, opacity: 0.9 };
   };
 
-  if (!isVisible) {
+  // Handle waterway feature interactions (same as superadmin)
+  const onEachWaterwayFeature = (feature: any, layer: any) => {
+    layer.on({
+      mouseover: (e: any) => { 
+        e.target.setStyle({ weight: 5, color: '#f97316', fillOpacity: 0.7 }); 
+      },
+      mouseout: (e: any) => { 
+        e.target.setStyle(geoPortalWaterwayStyle(feature)); 
+      }
+    });
+    layer.bindPopup(`<h4 class="font-bold">${feature.properties?.Name || 'Waterway'}</h4>`);
+  };
+
+  if (!isVisible || loading || !waterwaysData) {
     return null;
   }
 
   return (
     <>
-      {/* Waterway lines */}
-      {waterways.map((waterway) => (
-        <Polyline
-          key={waterway.id}
-          positions={waterway.points}
-          pathOptions={getWaterwayStyle(waterway.classification, isHighlighted)}
-        />
-      ))}
-      
-      {/* Waterway point markers and landmarks */}
-      {waterwayMarkers.map((marker) => (
-        <Marker
-          key={marker.id}
-          position={[marker.lat, marker.lng]}
-          icon={createWaterwayIcon(marker.type, isHighlighted)}
-        >
-          <Popup>
-            <div className="text-sm">
-              <h3 className="font-semibold text-blue-800">{marker.name}</h3>
-              <p className="text-gray-600">{marker.description}</p>
-              <p className="text-gray-500 text-xs">
-                Type: {marker.type.replace('_', ' ').toUpperCase()}
-              </p>
-              <p className="text-gray-500 text-xs">
-                Classification: {marker.type.includes('river') ? 'PRIMARY' : 
-                              marker.type.includes('creek') || marker.type.includes('tributary') ? 'SECONDARY' :
-                              marker.type.includes('stream') || marker.type.includes('irrigation') ? 'TERTIARY' : 'LOCAL'}
-              </p>
-              <p className="text-gray-500 text-xs">
-                Coordinates: {marker.lat.toFixed(4)}°N, {marker.lng.toFixed(4)}°E
-              </p>
-              <p className="text-gray-400 text-xs mt-1">
-                CRS: PRS92 Philippines Zone III
-              </p>
-            </div>
-          </Popup>
-        </Marker>
-      ))}
+      {/* Waterways GeoJSON layer (same as superadmin) */}
+      <GeoJSON 
+        key={`river-${waterwaysData.features.length}`}
+        data={transformCoordinates(waterwaysData)}
+        style={geoPortalWaterwayStyle}
+        onEachFeature={onEachWaterwayFeature}
+      />
     </>
   );
 };

@@ -45,11 +45,11 @@ export default function SuperadminLogin() {
   return (
     <div className="relative min-h-screen w-full flex items-center justify-center p-6 sm:p-12">
       <div className="absolute inset-0 -z-10">
-        <Image src="/Login-bg.jpg" alt="Login Background" fill priority className="object-cover" />
+        <Image src="/images/adminbg.jpg" alt="Login Background" fill priority className="object-cover" />
       </div>
 
       <div className="absolute top-6 left-6 w-24 h-24">
-        <Image src="/logo.png" alt="Logo" fill className="object-contain" priority />
+        <Image src="/images/logolg.png" alt="Logo" fill className="object-contain" priority />
       </div>
 
       <div className="bg-white p-8 sm:p-12 rounded-[40px] shadow-2xl w-full max-w-md border border-gray-50">
@@ -99,7 +99,7 @@ export default function SuperadminLogin() {
           <button
             type="submit"
             disabled={isLoading}
-            className="w-full bg-[#BF7004] hover:bg-[#a35f03] text-white font-bold py-4 rounded-2xl shadow-lg mt-4 disabled:opacity-50 flex items-center justify-center gap-2 transition-all active:scale-95"
+            className="w-full bg-[#112E57] hover:bg-[#a35f03] text-white font-bold py-4 rounded-2xl shadow-lg mt-4 disabled:opacity-50 flex items-center justify-center gap-2 transition-all active:scale-95"
           >
             {isLoading ? <><Loader2 className="animate-spin" /> Authenticating...</> : 'Sign in as Admin'}
           </button>

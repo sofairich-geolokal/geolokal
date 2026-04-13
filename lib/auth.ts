@@ -65,8 +65,24 @@ export async function requireLguRole() {
   
   const user = await getUserData(userId);
   
-  if (!user || user.role.toLowerCase() === 'viewer') {
+  if (!user || user.role.toLowerCase() === 'viewer' || user.role.toLowerCase() === 'superadmin') {
     redirect('/lgu-login');
+  }
+  
+  return user;
+}
+
+export async function requireSuperadminRole() {
+  const userId = await getAuthUser();
+  
+  if (!userId) {
+    redirect('/superadmin/login');
+  }
+  
+  const user = await getUserData(userId);
+  
+  if (!user || user.role.toLowerCase() !== 'superadmin') {
+    redirect('/superadmin/login');
   }
   
   return user;

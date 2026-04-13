@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useEffect, useState } from 'react';
-import { Circle, Polygon, Popup, Marker } from 'react-leaflet';
+import { GeoJSON, Popup } from 'react-leaflet';
 import L from 'leaflet';
 
 interface BoundaryLayerProps {
@@ -78,81 +78,161 @@ const BoundaryLayer: React.FC<BoundaryLayerProps> = ({
   isVisible, 
   isHighlighted = false 
 }) => {
-  // Create boundary marker icon
-  const createBoundaryIcon = (highlighted: boolean) => {
-    const iconUrl = highlighted 
-      ? '/icons/boundary-highlight.svg'
-      : '/icons/signpost-green.svg'; // Using existing signpost icon
+  const [boundariesData, setBoundariesData] = useState<any>(null);
+  const [selectedBoundaryId, setSelectedBoundaryId] = useState<number | null>(null);
+  const [loading, setLoading] = useState(true);
 
-    return L.icon({
-      iconUrl: iconUrl,
-      iconSize: [24, 24],
-      iconAnchor: [12, 12],
-      popupAnchor: [0, -12],
-      className: highlighted ? 'boundary-marker-highlighted' : 'boundary-marker'
-    });
+  // Fetch boundaries data from database (same as superadmin)
+  useEffect(() => {
+    const fetchBoundariesData = async () => {
+      try {
+        setLoading(true);
+        let bData = null;
+        
+        // Try to fetch from database first
+        try {
+          const bRes = await fetch('/api/boundaries');
+          if (bRes.ok) {
+            const result = await bRes.json();
+            if (result.success && result.data && result.data.features) {
+              bData = result.data;
+            }
+          }
+        } catch (e) { 
+          console.log("Boundaries DB route not ready, trying local file..."); 
+        }
+        
+        // Fallback to local file if database fails
+        if (!bData) {
+          try {
+            const localResponse = await fetch('/data/Ibaan_boundary.json');
+            bData = await localResponse.json();
+          } catch (e) { 
+            console.log("No local boundary data found."); 
+          }
+        }
+        
+        setBoundariesData(bData);
+      } catch (error) {
+        console.error('Error fetching boundaries data:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    if (isVisible) {
+      fetchBoundariesData();
+    }
+  }, [isVisible]);
+
+  // Transform coordinates from PRS92 to WGS84 (same as superadmin)
+  const transformCoordinates = (geoData: any) => {
+    if (!geoData || !geoData.features) return geoData;
+    return {
+      ...geoData,
+      features: geoData.features.map((feature: any) => {
+        if ((feature.geometry?.type === 'Polygon' || feature.geometry?.type === 'MultiPolygon') && feature.geometry?.coordinates) {
+          const transformRing = (ring: any) => ring.map((coord: any) => {
+            const x = coord[0], y = coord[1];
+            if (x < 180 && x > -180) return [x, y];
+            return [(x - 500000) / 100000 + 121.0, (y - 1520000) / 100000 + 13.8];
+          });
+
+          let newCoords;
+          if (feature.geometry.type === 'Polygon') {
+            newCoords = feature.geometry.coordinates.map(transformRing);
+          } else {
+            newCoords = feature.geometry.coordinates.map((poly: any) => poly.map(transformRing));
+          }
+
+          return { ...feature, geometry: { ...feature.geometry, coordinates: newCoords }};
+        }
+        return feature;
+      })
+    };
   };
 
-  // Get style for boundary polygon
-  const getBoundaryStyle = (highlighted: boolean) => ({
-    color: highlighted ? '#FFD700' : '#dc2626', // Gold when highlighted, red when normal
-    weight: highlighted ? 4 : 3,
-    opacity: highlighted ? 1 : 0.9,
-    fillColor: highlighted ? '#FFD700' : '#dc2626',
-    fillOpacity: highlighted ? 0.25 : 0.15,
-    dashArray: ''
-  });
+  // Admin boundary styling (same as superadmin)
+  const adminBoundaryStyle = (feature: any) => {
+    const isSelected = feature.id === selectedBoundaryId;
+    const hasCompleteData = feature.properties && feature.properties.brgy;
 
-  // Get style for circular boundary
-  const getCircleStyle = (highlighted: boolean) => ({
-    color: highlighted ? '#FFD700' : '#dc2626', // Gold when highlighted, red when normal
-    weight: highlighted ? 3 : 2,
-    opacity: highlighted ? 0.8 : 0.6,
-    fillColor: highlighted ? '#FFD700' : '#dc2626',
-    fillOpacity: highlighted ? 0.2 : 0.1
-  });
+    return {
+      color: isSelected ? '#3b82f6' : 'rgb(24, 49, 88)', // Blue when selected, dark blue when not
+      weight: isSelected ? 4 : 2,
+      fillColor: '#5432ff99', // Always blue fill color
+      fillOpacity: hasCompleteData ? (isSelected ? 0.2 : 0.15) : 0, // Fill only if data is complete
+      dashArray: isSelected ? '' : '5, 10', // Solid when selected, dotted when not
+    };
+  };
 
-  if (!isVisible) {
+  // Handle boundary feature interactions (same as superadmin)
+  const onEachBoundaryFeature = (feature: any, layer: any) => {
+    layer.on({
+      click: (e: any) => {
+        setSelectedBoundaryId(feature.id);
+        e.target._map.fitBounds(e.target.getBounds());
+        
+        // Show detailed popup with complete boundary information
+        const props = feature.properties || {};
+        const content = `<div class="p-3 min-w-[250px] text-xs">
+          <h4 class="font-bold text-blue-700 mb-2">Administrative Boundary Details</h4>
+          
+          ${props.brgy ? `<div class="mb-2"><span class="font-semibold">Barangay:</span> ${props.brgy}</div>` : ''}
+          ${props.lotno ? `<div><span class="font-semibold">Lot Number:</span> ${props.lotno}</div>` : ''}
+          ${props.layer ? `<div><span class="font-semibold">Layer:</span> ${props.layer}</div>` : ''}
+          ${props.SHAPE_Leng ? `<div><span class="font-semibold">Perimeter:</span> ${props.SHAPE_Leng.toFixed(2)} meters</div>` : ''}
+          ${props.Shape_Area ? `<div><span class="font-semibold">Area:</span> ${(props.Shape_Area / 10000).toFixed(2)} hectares</div>` : ''}
+          ${props.Shape_Le_1 ? `<div><span class="font-semibold">Secondary Perimeter:</span> ${props.Shape_Le_1.toFixed(2)} meters</div>` : ''}
+          
+          <div class="mt-2 pt-2 border-t border-gray-200">
+            <div class="text-gray-600"><span class="font-semibold">Boundary ID:</span> ${feature.id}</div>
+            <div class="text-gray-600"><span class="font-semibold">Geometry Type:</span> ${feature.geometry?.type || 'Polygon'}</div>
+            ${props.path ? `<div class="text-gray-600"><span class="font-semibold">Source File:</span> ${props.path.split('\\').pop()}</div>` : ''}
+          </div>
+          
+          <div class="mt-2 text-xs text-gray-500">
+            <div>📍 Administrative Boundary of Ibaan, Batangas</div>
+            <div>📐 CRS: PRS92 Philippines Zone III</div>
+          </div>
+        </div>`;
+        
+        layer.bindPopup(content).openPopup();
+      },
+      mouseover: (e: any) => {
+        // Highlight on hover
+        e.target.setStyle({ 
+          weight: 4, 
+          color: '#3b82f6', 
+          fillOpacity: 0.2,
+          dashArray: ''
+        });
+      },
+      mouseout: (e: any) => {
+        // Reset style on mouseout
+        const isSelected = feature.id === selectedBoundaryId;
+        e.target.setStyle(adminBoundaryStyle(feature));
+      }
+    });
+    
+    // Default popup for when not clicked
+    layer.bindPopup(`<h4 class="font-bold text-blue-700">${feature.properties?.brgy || 'Administrative Boundary'}</h4>
+      <div class="text-xs text-gray-600">
+        ${feature.properties?.brgy ? `Barangay: ${feature.properties.brgy}` : 'Boundary Area'}
+      </div>`);
+  };
+
+  if (!isVisible || loading || !boundariesData) {
     return null;
   }
 
   return (
-    <>
-      {/* Circular boundary representing Ibaan municipality area */}
-      <Circle
-        center={ibaCenter}
-        radius={ibaRadius}
-        pathOptions={getCircleStyle(isHighlighted)}
-      />
-
-      {/* Accurate Ibaan boundary polygon */}
-      <Polygon
-        positions={ibaBoundaryCoordinates}
-        pathOptions={getBoundaryStyle(isHighlighted)}
-      />
-
-      {/* Boundary markers at key locations */}
-      {boundaryMarkers.map((marker) => (
-        <Marker
-          key={marker.id}
-          position={[marker.lat, marker.lng]}
-          icon={createBoundaryIcon(isHighlighted)}
-        >
-          <Popup>
-            <div className="text-sm">
-              <h3 className="font-semibold text-red-800">{marker.name}</h3>
-              <p className="text-gray-600">{marker.description}</p>
-              <p className="text-gray-500 text-xs">
-                Coordinates: {marker.lat.toFixed(4)}°N, {marker.lng.toFixed(4)}°E
-              </p>
-              <p className="text-gray-400 text-xs mt-1">
-                CRS: PRS92 Philippines Zone III
-              </p>
-            </div>
-          </Popup>
-        </Marker>
-      ))}
-    </>
+    <GeoJSON 
+      key={`admin-layer-${selectedBoundaryId}-${boundariesData.features.length}`}
+      data={transformCoordinates(boundariesData)}
+      style={adminBoundaryStyle}
+      onEachFeature={onEachBoundaryFeature}
+    />
   );
 };
 
