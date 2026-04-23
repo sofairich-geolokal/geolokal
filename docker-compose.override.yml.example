@@ -1,0 +1,45 @@
+# This file is for system-specific overrides
+# Rename this file to docker-compose.override.yml to use it
+# This file is automatically loaded by Docker Compose and overrides settings in docker-compose.yml
+
+# Example: Override ports for different systems
+# services:
+#   app:
+#     ports:
+#       - "8080:3000"  # Change app port from 3000 to 8080
+#   postgres:
+#     ports:
+#       - "5433:5432"  # Change PostgreSQL port from 5432 to 5433
+
+# Example: Use external database instead of local PostgreSQL
+# services:
+#   app:
+#     environment:
+#       - DATABASE_URL=postgres://user:password@external-db-host:5432/dbname
+#       - POSTGRES_HOST=external-db-host
+#   postgres:
+#     profiles:
+#       - disabled  # Disable local PostgreSQL
+
+# Example: Add development-specific configurations
+# services:
+#   app:
+#     environment:
+#       - NODE_ENV=development
+#     volumes:
+#       - ./app:/app/app  # Mount app directory for hot reload
+
+# Example: Override resource limits
+# services:
+#   app:
+#     deploy:
+#       resources:
+#         limits:
+#           cpus: '2'
+#           memory: 2G
+#   postgres:
+#     deploy:
+#       resources:
+#         limits:
+#           cpus: '1'
+#           memory: 1G
