@@ -24,10 +24,8 @@ interface DashboardStats {
   };
   buildingDistribution?: any[];
   cbmsIndicators?: any[];
-  roadNetworks?: {
-    total_roads: number;
-    total_length_km: number;
-  };
+  roadNetworks?: any[];
+  populationByBarangay?: any[];
 }
 
 export default function ViewerDashboard() {
@@ -98,8 +96,8 @@ export default function ViewerDashboard() {
 
       {/* Charts Grid - First Row */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
-        <PopulationChart 
-          data={[]} 
+        <PopulationChart
+          data={stats?.populationByBarangay || []}
           isLoading={isLoading}
         />
         <BuildingDistributionChart 
@@ -114,8 +112,8 @@ export default function ViewerDashboard() {
           data={stats?.cbmsIndicators || []} 
           isLoading={isLoading}
         />
-        <RoadNetworksChart 
-          data={stats?.roadNetworks || { total_roads: 0, total_length_km: 0 }} 
+        <RoadNetworksChart
+          data={stats?.roadNetworks || []}
           isLoading={isLoading}
         />
       </div>

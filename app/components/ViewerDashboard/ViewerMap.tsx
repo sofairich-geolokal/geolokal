@@ -5,7 +5,7 @@ import dynamic from 'next/dynamic';
 import { 
   Menu, Layers, Globe, Ruler, CircleDot, 
   Download, ExternalLink, ChevronRight, 
-  ChevronLeft, X, MoveUp, Save, Eye
+  ChevronLeft, X, MoveUp, Save, Eye, ZoomIn, ZoomOut
 } from 'lucide-react';
 
 // Import the layer components
@@ -411,6 +411,7 @@ export default function ViewerMap() {
   ];
 
   const [xyInput, setXyInput] = useState({ lat: '', lng: '' });
+  const [currentZoom, setCurrentZoom] = useState(6);
   const [bufferInput, setBufferInput] = useState({ type: 'Point', distance: '', unit: 'Kilometers' });
   const [measureInput, setMeasureInput] = useState({ 
     startPoint: '', 
@@ -745,6 +746,26 @@ export default function ViewerMap() {
     }
   };
 
+  const handleZoomIn = () => {
+    const newZoom = Math.min(currentZoom + 1, 18);
+    setCurrentZoom(newZoom);
+    if (mapView) {
+      setMapView({ ...mapView, zoom: newZoom });
+    } else {
+      setMapView({ lat: 13.4124, lng: 122.5619, zoom: newZoom });
+    }
+  };
+
+  const handleZoomOut = () => {
+    const newZoom = Math.max(currentZoom - 1, 1);
+    setCurrentZoom(newZoom);
+    if (mapView) {
+      setMapView({ ...mapView, zoom: newZoom });
+    } else {
+      setMapView({ lat: 13.4124, lng: 122.5619, zoom: newZoom });
+    }
+  };
+
   // Calculate distance between two points using Haversine formula
   const calculateDistance = (startPoint: string, endPoint: string) => {
     try {
@@ -1060,6 +1081,24 @@ export default function ViewerMap() {
           />
         </div>
 
+        {/* Zoom Controls - Bottom Right */}
+        <div className="absolute bottom-4 right-4 z-[1000] flex flex-col space-y-1">
+          <button 
+            onClick={handleZoomIn}
+            className="bg-white p-2 rounded shadow-lg border border-gray-200 hover:bg-gray-50 transition-colors"
+            title="Zoom In"
+          >
+            <ZoomIn size={20} color={brandColor} />
+          </button>
+          <button 
+            onClick={handleZoomOut}
+            className="bg-white p-2 rounded shadow-lg border border-gray-200 hover:bg-gray-50 transition-colors"
+            title="Zoom Out"
+          >
+            <ZoomOut size={20} color={brandColor} />
+          </button>
+        </div>
+
         {/* Right Toolbar - Limited for viewers */}
         <div className="absolute top-4 right-4 z-[1000] flex flex-col space-y-1">
           <ToolIcon active={activeRightPanel === 'layers'} onClick={() => setActiveRightPanel('layers')} icon={<Layers size={18} />} brandColor={brandColor} />
@@ -1076,12 +1115,12 @@ export default function ViewerMap() {
                 <Layers size={12} className="mr-1" />
                 Legends
               </h3>
-              <button 
+              {/* <button 
                 onClick={() => setLegendsOpen(!legendsOpen)}
                 className="text-white hover:text-gray-200"
               >
                 {legendsOpen ? <X size={14} /> : <ChevronRight size={14} />}
-              </button>
+              </button> */}
             </div>
             <div className="p-2">
               {legendsOpen && (

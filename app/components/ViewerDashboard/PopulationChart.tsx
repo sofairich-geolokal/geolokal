@@ -24,7 +24,17 @@ const mockData = [
 ];
 
 export default function PopulationChart({ data, isLoading = false }: PopulationChartProps) {
-  const chartData = mockData;
+  // Transform API data to chart format
+  const chartData = data && data.length > 0 ? data.map((item: any, index: number) => ({
+    name: item.barangay_name || `Barangay ${(index + 1).toString().padStart(2, '0')}`,
+    population: item.population || 0,
+    color: getColor(index)
+  })) : mockData;
+
+  function getColor(index: number): string {
+    const colors = ['#3B82F6', '#10B981', '#1E3A8A', '#3B82F6', '#EF4444'];
+    return colors[index % colors.length];
+  }
 
   const CustomTooltip = ({ active, payload, label }: any) => {
     if (active && payload && payload.length) {

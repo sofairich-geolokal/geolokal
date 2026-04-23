@@ -5,12 +5,13 @@ import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContai
 import { Route } from 'lucide-react';
 
 interface RoadData {
+  source_type: string;
   total_roads: number;
   total_length_km: number;
 }
 
 interface RoadNetworksChartProps {
-  data: RoadData;
+  data: RoadData[];
   isLoading?: boolean;
 }
 
@@ -23,7 +24,22 @@ const mockData = [
 ];
 
 export default function RoadNetworksChart({ data, isLoading = false }: RoadNetworksChartProps) {
-  const chartData = mockData;
+  // Transform API data to chart format
+  const chartData = data && data.length > 0 ? data.map((item: any) => ({
+    name: getRoadTypeName(item.source_type),
+    paved: Math.round(item.total_length_km * 0.7), // Assuming 70% paved
+    unpaved: Math.round(item.total_length_km * 0.3) // Assuming 30% unpaved
+  })) : mockData;
+
+  function getRoadTypeName(sourceType: string): string {
+    const roadTypes: { [key: string]: string } = {
+      'national': 'National',
+      'provincial': 'Provincial',
+      'municipal': 'Municipal',
+      'barangay': 'Barangay'
+    };
+    return roadTypes[sourceType.toLowerCase()] || sourceType;
+  }
 
   const CustomTooltip = ({ active, payload, label }: any) => {
     if (active && payload && payload.length) {

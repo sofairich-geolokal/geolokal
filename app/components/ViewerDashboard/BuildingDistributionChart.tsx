@@ -26,8 +26,37 @@ const mockData = [
 ];
 
 export default function BuildingDistributionChart({ data, isLoading = false }: BuildingDistributionChartProps) {
-  // Use mock data to match the image exactly
-  const chartData = mockData;
+  // Transform API data to chart format
+  const chartData = data && data.length > 0 ? data.map((item: any) => ({
+    name: getCategoryName(item.category_id),
+    value: calculatePercentage(item.count, data),
+    color: getCategoryColor(item.category_id)
+  })) : mockData;
+
+  function getCategoryName(categoryId: number): string {
+    const categories: { [key: number]: string } = {
+      1: 'Industrial',
+      2: 'Residential',
+      3: 'Commercial',
+      4: 'Government'
+    };
+    return categories[categoryId] || `Category ${categoryId}`;
+  }
+
+  function getCategoryColor(categoryId: number): string {
+    const colors: { [key: number]: string } = {
+      1: '#374151', // Industrial - Dark Grey
+      2: '#3B82F6', // Residential - Blue
+      3: '#10B981', // Commercial - Green
+      4: '#EF4444'  // Government - Red
+    };
+    return colors[categoryId] || '#6B7280';
+  }
+
+  function calculatePercentage(count: number, allData: any[]): number {
+    const total = allData.reduce((sum, item) => sum + item.count, 0);
+    return total > 0 ? Math.round((count / total) * 100) : 0;
+  }
 
   const CustomTooltip = ({ active, payload }: any) => {
     if (active && payload && payload[0]) {

@@ -25,8 +25,37 @@ const mockData = [
 ];
 
 export default function CBMSIndicatorsChart({ data, isLoading = false }: CBMSIndicatorsChartProps) {
-  // Use mock data to match the image exactly
-  const chartData = mockData;
+  // Transform API data to chart format
+  const chartData = data && data.length > 0 ? data.map((item: any) => ({
+    indicator: getIndicatorName(item.indicator_code),
+    current: Math.round(item.average_value),
+    target: getTargetValue(item.indicator_code),
+    fullMark: 100
+  })) : mockData;
+
+  function getIndicatorName(code: string): string {
+    const indicators: { [key: string]: string } = {
+      'POV': 'Poverty',
+      'EMP': 'Employment',
+      'LIT': 'Literacy',
+      'HLT': 'Health Access',
+      'SAN': 'Sanitation',
+      'WTR': 'Water Access'
+    };
+    return indicators[code] || code;
+  }
+
+  function getTargetValue(code: string): number {
+    const targets: { [key: string]: number } = {
+      'POV': 85,
+      'EMP': 90,
+      'LIT': 95,
+      'HLT': 80,
+      'SAN': 85,
+      'WTR': 90
+    };
+    return targets[code] || 85;
+  }
 
   const CustomTooltip = ({ active, payload }: any) => {
     if (active && payload && payload.length) {

@@ -12,7 +12,19 @@ export async function GET(request: NextRequest) {
         COUNT(DISTINCT household_id) as total_households
       FROM population_data
     `);
-    
+
+    // Get population by barangay
+    const populationByBarangay = await query(`
+      SELECT 
+        barangay_name,
+        COUNT(*) as population
+      FROM population_data
+      WHERE barangay_name IS NOT NULL
+      GROUP BY barangay_name
+      ORDER BY barangay_name
+      LIMIT 10
+    `);
+
     console.log('📊 Dashboard API: Population data:', populationData);
 
     // Get land area data (from map layers with area info)
@@ -44,25 +56,29 @@ export async function GET(request: NextRequest) {
       ORDER BY indicator_code
     `);
 
-    // Get road network data
+    // Get road network data by road type
     const roadData = await query(`
       SELECT 
+        source_type,
         COUNT(*) as total_roads,
         SUM(ST_Length(geom::geography)) as total_length_km
       FROM map_layers 
-      WHERE category_id = 1
+      WHERE category_id = 1 AND source_type IS NOT NULL
+      GROUP BY source_type
     `);
 
     const populationResult = populationData.rows || [];
     const landAreaResult = landAreaData.rows || [];
     const roadResult = roadData.rows || [];
+    const populationByBarangayResult = populationByBarangay.rows || [];
     
     return NextResponse.json({
       population: populationResult[0] || { total_population: 0, total_households: 0 },
       landArea: landAreaResult[0] || { total_area_sqm: 0 },
       buildingDistribution: buildingData,
       cbmsIndicators: cbmsData,
-      roadNetworks: roadResult[0] || { total_roads: 0, total_length_km: 0 }
+      roadNetworks: roadResult,
+      populationByBarangay: populationByBarangayResult
     });
   } catch (error) {
     console.error('Dashboard stats error:', error);
