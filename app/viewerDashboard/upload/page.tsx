@@ -1,9 +1,9 @@
-import GISUploadComponent from "../../components/ViewerDashboard/upload";
+import LayerUpload from "../../components/ViewerDashboard/LayerUpload";
 
 export default function GISUploadPage() {
   return (
     <div>
-      <GISUploadComponent />
+      <LayerUpload />
     </div>
   );
 }

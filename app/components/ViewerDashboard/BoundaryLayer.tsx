@@ -7,6 +7,7 @@ import L from 'leaflet';
 interface BoundaryLayerProps {
   isVisible: boolean;
   isHighlighted?: boolean;
+  onBoundsReady?: (bounds: [[number, number], [number, number]]) => void;
 }
 
 // PRS92 Philippines Zone III coordinate system parameters
@@ -76,7 +77,8 @@ const boundaryMarkers = [
 
 const BoundaryLayer: React.FC<BoundaryLayerProps> = ({ 
   isVisible, 
-  isHighlighted = false 
+  isHighlighted = false,
+  onBoundsReady 
 }) => {
   const [boundariesData, setBoundariesData] = useState<any>(null);
   const [selectedBoundaryId, setSelectedBoundaryId] = useState<number | null>(null);
@@ -113,6 +115,15 @@ const BoundaryLayer: React.FC<BoundaryLayerProps> = ({
         }
         
         setBoundariesData(bData);
+        
+        // Calculate and report bounds when data is loaded
+        if (bData && onBoundsReady) {
+          const transformed = transformCoordinates(bData);
+          if (transformed && transformed.features && transformed.features.length > 0) {
+            const bounds = L.geoJSON(transformed).getBounds();
+            onBoundsReady([[bounds.getSouth(), bounds.getWest()], [bounds.getNorth(), bounds.getEast()]]);
+          }
+        }
       } catch (error) {
         console.error('Error fetching boundaries data:', error);
       } finally {
@@ -130,7 +141,18 @@ const BoundaryLayer: React.FC<BoundaryLayerProps> = ({
     if (!geoData || !geoData.features) return geoData;
     return {
       ...geoData,
-      features: geoData.features.map((feature: any) => {
+      features: geoData.features
+        .filter((feature: any) => {
+          // Filter out features with invalid or tiny geometries
+          if (!feature.geometry) return false;
+          if (feature.geometry.type === 'Polygon' && feature.geometry.coordinates) {
+            // Check if polygon has reasonable size (not a tiny rectangle)
+            const coords = feature.geometry.coordinates[0];
+            if (coords && coords.length < 4) return false; // Need at least 4 points for a polygon
+          }
+          return true;
+        })
+        .map((feature: any) => {
         if ((feature.geometry?.type === 'Polygon' || feature.geometry?.type === 'MultiPolygon') && feature.geometry?.coordinates) {
           const transformRing = (ring: any) => ring.map((coord: any) => {
             const x = coord[0], y = coord[1];

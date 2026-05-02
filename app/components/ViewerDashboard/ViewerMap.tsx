@@ -174,24 +174,7 @@ export default function ViewerMap() {
               title: layer.layer_name,
               agency: layer.city_muni_master?.name || 'Database',
               description: layer.metadata?.description || `Dynamic layer: ${layer.layer_name}`,
-              geometry: layer.metadata?.sample_geometry || (() => {
-                const baseCoords = [
-                  { center: [13.4124, 122.5619], offset: 0.5 },  // Manila area
-                  { center: [14.5995, 120.9842], offset: 0.4 },  // Batangas area  
-                  { center: [15.1570, 120.6344], offset: 0.3 },  // Bulacan area
-                  { center: [10.3157, 123.8854], offset: 0.6 }   // Cebu area
-                ];
-                
-                const coord = baseCoords[layer.id % baseCoords.length];
-                const size = 0.3 + (layer.id * 0.1);
-                
-                return [
-                  [coord.center[1] - size, coord.center[0] - size],
-                  [coord.center[1] + size, coord.center[0] - size],
-                  [coord.center[1] + size, coord.center[0] + size],
-                  [coord.center[1] - size, coord.center[0] - size]
-                ];
-              })(),
+              geometry: layer.metadata?.geojson || null,
               layer_type: layer.layer_type,
               style_config: layer.style_config,
               opacity: layer.opacity || 0.7,
@@ -940,15 +923,16 @@ export default function ViewerMap() {
               className="flex-1 h-8 px-2 text-md rounded text-white outline-none"
               suppressHydrationWarning={true}
             />
-            <button onClick={() => setLeftPanelOpen(false)} className="ml-1 p-1 hover:bg-black/10 rounded">
+            <button onClick={() => setLeftPanelOpen(false)} className="ml-1 p-1 hover:bg-black/10 rounded" suppressHydrationWarning={true}>
               <ChevronLeft size={18} />
             </button>
           </div>
 
           <div className="flex text-xs font-bold border-b bg-gray-50">
-            <button 
+            <button
               onClick={() => setActiveTab('Layer Name')}
               className={`flex-1 py-3 border-b-2 ${activeTab === 'Layer Name' ? `border-[#318855] text-[#318855] bg-white` : 'border-transparent text-gray-500'}`}
+              suppressHydrationWarning={true}
             >
               Available Layers
             </button>
@@ -1078,22 +1062,25 @@ export default function ViewerMap() {
             roadNetworkLayerHighlighted={roadNetworkLayerHighlighted}
             waterwaysLayerVisible={waterwaysLayerVisible}
             waterwaysLayerHighlighted={waterwaysLayerHighlighted}
+            initialZoom={15}
           />
         </div>
 
         {/* Zoom Controls - Bottom Right */}
         <div className="absolute bottom-4 right-4 z-[1000] flex flex-col space-y-1">
-          <button 
+          <button
             onClick={handleZoomIn}
             className="bg-white p-2 rounded shadow-lg border border-gray-200 hover:bg-gray-50 transition-colors"
             title="Zoom In"
+            suppressHydrationWarning={true}
           >
             <ZoomIn size={20} color={brandColor} />
           </button>
-          <button 
+          <button
             onClick={handleZoomOut}
             className="bg-white p-2 rounded shadow-lg border border-gray-200 hover:bg-gray-50 transition-colors"
             title="Zoom Out"
+            suppressHydrationWarning={true}
           >
             <ZoomOut size={20} color={brandColor} />
           </button>

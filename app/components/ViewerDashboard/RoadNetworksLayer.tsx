@@ -7,6 +7,7 @@ import L from 'leaflet';
 interface RoadNetworksLayerProps {
   isVisible: boolean;
   isHighlighted?: boolean;
+  onBoundsReady?: (bounds: [[number, number], [number, number]]) => void;
 }
 
 // PRS92 Philippines Zone III coordinate system parameters
@@ -148,7 +149,8 @@ const roadMarkers = [
 
 const RoadNetworksLayer: React.FC<RoadNetworksLayerProps> = ({ 
   isVisible, 
-  isHighlighted = false 
+  isHighlighted = false,
+  onBoundsReady 
 }) => {
   const [roadsData, setRoadsData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
@@ -184,6 +186,15 @@ const RoadNetworksLayer: React.FC<RoadNetworksLayerProps> = ({
         }
         
         setRoadsData(rData);
+        
+        // Calculate and report bounds when data is loaded
+        if (rData && onBoundsReady) {
+          const transformed = transformRoadCoordinates(rData);
+          if (transformed && transformed.features && transformed.features.length > 0) {
+            const bounds = L.geoJSON(transformed).getBounds();
+            onBoundsReady([[bounds.getSouth(), bounds.getWest()], [bounds.getNorth(), bounds.getEast()]]);
+          }
+        }
       } catch (error) {
         console.error('Error fetching roads data:', error);
       } finally {

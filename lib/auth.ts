@@ -50,7 +50,7 @@ export async function requireAuth() {
   const userId = await getAuthUser();
   
   if (!userId) {
-    redirect('/lgu-login');
+    redirect('/');
   }
   
   return userId;
@@ -60,13 +60,13 @@ export async function requireLguRole() {
   const userId = await getAuthUser();
   
   if (!userId) {
-    redirect('/lgu-login');
+    redirect('/lgu-dashboard/login');
   }
   
   const user = await getUserData(userId);
   
   if (!user || user.role.toLowerCase() === 'viewer' || user.role.toLowerCase() === 'superadmin') {
-    redirect('/lgu-login');
+    redirect('/lgu-dashboard/login');
   }
   
   return user;

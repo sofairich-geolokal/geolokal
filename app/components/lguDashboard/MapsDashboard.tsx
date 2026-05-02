@@ -24,7 +24,7 @@ export default function MapsDashboard() {
     riverBoundary: true,
   });
 
-  const [mapView, setMapView] = useState<{ lat: number; lng: number; zoom: number } | null>(null);
+  const [mapView, setMapView] = useState<{ lat: number; lng: number; zoom: number } | null>({ lat: 13.86, lng: 121.15, zoom: 16 });
   const [bufferData, setBufferData] = useState<any>(null);
   const [legendsOpen, setLegendsOpen] = useState(true);
   const [savedLayers, setSavedLayers] = useState<any[]>([]);
@@ -213,6 +213,7 @@ export default function MapsDashboard() {
             roadNetworkLayerHighlighted={false}
             waterwaysLayerVisible={layers.rivers}
             waterwaysLayerHighlighted={false}
+            initialZoom={3}
           />
         </div>
 

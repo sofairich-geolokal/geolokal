@@ -111,7 +111,7 @@ export async function logout() {
   } catch (error: any) {
     console.error('LOGOUT ERROR:', error.message);
   }
-  redirect('/viewerDashboard/viewerlogin');
+  redirect('/');
 }
 
 export async function logoutLgu() {
@@ -121,7 +121,7 @@ export async function logoutLgu() {
   } catch (error: any) {
     console.error('LOGOUT ERROR:', error.message);
   }
-  redirect('/lgu-dashboard/login');
+  redirect('/lgu-dashboard/(login)');
 }
 
 export async function logoutSuperadmin() {

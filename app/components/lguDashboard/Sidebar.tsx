@@ -20,12 +20,27 @@ const Sidebar = () => {
   ];
 
   // Logout handler
-  const handleLogout = () => {
-    // If you use cookies or local storage for auth, clear them here
-    // localStorage.removeItem('token'); 
-    
-    // Redirect to login page
-    router.push("/lgu-login"); 
+  const handleLogout = async () => {
+    try {
+      // Call the server action to clear authentication
+      const response = await fetch('/lgu-dashboard/logout', {
+        method: 'POST',
+      });
+      
+      if (response.ok) {
+        // Clear any client-side storage
+        localStorage.removeItem('loggedInUser');
+        localStorage.removeItem('userLocation');
+        sessionStorage.removeItem('selectedCityId');
+        
+        // Redirect to main landing login page
+        window.location.href = '/';
+      }
+    } catch (error) {
+      console.error('Logout error:', error);
+      // Fallback: just redirect to main landing login
+      window.location.href = '/';
+    }
   };
 
   return (
@@ -74,6 +89,7 @@ const Sidebar = () => {
         <button 
           onClick={handleLogout} // Added click handler
           className="w-full bg-[#E53E3E] py-2 rounded-2xl text-sm text-white hover:bg-red-700 transition-colors active:scale-95"
+          suppressHydrationWarning
         >
           Logout
         </button>

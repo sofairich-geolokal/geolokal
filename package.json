@@ -5,6 +5,7 @@
   "scripts": {
     "dev": "next dev",
     "build": "prisma generate && next build",
+    "build:skip-prisma": "next build",
     "start": "next start",
     "lint": "eslint",
     "db:deploy": "node scripts/deploy-db.js"
@@ -43,7 +44,7 @@
     "@types/leaflet": "^1.9.21",
     "@types/leaflet-draw": "^1.0.13",
     "@types/node": "^20",
-    "@types/pg": "^8.18.0",
+    "@types/pg": "^8.20.0",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "eslint": "^10.1.0",

@@ -39,7 +39,6 @@ model User {
   last_login       DateTime?         @default(now()) @db.Timestamptz(6)
   is_active        Boolean?          @default(true)
   audit_logs       AuditLog[]
-  map_layers       map_layers[]
   city_muni_master city_muni_master? @relation(fields: [lgu_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
   viewer_activities viewer_activity[]
   layer_bookmarks   layer_bookmark[]
@@ -47,6 +46,7 @@ model User {
   drawing_data      drawing_data[]
   saved_maps        saved_maps[]
   download_requests download_requests[]
+  uploaded_layers   map_layers[]
 
   @@map("users")
 }
@@ -72,48 +72,63 @@ model city_muni_master {
   province   String?      @db.VarChar(100)
   created_at DateTime?    @default(now()) @db.Timestamp(6)
   audit_logs AuditLog[]
-  map_layers map_layers[]
   projects   projects[]
   users      User[]
+  map_layers map_layers[]
 }
 
 model map_layers {
-  id                 Int                      @id @default(autoincrement())
-  lgu_id             Int?
-  category_id        Int?
-  layer_name         String                   @db.VarChar(100)
-  geom               Unsupported("geometry")?
-  metadata           Json?
-  uploaded_by        Int?
-  created_at         DateTime?                @default(now()) @db.Timestamp(6)
-  is_visible         Boolean?                 @default(true)
-  is_downloadable    Boolean?                 @default(false)
-  layer_type         String?                  @db.VarChar(50) // 'vector', 'raster', 'wms', 'wfs'
-  style_config       Json?                    // Layer styling configuration
-  bbox               Json?                    // Bounding box coordinates
-  projection         String?                  @db.VarChar(50) @default("EPSG:4326")
-  min_zoom           Int?                     @default(0)
-  max_zoom           Int?                     @default(20)
-  attribution        String?                  @db.VarChar(255)
-  opacity            Float?                   @default(1.0)
-  z_index            Int?                     @default(0)
-  project_categories project_categories?      @relation(fields: [category_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  city_muni_master   city_muni_master?        @relation(fields: [lgu_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  users              User?                    @relation(fields: [uploaded_by], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  viewer_activities  viewer_activity[]
-  layer_bookmarks    layer_bookmark[]
-  download_requests  download_requests[]
+  id                   Int                      @id @default(autoincrement())
+  lgu_id               Int?
+  category_id          Int?
+  layer_name           String                   @db.VarChar(100)
+  name                 String?                  @db.VarChar(255) // Legacy field
+  source               String?                  @db.VarChar(255) // Legacy field
+  geom                 Unsupported("geometry")?
+  metadata             Json?
+  uploaded_by          Int?
+  created_at           DateTime?                @default(now()) @db.Timestamptz(6)
+  layer_type           String?                  @db.VarChar(50)
+  style_config         Json?
+  bbox                 Json?
+  projection           String?                  @db.VarChar(20) @default("EPSG:4326")
+  min_zoom             Int?                     @default(0)
+  max_zoom             Int?                     @default(20)
+  attribution          String?
+  opacity              Decimal?                 @db.Decimal(3,2) @default(1.0)
+  z_index              Int?                     @default(0)
+  is_visible           Boolean?                 @default(true)
+  is_downloadable      Boolean?                 @default(false)
+  is_active            Boolean?                 @default(true)
+  
+  // Demographic data fields
+  population           Int?
+  households           Int?
+  poverty_rate         String?                  @db.VarChar(10)
+  employment_rate      String?                  @db.VarChar(10)
+  demographic_status   String?                  @db.VarChar(50)
+  demographic_last_updated DateTime?             @db.Timestamptz(6)
 
-  @@index([geom], map: "idx_map_layers_geom", type: Gist)
-  @@index([is_visible])
-  @@index([layer_type])
+  // Relationships
+  city_muni_master     city_muni_master?        @relation(fields: [lgu_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  project_categories   project_categories?      @relation(fields: [category_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  users                User?                    @relation(fields: [uploaded_by], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  
+  // Reverse relations
+  viewer_activities    viewer_activity[]
+  layer_bookmarks      layer_bookmark[]
+  measurement_data     measurement_data[]
+  drawing_data         drawing_data[]
+  download_requests    download_requests[]
+
+  @@map("map_layers")
 }
 
 model project_categories {
   id         Int          @id @default(autoincrement())
   name       String       @db.VarChar(100)
-  map_layers map_layers[]
   projects   projects[]
+  map_layers map_layers[]
 }
 
 model projects {
@@ -160,8 +175,8 @@ model viewer_activity {
   active_layers    Json?     // Array of active layer IDs
   duration_ms      Int?      // Activity duration in milliseconds
   layer_id         Int?
-  users            User?     @relation(fields: [user_id], references: [id], onDelete: SetNull)
-  map_layers       map_layers? @relation(fields: [layer_id], references: [id], onDelete: SetNull)
+  users            User?             @relation(fields: [user_id], references: [id], onDelete: SetNull)
+  map_layers       map_layers?       @relation(fields: [layer_id], references: [id], onDelete: SetNull)
 
   @@index([user_id])
   @@index([session_id])
@@ -178,7 +193,7 @@ model layer_bookmark {
   created_at  DateTime? @default(now()) @db.Timestamptz(6)
   is_public   Boolean?  @default(false)
   users       User?     @relation(fields: [user_id], references: [id], onDelete: Cascade)
-  map_layers  map_layers? @relation(fields: [layer_id], references: [id], onDelete: Cascade)
+  map_layers  map_layers? @relation(fields: [layer_id], references: [id], onDelete: SetNull)
 
   @@index([user_id])
   @@index([layer_id])
@@ -197,6 +212,7 @@ model measurement_data {
   timestamp   DateTime? @default(now()) @db.Timestamptz(6)
   layer_id    Int?
   users       User?     @relation(fields: [user_id], references: [id], onDelete: SetNull)
+  map_layers  map_layers? @relation(fields: [layer_id], references: [id], onDelete: SetNull)
 
   @@index([user_id])
   @@index([session_id])
@@ -214,6 +230,7 @@ model drawing_data {
   layer_id    Int?
   is_saved    Boolean?  @default(false)
   users       User?     @relation(fields: [user_id], references: [id], onDelete: SetNull)
+  map_layers  map_layers? @relation(fields: [layer_id], references: [id], onDelete: SetNull)
 
   @@index([user_id])
   @@index([session_id])

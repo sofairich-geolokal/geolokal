@@ -23,6 +23,15 @@ export default function SourceTypesChart({ data }: { data: SourceData[] }) {
   // Debug logging
   console.log('SourceTypesChart received data:', JSON.stringify(data, null, 2));
 
+  // Return early if no data
+  if (!data || data.length === 0) {
+    return (
+      <div className="w-full max-w-2xl p-4 font-sans flex flex-col items-center justify-center">
+        <div className="text-center text-gray-500 text-sm">No data available for the chart.</div>
+      </div>
+    );
+  }
+
   const size = 150;
   const strokeWidth = 35;
   const center = size / 2;
@@ -44,13 +53,14 @@ export default function SourceTypesChart({ data }: { data: SourceData[] }) {
         
         <svg width={size} height={size} className="transform -rotate-90 mt-6">
           {data.map((item, index) => {
-            const strokeDasharray = (item.percentage / 100) * circumference;
+            const percentage = item.percentage || 0;
+            const strokeDasharray = (percentage / 100) * circumference;
             const currentOffset = (cumulativeOffset / 100) * circumference;
-            cumulativeOffset += item.percentage;
+            cumulativeOffset += percentage;
 
             return (
               <motion.circle
-                key={item.label}
+                key={`${item.label}-${index}`}
                 cx={center}
                 cy={center}
                 r={radius}

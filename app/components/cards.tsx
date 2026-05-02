@@ -82,24 +82,30 @@ export default function Cards() {
 
   const getPopupConfig = (title: string): { endpoint: string; columns: { key: string; label: string; format?: 'date' | 'currency' | undefined }[] } => {
     switch (title) {
-      case 'Total Tax Parcel':
+      case 'Total Projects':
         return {
-          endpoint: '/api/stats/tax-parcels',
+          endpoint: '/api/stats/projects',
           columns: [
-            { key: 'parcel_no', label: 'Parcel Number' },
-            { key: 'owner_name', label: 'Owner Name' },
-            { key: 'valuation', label: 'Valuation', format: 'currency' },
+            { key: 'project_name', label: 'Project Name' },
+            { key: 'category', label: 'Category' },
+            { key: 'lgu_location', label: 'Location' },
+            { key: 'status', label: 'Status' },
             { key: 'created_at', label: 'Created At', format: 'date' }
           ]
         };
-      case 'CBMS Indicator':
+      case 'Map Layers':
         return {
-          endpoint: '/api/stats/cbms-indicators',
+          endpoint: '/api/viewer/demographics',
           columns: [
-            { key: 'indicator_code', label: 'Indicator Code' },
-            { key: 'indicator_value', label: 'Value' },
+            { key: 'location', label: 'Location' },
+            { key: 'population', label: 'Population' },
+            { key: 'households', label: 'Households' },
+            { key: 'povertyRate', label: 'Poverty' },
+            { key: 'employmentRate', label: 'Employment' },
             { key: 'status', label: 'Status' },
-            { key: 'updated_at', label: 'Updated At', format: 'date' }
+            { key: 'agency', label: 'Agency' },
+            { key: 'category', label: 'Category' },
+            { key: 'area', label: 'Layer Type' }
           ]
         };
       case 'Active Users':
@@ -112,7 +118,7 @@ export default function Cards() {
             { key: 'created_at', label: 'Member Since', format: 'date' }
           ]
         };
-      case 'System Uptime':
+      case 'Audits':
         return {
           endpoint: '/api/stats/system-logs',
           columns: [
@@ -149,7 +155,7 @@ export default function Cards() {
     <div className="p-0 sm:p-6 bg-white h-full">
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 max-w-7xl mx-auto">
         {stats.length === 0 ? (
-          ['Total Tax Parcel', 'CBMS Indicator', 'System Uptime', 'Active Users'].map((title, index) => (
+          ['Total Projects', 'Map Layers', 'Audits', 'Active Users'].map((title, index) => (
             <motion.div 
               key={index}
               initial={{ opacity: 0, y: 15 }}

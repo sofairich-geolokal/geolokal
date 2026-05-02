@@ -13,7 +13,7 @@ import RoadNetworksChart from './RoadNetworksChart';
 
 interface DashboardStats {
   userCount: number;
-  cityCount: number;
+  barangayCount: number;
   timestamp: string;
   population?: {
     total_population: number;
@@ -78,8 +78,8 @@ export default function ViewerDashboard() {
         </div>
         <div className="bg-white p-6 rounded-xl shadow-lg border border-gray-200">
           <div className="text-center">
-            <h3 className="text-lg font-semibold text-gray-800 mb-2">Cities</h3>
-            <p className="text-3xl font-bold text-green-600">{stats?.cityCount || 0}</p>
+            <h3 className="text-lg font-semibold text-gray-800 mb-2">Barangays</h3>
+            <p className="text-3xl font-bold text-green-600">{stats?.barangayCount || 0}</p>
           </div>
         </div>
         <div className="bg-white p-6 rounded-xl shadow-lg border border-gray-200">

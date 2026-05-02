@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { getTopbarData, getCurrentUser } from "@/app/actions/topbar";
 
 export default function Topbar() {
-  const [data, setData] = useState({ username: "Loading...", location: "...", role: "" });
+  const [data, setData] = useState({ username: "Loading...", location: "Ibaan, Batangas", role: "" });
   const [userId, setUserId] = useState<number | null>(null);
 
   useEffect(() => {
@@ -14,13 +14,13 @@ export default function Topbar() {
         if (currentUserId) {
           setUserId(Number(currentUserId));
           const result = await getTopbarData(currentUserId);
-          setData(result);
+          setData(prev => ({ ...result, location: "Ibaan, Batangas" }));
         } else {
-          setData({ username: 'Guest', location: 'N/A', role: 'Viewer' });
+          setData({ username: 'Guest', location: 'Ibaan, Batangas', role: 'Viewer' });
         }
       } catch (error) {
         console.error("Error loading user data:", error);
-        setData({ username: 'Error', location: 'Failed to load', role: '' });
+        setData({ username: 'Error', location: 'Ibaan, Batangas', role: '' });
       }
     }
     loadUserData();
@@ -58,7 +58,7 @@ export default function Topbar() {
             className="text-sm text-white"
             style={{ display: 'inline' }}
           >
-            <b>Location: </b>{data.location}
+            <b>Location: </b>Ibaan, Batangas
           </p>
         </div>
       </div>

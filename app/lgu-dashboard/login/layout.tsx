@@ -7,7 +7,7 @@ export default function LoginLayout({
   // to provide a full-screen login experience without sidebar or header
   return (
     <html lang="en">
-      <body>
+      <body suppressHydrationWarning>
         {children}
       </body>
     </html>

@@ -109,7 +109,7 @@ const ProjectCountByCategory = () => {
         </div>
       )}
       
-      <div className="relative h-[200px] ml-10 mr-4 mb-8">
+      <div className="relative h-[200px] ml-10 mr-4 mb-12">
         {/* Y-Axis & Grid Lines */}
         <div className="absolute inset-0 flex flex-col-reverse justify-between pointer-events-none">
           {gridLines.map((line) => (
@@ -140,12 +140,12 @@ const ProjectCountByCategory = () => {
                 animate={{ height: `${Math.max((item.count / maxCount) * 100, 5)}%` }}
                 transition={{ duration: 1, ease: [0.4, 0, 0.2, 1] }}
                 style={{ backgroundColor: item.color }}
-                className="w-[28px] md:w-[36px] rounded-t-lg cursor-pointer hover:brightness-110 transition-all shadow-sm"
+                className="w-[56px] md:w-[72px] rounded-t-lg cursor-pointer hover:brightness-110 transition-all shadow-sm"
               />
 
               {/* X-Axis Label */}
-              <div className="absolute -bottom-10 w-full text-center">
-                <span className="text-[10px] line-clamp-2 leading-[1.2] text-gray-500 font-medium wrap inline-block transform rotate-[-30deg] origin-left">
+              <div className="absolute -bottom-8 w-full text-center">
+                <span className="text-[10px] line-clamp-2 leading-[1.2] text-gray-500 font-medium">
                   {item.category}
                 </span>
               </div>
