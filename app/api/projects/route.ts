@@ -1,5 +1,6 @@
 import { query } from '@/lib/db';
 import { NextResponse, NextRequest } from 'next/server';
+import { getAuthUser } from '@/lib/auth';
 
 export async function GET() {
   try {
@@ -32,6 +33,12 @@ ORDER BY c.name, p.project_name;
 
 export async function POST(request: NextRequest) {
   try {
+    // Get logged-in user ID from auth token
+    const userId = await getAuthUser();
+    if (!userId) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
     const body = await request.json();
     
     if (!body.title || body.title.trim() === '') {
@@ -84,6 +91,12 @@ export async function POST(request: NextRequest) {
 
 export async function PUT(request: NextRequest) {
   try {
+    // Get logged-in user ID from auth token
+    const userId = await getAuthUser();
+    if (!userId) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
     const body = await request.json();
     const { id } = body;
 
@@ -140,6 +153,12 @@ export async function PUT(request: NextRequest) {
 
 export async function DELETE(request: NextRequest) {
   try {
+    // Get logged-in user ID from auth token
+    const userId = await getAuthUser();
+    if (!userId) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
     const { searchParams } = new URL(request.url);
     const id = searchParams.get('id');
 

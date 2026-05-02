@@ -7,7 +7,7 @@ export default function SuperadminRoot() {
   const router = useRouter();
 
   useEffect(() => {
-    router.replace('/superadmin/dashboard');
+    router.replace('/superadmin/(auth)/dashboard');
   }, [router]);
 
   return null;

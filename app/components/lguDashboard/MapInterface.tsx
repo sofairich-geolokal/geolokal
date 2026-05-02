@@ -1,7 +1,7 @@
 "use client";
 
-import React, { useState } from 'react';
-import { MapContainer, TileLayer, Circle, Rectangle, Marker, ZoomControl } from 'react-leaflet';
+import React, { useState, useEffect } from 'react';
+import { MapContainer, TileLayer, Circle, Rectangle, Marker, ZoomControl, GeoJSON } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
 
@@ -19,11 +19,51 @@ const orangePin = L.divIcon({
   iconAnchor: [15, 42]
 });
 
+interface DatabaseLayer {
+  id: number;
+  layer_name: string;
+  metadata: any;
+  style_config: any;
+  is_visible: boolean;
+}
+
 const PreciseMapInterface = () => {
-  const [layers, setLayers] = useState({ admin: true, evacuation: true, hazard: true });
+  const [layers, setLayers] = useState({ admin: false, evacuation: false, hazard: false });
   const [mapType, setMapType] = useState('satellite');
+  const [dbLayers, setDbLayers] = useState<DatabaseLayer[]>([]);
+  const [visibleDbLayers, setVisibleDbLayers] = useState<Set<number>>(new Set());
   
-  const center: [number, number] = [13.8242, 121.1311];
+  const center: [number, number] = [13.86, 121.15];
+
+  useEffect(() => {
+    fetchDatabaseLayers();
+  }, []);
+
+  const fetchDatabaseLayers = async () => {
+    try {
+      const response = await fetch('/api/layers?visible=true');
+      if (response.ok) {
+        const result = await response.json();
+        if (result.success && result.data) {
+          setDbLayers(result.data);
+        }
+      }
+    } catch (error) {
+      console.error('Error fetching database layers:', error);
+    }
+  };
+
+  const toggleDbLayer = (layerId: number) => {
+    setVisibleDbLayers(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(layerId)) {
+        newSet.delete(layerId);
+      } else {
+        newSet.add(layerId);
+      }
+      return newSet;
+    });
+  };
 
   return (
     <div className="w-full h-screen bg-gray-100 p-4 md:p-10 flex items-center justify-center">
@@ -70,6 +110,32 @@ const PreciseMapInterface = () => {
                 </label>
               ))}
             </div>
+
+            {dbLayers.length > 0 && (
+              <>
+                <div className="h-px bg-gray-100 w-full" />
+                <div className="space-y-3">
+                  <h4 className="text-xs font-bold text-gray-400 uppercase tracking-widest">Uploaded Layers</h4>
+                  {dbLayers.map((layer) => (
+                    <label key={layer.id} className="flex items-center gap-3 cursor-pointer">
+                      <input 
+                        type="checkbox" 
+                        className="w-5 h-5 rounded border-gray-300 text-orange-500 focus:ring-orange-500 accent-black" 
+                        checked={visibleDbLayers.has(layer.id)}
+                        onChange={() => toggleDbLayer(layer.id)}
+                      />
+                      <div className="flex items-center gap-2">
+                        <div 
+                          className="w-3 h-3 rounded-full" 
+                          style={{ backgroundColor: layer.style_config?.color || layer.metadata?.color || '#333333' }}
+                        />
+                        <span className="text-sm font-medium text-gray-700 truncate">{layer.layer_name}</span>
+                      </div>
+                    </label>
+                  ))}
+                </div>
+              </>
+            )}
           </div>
         </div>
 
@@ -95,7 +161,7 @@ const PreciseMapInterface = () => {
         {/* --- MAP ENGINE --- */}
         <MapContainer 
           center={center} 
-          zoom={17} 
+          zoom={20} 
           zoomControl={false} 
           className="w-full h-full z-0"
         >
@@ -131,6 +197,23 @@ const PreciseMapInterface = () => {
               <Marker position={[13.8234, 121.1310]} icon={orangePin} />
             </>
           )}
+
+          {/* Database Layers */}
+          {dbLayers.map((layer) => (
+            visibleDbLayers.has(layer.id) && layer.metadata?.geojson ? (
+              <GeoJSON
+                key={layer.id}
+                data={layer.metadata.geojson}
+                style={{
+                  color: layer.style_config?.color || layer.metadata?.color || '#333333',
+                  weight: layer.style_config?.weight || 2,
+                  opacity: layer.style_config?.opacity || 1,
+                  fillOpacity: layer.style_config?.fillOpacity || 0.3,
+                  fillColor: layer.style_config?.fillColor || layer.style_config?.color || layer.metadata?.color || '#333333'
+                }}
+              />
+            ) : null
+          ))}
 
           <ZoomControl position="bottomleft" />
         </MapContainer>

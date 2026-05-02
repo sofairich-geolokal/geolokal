@@ -139,27 +139,27 @@ export default function DataTablePopup({
                 </div>
               ) : (
                 <div className="overflow-x-auto">
-                  <table className="min-w-full divide-y divide-gray-200">
-                    <thead className="bg-gray-50">
-                      <tr>
+                  <table className="min-w-full">
+                    <thead className="font-bold">
+                      <tr className="bg-gray-50 border-b border-gray-200">
                         {columns.map((column, index) => (
                           <th
                             key={index}
-                            className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
+                            className="px-4 py-3 text-left text-sm font-semibold text-gray-700"
                           >
                             {column.label}
                           </th>
                         ))}
                       </tr>
                     </thead>
-                    <tbody className="bg-white divide-y divide-gray-200">
+                    <tbody>
                       {currentData.map((row, rowIndex) => (
-                        <tr key={rowIndex} className="hover:bg-gray-50 transition-colors">
+                        <tr key={rowIndex} className={rowIndex % 2 === 0 ? "bg-white border-b border-gray-100" : "bg-blue-50 border-b border-gray-100"}>
                           {columns.map((column, colIndex) => {
                             const formatFunction = getFormatFunction(column.format);
                             const value = row[column.key];
                             return (
-                              <td key={colIndex} className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                              <td key={colIndex} className="px-4 py-3 text-sm text-gray-900">
                                 {formatFunction(value)}
                               </td>
                             );
@@ -174,47 +174,44 @@ export default function DataTablePopup({
 
             {/* Pagination */}
             {totalPages > 1 && (
-              <div className="bg-gray-50 px-6 py-4 border-t">
-                <div className="flex justify-between items-center">
-                  <p className="text-sm text-gray-500">
-                    Showing {startIndex + 1} to {Math.min(endIndex, data.length)} of {data.length} records
-                  </p>
-                  <div className="flex space-x-2">
+              <div className="bg-white border-t border-gray-200 px-6 py-3">
+                <div className="flex items-center justify-between">
+                  <div className="text-sm text-gray-700">
+                    Showing {startIndex + 1} to {Math.min(endIndex, data.length)} of {data.length} results
+                  </div>
+                  <div className="flex items-center space-x-2">
                     <button
                       onClick={() => paginate(currentPage - 1)}
                       disabled={currentPage === 1}
-                      className={`px-3 py-1 rounded text-sm ${
+                      className={`px-3 py-1 text-sm rounded-md ${
                         currentPage === 1
-                          ? 'bg-gray-200 text-gray-400 cursor-not-allowed'
+                          ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
                           : 'bg-white border border-gray-300 text-gray-700 hover:bg-gray-50'
                       }`}
                     >
                       Previous
                     </button>
                     
-                    {[...Array(totalPages)].map((_, index) => {
-                      const pageNumber = index + 1;
-                      return (
-                        <button
-                          key={pageNumber}
-                          onClick={() => paginate(pageNumber)}
-                          className={`px-3 py-1 rounded text-sm ${
-                            currentPage === pageNumber
-                              ? 'bg-[#bf7004] text-white'
-                              : 'bg-white border border-gray-300 text-gray-700 hover:bg-gray-50'
-                          }`}
-                        >
-                          {pageNumber}
-                        </button>
-                      );
-                    })}
+                    {Array.from({ length: totalPages }, (_, i) => i + 1).map(page => (
+                      <button
+                        key={page}
+                        onClick={() => paginate(page)}
+                        className={`px-3 py-1 text-sm rounded-md ${
+                          currentPage === page
+                            ? 'bg-[#318855] text-white'
+                            : 'bg-white border border-gray-300 text-gray-700 hover:bg-gray-50'
+                        }`}
+                      >
+                        {page}
+                      </button>
+                    ))}
                     
                     <button
                       onClick={() => paginate(currentPage + 1)}
                       disabled={currentPage === totalPages}
-                      className={`px-3 py-1 rounded text-sm ${
+                      className={`px-3 py-1 text-sm rounded-md ${
                         currentPage === totalPages
-                          ? 'bg-gray-200 text-gray-400 cursor-not-allowed'
+                          ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
                           : 'bg-white border border-gray-300 text-gray-700 hover:bg-gray-50'
                       }`}
                     >

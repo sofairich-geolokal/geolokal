@@ -14,13 +14,13 @@ interface PopulationChartProps {
   isLoading?: boolean;
 }
 
-// Mock data matching the image exactly
+// Mock data with actual Barangay names for Ibaan
 const mockData = [
-  { name: 'Barangay 01', population: 18000, color: '#3B82F6' }, // Blue
-  { name: 'Barangay 02', population: 30000, color: '#10B981' }, // Green
-  { name: 'Barangay 03', population: 22000, color: '#1E3A8A' }, // Dark Blue
-  { name: 'Barangay 04', population: 32000, color: '#3B82F6' }, // Blue
-  { name: 'Barangay 05', population: 13000, color: '#EF4444' }  // Red
+  { name: 'Barangay San Isidro', population: 18000, color: '#3B82F6' }, // Blue
+  { name: 'Barangay Sabang', population: 30000, color: '#10B981' }, // Green
+  { name: 'Barangay Tala', population: 22000, color: '#1E3A8A' }, // Dark Blue
+  { name: 'Barangay Paligawan', population: 32000, color: '#3B82F6' }, // Blue
+  { name: 'Barangay Mabalacat', population: 13000, color: '#EF4444' }  // Red
 ];
 
 export default function PopulationChart({ data, isLoading = false }: PopulationChartProps) {
@@ -55,6 +55,26 @@ export default function PopulationChart({ data, isLoading = false }: PopulationC
       return `${value / 1000}K`;
     }
     return value;
+  };
+
+  const CustomXAxisTick = ({ x, y, payload }: any) => {
+    const words = payload.value.split(' ');
+    const midPoint = Math.ceil(words.length / 2);
+    const firstLine = words.slice(0, midPoint).join(' ');
+    const secondLine = words.slice(midPoint).join(' ');
+    
+    return (
+      <g transform={`translate(${x},${y})`}>
+        <text x={0} y={0} dy={-4} textAnchor="middle" fontSize={12} fill="#6B7280">
+          {firstLine}
+        </text>
+        {secondLine && (
+          <text x={0} y={0} dy={12} textAnchor="middle" fontSize={12} fill="#6B7280">
+            {secondLine}
+          </text>
+        )}
+      </g>
+    );
   };
 
   return (
@@ -109,9 +129,7 @@ export default function PopulationChart({ data, isLoading = false }: PopulationC
               <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
               <XAxis 
                 dataKey="name" 
-                tick={{ fontSize: 12, fill: '#6B7280' }}
-                angle={-45}
-                textAnchor="end"
+                tick={<CustomXAxisTick />}
                 height={60}
               />
               <YAxis 

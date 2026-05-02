@@ -3,16 +3,63 @@
 import React, { useState, useEffect } from 'react';
 import dynamic from 'next/dynamic';
 // Remove: import L from 'leaflet'; <--- This was the culprit
+// Import Leaflet CSS first
 import 'leaflet/dist/leaflet.css';
+
+// Add comprehensive CSS override for Leaflet compatibility issues
+const customStyles = `
+  /* Marker styling */
+  .leaflet-container .leaflet-marker-pane img {
+    width:22px;
+  }
+  
+  /* Comprehensive Leaflet CSS compatibility fixes */
+  .leaflet-container,
+  .leaflet-container * {
+    transform-origin: 0 0 !important;
+    user-select: none !important;
+    zoom: 1 !important;
+  }
+  
+  .leaflet-zoom-animated,
+  .leaflet-zoom-animated * {
+    transform-origin: 0 0 !important;
+  }
+  
+  .leaflet-marker-icon,
+  .leaflet-marker-icon * {
+    user-select: none !important;
+  }
+  
+  .leaflet-pane,
+  .leaflet-pane * {
+    transform-origin: 0 0 !important;
+  }
+  
+  .leaflet-map-pane,
+  .leaflet-map-pane * {
+    transform-origin: 0 0 !important;
+  }
+  
+  .leaflet-control,
+  .leaflet-control * {
+    user-select: none !important;
+  }
+  
+  .leaflet-overlay-pane,
+  .leaflet-overlay-pane * {
+    transform-origin: 0 0 !important;
+  }
+`;
 
 const MapContainer = dynamic(() => import('react-leaflet').then((mod) => mod.MapContainer), { ssr: false });
 const TileLayer = dynamic(() => import('react-leaflet').then((mod) => mod.TileLayer), { ssr: false });
 const Circle = dynamic(() => import('react-leaflet').then((mod) => mod.Circle), { ssr: false });
 const Rectangle = dynamic(() => import('react-leaflet').then((mod) => mod.Rectangle), { ssr: false });
 const Marker = dynamic(() => import('react-leaflet').then((mod) => mod.Marker), { ssr: false });
-const ZoomControl = dynamic(() => import('react-leaflet').then((mod) => mod.ZoomControl), { ssr: false });
-const GeoJSON = dynamic(() => import('react-leaflet').then((mod) => mod.GeoJSON), { ssr: false });
 const Popup = dynamic(() => import('react-leaflet').then((mod) => mod.Popup), { ssr: false });
+const GeoJSON = dynamic(() => import('react-leaflet').then((mod) => mod.GeoJSON), { ssr: false });
+const ZoomControl = dynamic(() => import('react-leaflet').then((mod) => mod.ZoomControl), { ssr: false });
 
 interface Project {
   id: number | string;
@@ -25,6 +72,8 @@ interface Project {
   address?: string;
   location?: string;
   area?: string;
+  mapLink?: string;
+  embeddedMapLink?: string;
 }
 
 interface MapPopupProps {
@@ -34,17 +83,13 @@ interface MapPopupProps {
 
 const MapPopup = ({ project, onClose }: MapPopupProps) => {
   const [mapType, setMapType] = useState<'osm' | 'satellite'>('satellite');
-  const [customIcon, setCustomIcon] = useState<any>(null);
   const [projectIcon, setProjectIcon] = useState<any>(null);
   const [showProjectDetails, setShowProjectDetails] = useState(true);
-  const [layers, setLayers] = useState({
+    const [layers, setLayers] = useState({
     adminBoundary: false,
-    evacuationCenter: false,
-    hazardArea: false,
     roadNetworks: false,
     rivers: false,
   });
-  const [boundaryLocations, setBoundaryLocations] = useState<any[]>([]);
   const [waterwaysData, setWaterwaysData] = useState<any>(null);
   const [roadsData, setRoadsData] = useState<any>(null);
   const [boundariesData, setBoundariesData] = useState<any>(null);
@@ -52,52 +97,44 @@ const MapPopup = ({ project, onClose }: MapPopupProps) => {
   const [loading, setLoading] = useState(true);
   const [mapLoading, setMapLoading] = useState(true);
 
+  // Inject custom CSS styles
+  useEffect(() => {
+    const styleElement = document.createElement('style');
+    styleElement.textContent = customStyles;
+    document.head.appendChild(styleElement);
+    
+    return () => {
+      // Cleanup styles when component unmounts
+      if (document.head.contains(styleElement)) {
+        document.head.removeChild(styleElement);
+      }
+    };
+  }, []);
+
   // Load Leaflet icon and geographic data
   useEffect(() => {
     const initLeaflet = async () => {
       const L = (await import('leaflet')).default;
       
-      // Evacuation center icon (orange)
-      const evacuationIcon = L.divIcon({
-        className: 'custom-pin',
-        html: `
-          <div style="position: relative; display: flex; justify-content: center; align-items: center; filter: drop-shadow(0px 2px 4px rgba(0,0,0,0.3));">
-            <svg width="30" height="42" viewBox="0 0 30 42" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <path d="M15 0C6.71573 0 0 6.71573 0 15C0 26.25 15 42 15 42C15 42 30 26.25 30 15C30 6.71573 23.2843 0 15 0Z" fill="#F59E0B"/>
-              <circle cx="15" cy="15" r="5" fill="white"/>
-            </svg>
-          </div>`,
-        iconSize: [30, 42],
-        iconAnchor: [15, 42]
-      });
-      setCustomIcon(evacuationIcon);
-
-      // Project location icon (red/purple)
+      
+      // Project location icon using placeholder.png - very small but prominent
       const projectLocationIcon = L.divIcon({
         className: 'project-pin',
         html: `
-          <div style="position: relative; display: flex; justify-content: center; align-items: center; filter: drop-shadow(0px 2px 4px rgba(0,0,0,0.4));">
-            <img src="/icons/marker-icon.png" width="35" height="48" style="display: block;" />
+          <div style="z-index:10000; position: relative; display: flex; justify-content: center; align-items: center; background: rgba(59, 130, 246, 0.9); border-radius: 50%; padding: 2px;">
+            <img src="/icons/placeholder.png" width="16" height="22" style="display: block;" />
           </div>`,
-        iconSize: [35, 48],
-        iconAnchor: [17.5, 48]
+        iconSize: [20, 26],
+        iconAnchor: [10, 13] // Center the icon for precise positioning
       });
       setProjectIcon(projectLocationIcon);
-      console.log('Project icon created successfully');
+      console.log('Project icon created successfully with placeholder.png');
 
       // Fetch geographic data from database with fallback to local files
       try {
         setLoading(true);
         
-        // Fetch locations
-        fetch('/api/boundary-locations')
-          .then(res => res.json())
-          .then(result => {
-            if (result.success && result.data) {
-              setBoundaryLocations(Object.values(result.data).flat());
-            }
-          }).catch(err => console.error(err));
-
+        
         // Fetch Waterways
         let geoData = null;
         try {
@@ -152,6 +189,7 @@ const MapPopup = ({ project, onClose }: MapPopupProps) => {
         setBoundariesData(bData);
         console.log('Boundaries data loaded:', bData?.features?.length || 0, 'features');
 
+        
       } catch (error) {
         console.error('Error loading geographic data:', error);
       } finally {
@@ -178,7 +216,19 @@ const MapPopup = ({ project, onClose }: MapPopupProps) => {
 
   const centerPosition: [number, number] = project.latitude && project.longitude 
     ? [project.latitude, project.longitude] 
-    : [13.8242, 121.1311];
+    : [13.8242, 121.1311]; // Ibaan, Batangas, Philippines (fallback)
+
+  // Add debugging to verify dynamic coordinates
+  useEffect(() => {
+    console.log('MapPopup - Dynamic coordinates from database:', {
+      projectId: project.id,
+      title: project.title,
+      latitude: project.latitude,
+      longitude: project.longitude,
+      location: project.location,
+      centerPosition: centerPosition
+    });
+  }, [project]);
 
   const getProjectLocationAddress = () => {
     // Priority: address > location > coordinates > area
@@ -193,28 +243,39 @@ const MapPopup = ({ project, onClose }: MapPopupProps) => {
 
   const createProjectAreaBoundary = (): [[number, number], [number, number]] | null => {
     if (project.latitude && project.longitude) {
-      // Create a 200-meter boundary around the project point
+      // Create a 400-meter boundary around the project point for better visibility
       const lat = project.latitude;
       const lng = project.longitude;
-      const delta = 0.001; // Approximately 100 meters
+      const delta = 0.002; // Approximately 200 meters (doubled for better visibility)
+      
+      console.log('Creating dynamic boundary for project:', {
+        title: project.title,
+        coordinates: [lat, lng],
+        boundary: [
+          [lat - delta, lng - delta],
+          [lat + delta, lng + delta]
+        ]
+      });
       
       return [
         [lat - delta, lng - delta], // Southwest corner
         [lat + delta, lng + delta]  // Northeast corner
       ];
     }
+    console.log('No coordinates available for boundary creation');
     return null;
   };
 
-  const getFilteredLocations = () => {
-    return boundaryLocations.filter((location: any) => 
-      location.latitude && location.longitude && 
-      !isNaN(location.latitude) && !isNaN(location.longitude) &&
-      location.latitude >= 13 && location.latitude <= 14 &&
-      location.longitude >= 121 && location.longitude <= 122
-    );
+  // MapEvents component to handle map initialization
+  const MapEvents = () => {
+    useEffect(() => {
+      // This will be handled by the MapContainer's center and zoom props
+      // The project boundary will be automatically visible due to the increased size
+    }, []);
+    return null;
   };
 
+  
   const transformCoordinates = (geoData: any) => {
     try {
       if (!geoData || !geoData.features || !Array.isArray(geoData.features)) {
@@ -332,6 +393,7 @@ const MapPopup = ({ project, onClose }: MapPopupProps) => {
     return { color: '#2563eb', weight: 3, opacity: 0.9 };
   };
 
+  
   const geoPortalRoadStyle = () => ({ color: '#06a506ee', weight: 3, opacity: 0.9 });
 
   const adminBoundaryStyle = (feature: any) => {
@@ -394,7 +456,7 @@ const MapPopup = ({ project, onClose }: MapPopupProps) => {
 
   return (
     <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
-      <div className="bg-white w-full max-w-[95vw] h-[90vh] rounded-[40px] shadow-2xl overflow-hidden flex flex-col relative">
+      <div className="bg-white w-full max-w-[95vw] h-[90vh] rounded  shadow-2xl overflow-hidden flex flex-col relative">
         
         {/* Header Section */}
         <div className="px-8 py-4 flex justify-between items-center border-b border-gray-100">
@@ -412,12 +474,18 @@ const MapPopup = ({ project, onClose }: MapPopupProps) => {
         </div>
 
         {/* Content Section */}
-        <div className="flex flex-1 overflow-hidden p-6 gap-6">
-          <div className="relative flex-1 rounded-[32px] overflow-hidden border border-gray-100 shadow-inner">
+        <div className="flex flex-1 overflow-hidden p-0 gap-6">
+          <div className="relative flex-1 overflow-hidden ">
             
             {/* Control Overlays */}
-            <div className="absolute top-5 left-5 z-[1000] bg-white/95 backdrop-blur-md rounded-2xl shadow-xl p-5 w-56 border border-gray-100">
+            <div className="absolute top-5 left-5 z-[1000] bg-white/95 backdrop-blur-md rounded shadow-xl p-5 w-64 border border-gray-100">
               <div className="space-y-4">
+                {/* Map View Options */}
+                <div className="space-y-2">
+                  
+                                  </div>
+                
+                {/* Map Type Options */}
                 <div className="space-y-2">
                   <label className="flex items-center gap-3 cursor-pointer">
                     <input type="radio" checked={mapType === 'osm'} onChange={() => setMapType('osm')} className="w-4 h-4 accent-gray-500" />
@@ -428,48 +496,54 @@ const MapPopup = ({ project, onClose }: MapPopupProps) => {
                     <span className="text-[13px] font-bold text-gray-800">Satellite (Esri)</span>
                   </label>
                 </div>
-                <hr className="border-gray-100" />
-                {Object.entries(layers).map(([key, value]) => (
-                  <label key={key} className="flex items-center justify-between cursor-pointer">
-                    <span className="text-[13px] font-semibold text-gray-700 capitalize">{key.replace(/([A-Z])/g, ' $1').trim()}</span>
-                    <input 
-                      type="checkbox" 
-                      checked={value} 
-                      onChange={() => setLayers(prev => ({ ...prev, [key]: !value }))} 
-                      className="w-4 h-4 rounded accent-orange-500"
-                    />
-                  </label>
-                ))}
+                
+                {/* Layer Controls */}
+                { (
+                  <>
+                    <hr className="border-gray-100" />
+                    {Object.entries(layers).map(([key, value]) => (
+                      <label key={key} className="flex items-center justify-between cursor-pointer">
+                        <span className="text-[13px] font-semibold text-gray-700 capitalize">{key.replace(/([A-Z])/g, ' $1').trim()}</span>
+                        <input 
+                          type="checkbox" 
+                          checked={value} 
+                          onChange={() => setLayers(prev => ({ ...prev, [key]: !value }))} 
+                          className="w-4 h-4 rounded accent-orange-500"
+                        />
+                      </label>
+                    ))}
+                  </>
+                )}
               </div>
             </div>
 
-            {/* Map Loading State */}
-            {mapLoading ? (
-              <div className="h-full w-full flex items-center justify-center bg-gray-100">
-                <div className="text-center">
-                  <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-gray-900 mx-auto mb-4"></div>
-                  <p className="text-gray-600">Loading map...</p>
-                </div>
-              </div>
-            ) : (
-            <MapContainer 
-              key={`map-${project.id || 'default'}-${Date.now()}`}
-              center={centerPosition} 
-              zoom={15} 
-              className="h-full w-full" 
-              zoomControl={false}
-            >
-              <TileLayer 
-                url={mapType === 'osm' 
-                  ? "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" 
-                  : "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"
-                } 
-              />
-              
-              {layers.hazardArea && (
-                <Circle center={centerPosition} radius={500} pathOptions={{ color: '#ea580c', weight: 3, fillOpacity: 0.15, fillColor: '#ea580c' }} />
-              )}
-              
+            {/* Map Content - Only internal map */}
+            { (
+              <>
+                {/* Map Loading State */}
+                {mapLoading ? (
+                  <div className="h-full w-full flex items-center justify-center bg-gray-100">
+                    <div className="text-center">
+                      <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-gray-900 mx-auto mb-4"></div>
+                      <p className="text-gray-600">Loading map...</p>
+                    </div>
+                  </div>
+                ) : (
+                  <MapContainer 
+                    key={`map-${project.id || 'default'}-${Date.now()}`}
+                    center={centerPosition} 
+                    zoom={13} 
+                    className="h-full w-full" 
+                    zoomControl={false}
+                  >
+                    <TileLayer 
+                      url={mapType === 'osm' 
+                        ? "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" 
+                        : "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"
+                      } 
+                    />
+                    
+                                  
               {/* ADMIN BOUNDARY LAYER */}
               {layers.adminBoundary && boundariesData && (
                 (() => {
@@ -509,6 +583,7 @@ const MapPopup = ({ project, onClose }: MapPopupProps) => {
                 })()
               )}
 
+              
               {layers.roadNetworks && roadsData && roadsData.features && (
                 (() => {
                   console.log('Rendering Road Networks layer with', roadsData.features.length, 'features');
@@ -528,40 +603,88 @@ const MapPopup = ({ project, onClose }: MapPopupProps) => {
                 })()
               )}
 
-              {layers.evacuationCenter && customIcon && getFilteredLocations().map((location: any) => (
-                <Marker key={location.id} position={[location.latitude, location.longitude]} icon={customIcon}>
+              
+              {/* PROJECT MARKER - Always show when lat/lng available */}
+              {project.latitude && project.longitude && projectIcon && (
+                <Marker 
+                  position={[project.latitude, project.longitude]} 
+                  icon={projectIcon}
+                  zIndexOffset={2000}
+                >
                   <Popup>
-                    <div className="p-2">
-                      <h4 className="font-bold text-sm">{location.name}</h4>
-                      <p className="text-xs text-gray-600">{location.address}</p>
+                    <div className="p-3 min-w-[200px]">
+                      <h4 className="font-semibold text-lg mb-2">{project.title}</h4>
+                      <p className="text-xs text-gray-600 mb-1">{project.location || 'Location not specified'}</p>
+                      <p className="text-xs text-gray-500 mb-2">{project.lgu} · {project.category}</p>
+                      <p className="text-xs text-blue-600 font-medium">
+                        📍 {project.latitude.toFixed(6)}, {project.longitude.toFixed(6)}
+                      </p>
                     </div>
                   </Popup>
                 </Marker>
-              ))}
+              )}
 
               {/* PROJECT AREA HIGHLIGHT - Always show when lat/lng available */}
               {(() => {
                 // Use existing coordinates if available, otherwise create from lat/lng
                 const projectBoundary = project.coordinates || createProjectAreaBoundary();
+                const hasSpecificLocation = project.location && project.location.trim() !== '';
                 
                 if (projectBoundary) {
                   return (
-                    <Rectangle 
-                      bounds={projectBoundary}
-                      pathOptions={{ 
-                        color: '#000000',       // Black border
-                        weight: 3,               // Medium thickness
-                        fillOpacity: 0.25,      // More transparent background
-                        fillColor: '#000000',   // Black fill
-                        dashArray: ''           // Solid line (no dash)
-                      }}
-                    />
+                    <>
+                      {/* Main project area highlight */}
+                      <Rectangle 
+                        bounds={projectBoundary}
+                        pathOptions={{ 
+                          color: hasSpecificLocation ? '#2563eb' : '#dc2626', // Blue for specific, red for general
+                          weight: 4,               // Thicker border for visibility
+                          fillOpacity: hasSpecificLocation ? 0.3 : 0.2, // More transparent for general
+                          fillColor: hasSpecificLocation ? '#3b82f6' : '#ef4444', // Blue fill for specific, red for general
+                          dashArray: hasSpecificLocation ? '' : '8, 4' // Solid for specific, dashed for general
+                        }}
+                      />
+                      
+                      {/* Secondary highlight ring for emphasis - only for specific locations */}
+                      {hasSpecificLocation && (
+                        <Rectangle 
+                          bounds={projectBoundary}
+                          pathOptions={{ 
+                            color: '#60a5fa',       // Light blue border
+                            weight: 2,               // Thinner border
+                            fillOpacity: 0,         // No fill
+                            dashArray: '10, 5'      // Dashed line for emphasis
+                          }}
+                        />
+                      )}
+                      
+                      {/* Location message marker for non-specific locations */}
+                      {!hasSpecificLocation && project.latitude && project.longitude && (
+                        <Marker 
+                          position={[project.latitude, project.longitude]} 
+                          icon={projectIcon}
+                        >
+                          <Popup>
+                            <div className="p-3 min-w-[200px]">
+                              <h4 className="font-bold text-sm mb-2">{project.title}</h4>
+                              <p className="text-xs text-orange-600 mb-1 font-medium">
+                                ⚠️ General Area - Specific location not provided
+                              </p>
+                              <p className="text-xs text-gray-500">{project.lgu} · {project.category}</p>
+                            </div>
+                          </Popup>
+                        </Marker>
+                      )}
+                    </>
                   );
                 }
                 return null;
               })()}
+              <MapEvents />
               <ZoomControl position="bottomleft" />
             </MapContainer>
+            )}
+              </>
             )}
           </div>
         </div>

@@ -27,7 +27,7 @@ export default function LoginPage() {
       
       if (result.success) {
         // Successful login redirects to dashboard
-        router.push('/lgu-dashboard/dashboard');
+        router.push('/lgu-dashboard/(portal)/dashboard');
         router.refresh();
       } else {
         setError(result.error || 'Login failed');

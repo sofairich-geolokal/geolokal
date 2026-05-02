@@ -19,8 +19,27 @@ const Sidebar = () => {
   ];
 
   // Logout handler
-  const handleLogout = () => {
-    router.push("/superadmin/login"); 
+  const handleLogout = async () => {
+    try {
+      // Call the server action to clear authentication
+      const response = await fetch('/superadmin/logout', {
+        method: 'POST',
+      });
+      
+      if (response.ok) {
+        // Clear any client-side storage
+        localStorage.removeItem('loggedInUser');
+        localStorage.removeItem('userLocation');
+        sessionStorage.removeItem('selectedCityId');
+        
+        // Redirect to main landing login page
+        window.location.href = '/';
+      }
+    } catch (error) {
+      console.error('Logout error:', error);
+      // Fallback: just redirect to main landing login
+      window.location.href = '/';
+    }
   };
 
   return (

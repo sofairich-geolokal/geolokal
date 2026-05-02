@@ -62,14 +62,12 @@ export default function Dashboard(){
     return(
         <div className="bg-white px-2">
         <Cards />
-                <div className="flex flex-col lg:flex-row gap-6 px-5 py-2">
-                    <div className="flex-1 rounded-2xl">
-                        <ProjectCountByCategory />
-                    </div>
-                    <div className="flex-1 rounded-2xl">
-                        <DataChartWrapper />
-                    </div>
+                <div className="px-5 py-2">
+                    <ProjectCountByCategory />
                 </div>
+                {/* <div className="px-5 py-2">
+                    <DataChartWrapper />
+                </div> */}
         {/* <GeoMap /> */}
         </div>
     )

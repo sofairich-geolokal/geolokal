@@ -1,7 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { PrismaClient } from '@prisma/client';
-
-const prisma = new PrismaClient();
+import { prisma } from '@/lib/prisma';
 
 export async function GET(request: NextRequest) {
   try {
@@ -25,22 +23,7 @@ export async function GET(request: NextRequest) {
     }
 
     const layers = await prisma.map_layers.findMany({
-      where: whereClause,
-      include: {
-        project_categories: true,
-        city_muni_master: true,
-        users: {
-          select: {
-            id: true,
-            username: true,
-            email: true,
-          },
-        },
-      },
-      orderBy: [
-        { z_index: 'asc' },
-        { layer_name: 'asc' },
-      ],
+      where: whereClause as any,
     });
 
     return NextResponse.json({
@@ -79,10 +62,10 @@ export async function POST(request: NextRequest) {
     } = body;
 
     const data: any = {
-      name: layer_name, // Fixed: mapping frontend 'layer_name' to DB 'name'
-      layer_type,
-      metadata,
-      style_config,
+      layer_name,
+      layer_type: layer_type || 'vector',
+      metadata: metadata || {},
+      style_config: style_config || {},
       projection: projection || 'EPSG:4326',
       min_zoom: min_zoom ? parseInt(min_zoom) : 0,
       max_zoom: max_zoom ? parseInt(max_zoom) : 20,
@@ -105,20 +88,40 @@ export async function POST(request: NextRequest) {
       data.attribution = attribution;
     }
 
-    const layer = await prisma.map_layers.create({
-      data,
-      include: {
-        project_categories: true,
-        city_muni_master: true,
-      },
-    });
+    console.log('Creating layer with data:', JSON.stringify(data, null, 2));
+    
+    // Validate required fields
+    if (!data.layer_name) {
+      return NextResponse.json(
+        { success: false, error: 'Layer name is required' },
+        { status: 400 }
+      );
+    }
 
-    return NextResponse.json({
-      success: true,
-      data: layer,
-    });
+    // Try creating with minimal data first
+    try {
+      const layer = await prisma.map_layers.create({
+        data: {
+          layer_name: data.layer_name,
+          layer_type: data.layer_type,
+          metadata: data.metadata,
+          style_config: data.style_config,
+          is_visible: data.is_visible,
+        } as any,
+      });
+      console.log('Layer created successfully:', layer.id);
+      return NextResponse.json({
+        success: true,
+        data: layer,
+      });
+    } catch (createError) {
+      console.error('Error creating layer with minimal data:', createError);
+      throw createError;
+    }
   } catch (error) {
     console.error('Error creating layer:', error);
+    console.error('Error details:', error instanceof Error ? error.message : String(error));
+    console.error('Error stack:', error instanceof Error ? error.stack : 'No stack trace');
     return NextResponse.json(
       { success: false, error: 'Failed to create layer', details: error instanceof Error ? error.message : String(error) },
       { status: 500 }
@@ -152,11 +155,7 @@ export async function PUT(request: NextRequest) {
 
     const layer = await prisma.map_layers.update({
       where: { id: parseInt(id) },
-      data: updateData,
-      include: {
-        project_categories: true,
-        city_muni_master: true,
-      },
+      data: updateData as any,
     });
 
     return NextResponse.json({

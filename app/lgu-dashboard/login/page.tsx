@@ -59,7 +59,7 @@ export default function LoginPage() {
         <p className="text-gray-500 mb-2 font-medium">Welcome to IBAAN LGU</p>
         <h1 className="text-5xl font-bold mb-10 text-black tracking-tight">Login</h1>
 
-        <form className="space-y-6" onSubmit={handleLogin}>
+        <form className="space-y-6" onSubmit={handleLogin} suppressHydrationWarning>
           {success && (
             <div className="bg-green-50 border border-green-100 text-green-600 p-4 rounded-xl text-sm font-semibold">
               {success}
@@ -80,6 +80,7 @@ export default function LoginPage() {
               onChange={(e) => setUsername(e.target.value)}
               placeholder="Enter username"
               className="w-full px-4 py-4 rounded-xl border border-blue-200 focus:outline-none focus:ring-2 focus:ring-blue-100 text-black placeholder:text-gray-300"
+              suppressHydrationWarning
             />
           </div>
 
@@ -93,6 +94,7 @@ export default function LoginPage() {
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="Enter password"
                 className="w-full px-4 py-4 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-100 text-black placeholder:text-gray-300"
+                suppressHydrationWarning
               />
               <button
                 type="button"
@@ -108,6 +110,7 @@ export default function LoginPage() {
             type="submit"
             disabled={isLoading}
             className="w-full bg-[#BF7004] hover:bg-[#a35f03] text-white font-bold py-4 rounded-2xl shadow-lg mt-4 disabled:opacity-50 flex items-center justify-center gap-2 transition-all active:scale-95"
+            suppressHydrationWarning
           >
             {isLoading ? <><Loader2 className="animate-spin" /> Authenticating...</> : 'Sign in'}
           </button>

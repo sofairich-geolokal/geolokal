@@ -18,6 +18,9 @@ interface Project {
   status: 'In Progress' | 'Published' | 'Syncing' | 'Draft' | 'Failed';
   latitude?: number;
   longitude?: number;
+  location?: string;
+  mapLink?: string;
+  embeddedMapLink?: string;
 }
 
 const ProjectManagement = () => {
@@ -25,23 +28,111 @@ const ProjectManagement = () => {
   const [loading, setLoading] = useState(true);
   const [selectedProjectForMap, setSelectedProjectForMap] = useState<Project | null>(null);
   const [selectedProjectForDetails, setSelectedProjectForDetails] = useState<Project | null>(null);
+  const [selectedProjectForEdit, setSelectedProjectForEdit] = useState<Project | null>(null);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [lguRoles, setLguRoles] = useState<string[]>([]);
   const [lguRolesLoading, setLguRolesLoading] = useState(false);
+  const [projectCategories, setProjectCategories] = useState<string[]>([]);
+  const [teamOptions, setTeamOptions] = useState<string[]>([]);
+  const [dataTypeOptions, setDataTypeOptions] = useState<string[]>([]);
+  const [dynamicDataLoading, setDynamicDataLoading] = useState(false);
 
   // Form state for new project
   const [newProject, setNewProject] = useState({
     title: '',
-    category: 'Smart City',
-    dataTypes: 'Raster (GeoTIFF)',
-    team: 'Design team',
+    category: '',
+    dataTypes: '',
+    team: '',
     accessLevel: 'Public',
-    description: ''
+    description: '',
+    location: '',
+    mapLink: '',
+    embeddedMapLink: '',
+    status: 'Draft'
+  });
+
+  // Form state for editing project
+  const [editProject, setEditProject] = useState({
+    title: '',
+    category: '',
+    dataTypes: '',
+    team: '',
+    accessLevel: 'Public',
+    description: '',
+    location: '',
+    mapLink: '',
+    embeddedMapLink: '',
+    status: 'Draft'
   });
 
   // --- Pagination State ---
   const [currentPage, setCurrentPage] = useState(1);
-  const itemsPerPage = 4; 
+  const itemsPerPage = 5; 
+
+  // Fetch dynamic data for dropdowns
+  const fetchDynamicData = async () => {
+    try {
+      setDynamicDataLoading(true);
+      
+      // Fetch project categories
+      const categoriesResponse = await fetch('/api/projects/categories');
+      if (categoriesResponse.ok) {
+        const categoriesData = await categoriesResponse.json();
+        const categories = categoriesData.map((cat: any) => cat.name);
+        setProjectCategories(categories);
+        
+        // Set default category to first available
+        if (categories.length > 0 && !newProject.category) {
+          setNewProject(prev => ({ ...prev, category: categories[0] }));
+          setEditProject(prev => ({ ...prev, category: categories[0] }));
+        }
+      }
+
+      // Fetch team options (mock data for now, can be made dynamic later)
+      const teams = ['Design team', 'Development team', 'QA team', 'Research team', 'Implementation team'];
+      setTeamOptions(teams);
+      
+      if (teams.length > 0 && !newProject.team) {
+        setNewProject(prev => ({ ...prev, team: teams[0] }));
+        setEditProject(prev => ({ ...prev, team: teams[0] }));
+      }
+
+      // Fetch data type options (mock data for now, can be made dynamic later)
+      const dataTypes = ['Raster (GeoTIFF)', 'Vector (SHP)', 'Point Cloud', 'CAD (DWG)', 'KML/KMZ'];
+      setDataTypeOptions(dataTypes);
+      
+      if (dataTypes.length > 0 && !newProject.dataTypes) {
+        setNewProject(prev => ({ ...prev, dataTypes: dataTypes[0] }));
+        setEditProject(prev => ({ ...prev, dataTypes: dataTypes[0] }));
+      }
+      
+    } catch (error) {
+      console.error('Error fetching dynamic data:', error);
+      // Fallback to hardcoded options
+      const fallbackCategories = ['Smart City', 'Infrastructure', 'Environmental', 'Urban Planning', 'Transportation'];
+      const fallbackTeams = ['Design team', 'Development team', 'QA team'];
+      const fallbackDataTypes = ['Raster (GeoTIFF)', 'Vector (SHP)', 'Point Cloud'];
+      
+      setProjectCategories(fallbackCategories);
+      setTeamOptions(fallbackTeams);
+      setDataTypeOptions(fallbackDataTypes);
+      
+      if (!newProject.category) {
+        setNewProject(prev => ({ ...prev, category: fallbackCategories[0] }));
+        setEditProject(prev => ({ ...prev, category: fallbackCategories[0] }));
+      }
+      if (!newProject.team) {
+        setNewProject(prev => ({ ...prev, team: fallbackTeams[0] }));
+        setEditProject(prev => ({ ...prev, team: fallbackTeams[0] }));
+      }
+      if (!newProject.dataTypes) {
+        setNewProject(prev => ({ ...prev, dataTypes: fallbackDataTypes[0] }));
+        setEditProject(prev => ({ ...prev, dataTypes: fallbackDataTypes[0] }));
+      }
+    } finally {
+      setDynamicDataLoading(false);
+    }
+  };
 
   useEffect(() => {
     const fetchProjects = async () => {
@@ -53,21 +144,46 @@ const ProjectManagement = () => {
           return text.replace(/\[cite:\s*\d+\]/g, '').trim();
         };
 
-        const formattedData = data.map((p: any) => ({
-          id: p["Project ID"],
-          title: p["Project Title"],
-          category: p["Category"],
-          description: cleanDescription(p["Details"] || ""),
-          dataTypes: p["Data Format"] || "Vector (SHP)", 
-          lgu: p["LGU Location"],
-          accessLevel: p["Security Level"] || "LGU Restricted",
-          lastUpdated: new Date(p["Date Created"]).toLocaleString('en-US', {
-            month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit'
-          }),
-          status: p["Current Status"] || 'Draft',
-          latitude: p["Lat"] ? parseFloat(p["Lat"]) : undefined,      // Convert to number
-          longitude: p["Long"] ? parseFloat(p["Long"]) : undefined     // Convert to number
-        }));
+        const formattedData = data.map((p: any) => {
+          const description = cleanDescription(p["Details"] || "");
+          // Extract location from description if it exists
+          const locationMatch = description.match(/Location:\s*(.+?)(?:\n\n|$)/);
+          const location = locationMatch ? locationMatch[1].trim() : '';
+          
+          // Extract map link from description if it exists
+          const mapLinkMatch = description.match(/Map Link:\s*(.+?)(?:\n\n|$)/);
+          const mapLink = mapLinkMatch ? mapLinkMatch[1].trim() : '';
+          
+          // Extract embedded map link from description if it exists
+          const embeddedMapLinkMatch = description.match(/Embedded Map:\s*(.+?)(?:\n\n|$)/);
+          const embeddedMapLink = embeddedMapLinkMatch ? embeddedMapLinkMatch[1].trim() : '';
+          
+          // Clean description by removing all extracted fields
+          const cleanDescriptionWithoutFields = description
+            .replace(/Location:\s*.+?(?:\n\n|$)/, '')
+            .replace(/Map Link:\s*.+?(?:\n\n|$)/, '')
+            .replace(/Embedded Map:\s*.+?(?:\n\n|$)/, '')
+            .trim();
+          
+          return {
+            id: p["Project ID"],
+            title: p["Project Title"],
+            category: p["Category"],
+            description: cleanDescriptionWithoutFields,
+            dataTypes: p["Data Format"] || "Vector (SHP)", 
+            lgu: p["LGU Location"],
+            accessLevel: p["Security Level"] || "LGU Restricted",
+            lastUpdated: new Date(p["Date Created"]).toLocaleString('en-US', {
+              month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit'
+            }),
+            status: p["Current Status"] || 'Draft',
+            latitude: p["Lat"] ? parseFloat(p["Lat"]) : undefined,      // Convert to number
+            longitude: p["Long"] ? parseFloat(p["Long"]) : undefined,     // Convert to number
+            location: location,
+            mapLink: mapLink,
+            embeddedMapLink: embeddedMapLink
+          };
+        });
 
         setProjects(formattedData);
       } catch (error) {
@@ -119,6 +235,10 @@ const ProjectManagement = () => {
     }
   }, [showCreateModal]);
 
+  useEffect(() => {
+    fetchDynamicData();
+  }, []);
+
   const handleCreateProject = async () => {
     if (!newProject.title.trim()) {
       alert('Please enter a project name');
@@ -133,13 +253,16 @@ const ProjectManagement = () => {
         },
         body: JSON.stringify({
           title: newProject.title,
-          category: newProject.category,
+          categoryId: 1, // Default category ID for Smart City
+          description: newProject.description + 
+            (newProject.location ? `\n\nLocation: ${newProject.location}` : '') +
+            (newProject.mapLink ? `\n\nMap Link: ${newProject.mapLink}` : '') +
+            (newProject.embeddedMapLink ? `\n\nEmbedded Map: ${newProject.embeddedMapLink}` : ''),
           dataTypes: newProject.dataTypes,
-          team: newProject.team,
+          lguId: 1, // Default LGU ID
           accessLevel: newProject.accessLevel,
-          description: newProject.description,
-          lgu: 'Default LGU', 
-          status: 'Draft' as const
+          team: newProject.team,
+          status: newProject.status
         }),
       });
 
@@ -148,15 +271,26 @@ const ProjectManagement = () => {
         const createdProject = result.project;
         
         const formattedProject = {
-          ...createdProject,
+          id: createdProject.id,
+          title: createdProject.project_name,
+          category: newProject.category, // Use the category from form state
+          description: createdProject.description || "",
           dataTypes: createdProject.dataTypes || "Vector (SHP)",
-          accessLevel: createdProject.accessLevel || "LGU Restricted",
+          lgu: "Default LGU",
+          accessLevel: createdProject.access_level || "Public",
           lastUpdated: new Date().toLocaleString('en-US', {
             month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit'
-          })
+          }),
+          status: createdProject.status || 'Draft',
+          latitude: createdProject.latitude,
+          longitude: createdProject.longitude
         };
         
-        setProjects([formattedProject, ...projects]);
+        // Refresh the projects list to ensure we have the latest data from database
+        setTimeout(() => {
+          window.location.reload(); // Simple refresh to ensure data consistency
+        }, 1000);
+        
         resetForm();
         alert('Project created successfully!');
       } else {
@@ -168,27 +302,130 @@ const ProjectManagement = () => {
     }
   };
 
+  const handleEditProject = (project: Project) => {
+    // Extract location from description if it exists
+    const locationMatch = project.description.match(/Location:\s*(.+?)(?:\n\n|$)/);
+    const location = locationMatch ? locationMatch[1].trim() : '';
+    
+    // Clean description by removing location field
+    const cleanDescriptionWithoutFields = project.description
+      .replace(/Location:\s*.+?(?:\n\n|$)/, '')
+      .trim();
+
+    setEditProject({
+      title: project.title,
+      category: project.category,
+      dataTypes: project.dataTypes,
+      team: 'Design team', // Default team since it's not stored in database
+      accessLevel: project.accessLevel,
+      description: cleanDescriptionWithoutFields,
+      location: location,
+      mapLink: project.mapLink || '',
+      embeddedMapLink: project.embeddedMapLink || '',
+      status: project.status
+    });
+    setSelectedProjectForEdit(project);
+  };
+
+  const handleUpdateProject = async () => {
+    if (!selectedProjectForEdit || !editProject.title.trim()) {
+      alert('Please enter a project name');
+      return;
+    }
+
+    try {
+      const response = await fetch('/api/projects', {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          id: selectedProjectForEdit.id,
+          title: editProject.title,
+          categoryId: 1, // Default category ID for Smart City
+          description: editProject.description + 
+            (editProject.location ? `\n\nLocation: ${editProject.location}` : ''),
+          dataTypes: editProject.dataTypes,
+          lguId: 1, // Default LGU ID
+          accessLevel: editProject.accessLevel,
+          team: editProject.team,
+          status: editProject.status,
+          latitude: selectedProjectForEdit.latitude || 0,
+          longitude: selectedProjectForEdit.longitude || 0
+        }),
+      });
+
+      if (response.ok) {
+        const result = await response.json();
+        const updatedProject = result.project;
+        
+        // Update the project in the list
+        setProjects(projects.map(p => 
+          p.id === selectedProjectForEdit.id 
+            ? {
+                ...p,
+                title: updatedProject.project_name,
+                category: editProject.category,
+                description: editProject.description,
+                dataTypes: updatedProject.dataTypes || "Vector (SHP)",
+                accessLevel: updatedProject.access_level || "Public",
+                status: updatedProject.status || 'Draft',
+                location: editProject.location,
+                lastUpdated: new Date().toLocaleString('en-US', {
+                  month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit'
+                })
+              }
+            : p
+        ));
+        
+        setSelectedProjectForEdit(null);
+        alert('Project updated successfully!');
+      } else {
+        throw new Error('Failed to update project');
+      }
+    } catch (error) {
+      console.error('Error updating project:', error);
+      alert('Failed to update project. Please try again.');
+    }
+  };
+
   const handleDeleteProject = async (id: number | string) => {
     if (!confirm('Are you sure you want to delete this project?')) return;
     try {
-      const response = await fetch(`/api/projects?id=${id}`, { method: 'DELETE' });
+      const response = await fetch(`/api/projects?id=${id}`, { 
+        method: 'DELETE',
+        credentials: 'include',
+        headers: {
+          'Content-Type': 'application/json'
+        }
+      });
+      
       if (response.ok) {
         setProjects(projects.filter(p => p.id !== id));
         alert('Project deleted successfully');
+      } else {
+        const errorData = await response.json();
+        console.error('Delete failed:', errorData);
+        alert(`Failed to delete project: ${errorData.error || 'Unknown error'}`);
       }
     } catch (error) {
       console.error('Delete error:', error);
+      alert('Failed to delete project. Please check your network connection and try again.');
     }
   };
 
   const resetForm = () => {
     setNewProject({
       title: '',
-      category: 'Smart City',
-      dataTypes: 'Raster (GeoTIFF)',
-      team: 'Design team',
+      category: projectCategories[0] || 'Smart City',
+      dataTypes: dataTypeOptions[0] || 'Raster (GeoTIFF)',
+      team: teamOptions[0] || 'Design team',
       accessLevel: 'Public',
-      description: ''
+      description: '',
+      location: '',
+      mapLink: '',
+      embeddedMapLink: '',
+      status: 'Draft'
     });
     setShowCreateModal(false);
   };
@@ -197,7 +434,7 @@ const ProjectManagement = () => {
 
   return (
     <div className="w-full font-sans p-6 bg-white relative">
-      <ProjectCards />
+      <ProjectCards projects={projects} />
       
       <div className="flex justify-between items-center mb-4">
         <h1 className="text-2xl font-bold text-black">Projects Management</h1>
@@ -219,27 +456,23 @@ const ProjectManagement = () => {
         <div className="overflow-x-auto flex-grow">
           <table className="w-full text-left border-collapse">
             <thead>
-              <tr className="text-gray-800 font-bold text-[12px]">
-                <th className="px-4 py-5 w-[15%]">Project Title</th>
-                <th className="px-2 py-5 w-[10%]">Category</th>
-                <th className='px-2 py-5 w-[24%]'>Description</th>
-                <th className="px-2 py-5 w-[12%]">Data Types</th>
-                <th className="px-2 py-5 w-[10%] text-center">Access Level</th>
-                <th className="px-2 py-5 w-[12%] text-center">Last Updated</th>
-                <th className="px-2 py-5 w-[10%] text-center">Status</th>
-                <th className="px-2 py-5 w-[10%] text-center">Action</th>
+              <tr className="text-gray-800 font-bold text-[15px]">
+                <th className="px-3 py-5 w-[18%]">Project Title</th>
+                <th className="px-3 py-5 w-[8%]">Category</th>
+                <th className="px-3 py-5 w-[10%] text-left">Access Level</th>
+                <th className="px-3 py-5 w-[13%] text-left">Last Updated</th>
+                <th className="px-3 py-5 w-[10%] text-center">Status</th>
+                <th className="px-3 py-5 w-[10%] text-center">Action</th>
               </tr>
             </thead>
             <tbody className="text-[13px] text-gray-700">
               {currentProjects.map((project, index) => (
                 <tr key={index} className={`${index % 2 === 0 ? 'bg-[#eeeffc]' : 'bg-transparent'} 
                 hover:bg-gray-50 transition-colors max-h-[100px]`}>
-                  <td className="px-4 py-2 font-normal align-top text-left">{project.title}</td>
+                  <td className="px-4 py-2 font-normal align-top text-left"><h2>{project.title}</h2></td>
                   <td className="px-4 py-2 align-top text-left">{project.category}</td>
-                  <td className="px-4 py-2 align-top text-left text-gray-500 line-clamp-4">{project.description || "No description provided"}</td>
-                  <td className="px-4 py-2 align-top text-left">{project.dataTypes}</td>
-                  <td className="px-4 py-2 align-top text-center">{project.accessLevel}</td>
-                  <td className="px-4 py-2 align-top text-center">{project.lastUpdated}</td>
+                  <td className="px-4 py-2 align-top text-left">{project.accessLevel}</td>
+                  <td className="px-4 py-2 align-top text-left">{project.lastUpdated}</td>
                   <td className="px-2 py-2 align-top text-center">
                     <span className={`px-3 py-1.5 rounded-full text-[11px] font-bold inline-block min-w-[90px] ${getStatusStyle(project.status)}`}>
                       {project.status}
@@ -249,30 +482,31 @@ const ProjectManagement = () => {
                     <div className="flex justify-center gap-2">
                       <button 
                         onClick={() => setSelectedProjectForMap(project)}
-                        className="p-2 text-white bg-black rounded-full transition-all"
+                        className="p-2 text-white bg-gray-800/80 rounded-full transition-all"
                         title="View Map"
                       >
-                        <MapPin size={16} />
+                        <MapPin size={14} />
                       </button>
                       <button 
                         onClick={() => setSelectedProjectForDetails(project)}
                         className="p-2 text-white bg-green-900 rounded-full transition-all"
                         title="View Project Details"
                       >
-                        <Eye size={16} />
+                        <Eye size={14} />
                       </button>
                       <button 
+                        onClick={() => handleEditProject(project)}
                         className="p-2 text-white bg-blue-900 rounded-full transition-all"
                         title="Edit Project"
                       >
-                        <Edit size={16} />
+                        <Edit size={14} />
                       </button>
                       <button 
                         onClick={() => handleDeleteProject(project.id)}
                         className="p-2 text-white bg-red-900 rounded-full transition-all"
                         title="Delete Project"
                       >
-                        <Trash2 size={16} />
+                        <Trash2 size={14} />
                       </button>
                     </div>
                   </td>
@@ -336,8 +570,8 @@ const ProjectManagement = () => {
 
       {showCreateModal && (
         <div className="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50">
-          <div className="bg-white rounded-2xl p-8 w-full max-w-2xl mx-4 shadow-xl">
-            <div className="flex justify-between items-center mb-6">
+          <div className="bg-white rounded-2xl p-6 w-full max-w-6xl mx-4 shadow-xl max-h-[90vh] overflow-y-auto">
+            <div className="flex justify-between items-center mb-4">
               <h2 className="text-2xl font-bold text-gray-800">Create new project</h2>
               <button
                 onClick={() => setShowCreateModal(false)}
@@ -347,8 +581,8 @@ const ProjectManagement = () => {
               </button>
             </div>
 
-            <div className="grid grid-cols-2 gap-6">
-              <div className="col-span-2">
+            <div className="grid grid-cols-3 gap-4">
+              <div className="col-span-3">
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Project name
                 </label>
@@ -369,12 +603,11 @@ const ProjectManagement = () => {
                   value={newProject.category}
                   onChange={(e) => setNewProject({...newProject, category: e.target.value})}
                   className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  disabled={dynamicDataLoading}
                 >
-                  <option>Smart City</option>
-                  <option>Infrastructure</option>
-                  <option>Environmental</option>
-                  <option>Urban Planning</option>
-                  <option>Transportation</option>
+                  {projectCategories.map((category) => (
+                    <option key={category} value={category}>{category}</option>
+                  ))}
                 </select>
               </div>
 
@@ -386,10 +619,11 @@ const ProjectManagement = () => {
                   value={newProject.dataTypes}
                   onChange={(e) => setNewProject({...newProject, dataTypes: e.target.value})}
                   className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  disabled={dynamicDataLoading}
                 >
-                  <option>Raster (GeoTIFF)</option>
-                  <option>Vector (SHP)</option>
-                  <option>Point Cloud</option>
+                  {dataTypeOptions.map((dataType) => (
+                    <option key={dataType} value={dataType}>{dataType}</option>
+                  ))}
                 </select>
               </div>
 
@@ -401,10 +635,11 @@ const ProjectManagement = () => {
                   value={newProject.team}
                   onChange={(e) => setNewProject({...newProject, team: e.target.value})}
                   className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  disabled={dynamicDataLoading}
                 >
-                  <option>Design team</option>
-                  <option>Development team</option>
-                  <option>QA team</option>
+                  {teamOptions.map((team) => (
+                    <option key={team} value={team}>{team}</option>
+                  ))}
                 </select>
               </div>
 
@@ -423,14 +658,44 @@ const ProjectManagement = () => {
                 </select>
               </div>
 
-              <div className="col-span-2">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Location
+                </label>
+                <input
+                  type="text"
+                  value={newProject.location}
+                  onChange={(e) => setNewProject({...newProject, location: e.target.value})}
+                  className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  placeholder="Enter project location"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Current Status
+                </label>
+                <select 
+                  value={newProject.status}
+                  onChange={(e) => setNewProject({...newProject, status: e.target.value})}
+                  className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="Draft">Draft</option>
+                  <option value="In Progress">In Progress</option>
+                  <option value="Published">Published</option>
+                  <option value="Syncing">Syncing</option>
+                  <option value="Failed">Failed</option>
+                </select>
+              </div>
+
+              <div className="col-span-3">
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Description
                 </label>
                 <textarea
                   value={newProject.description}
                   onChange={(e) => setNewProject({...newProject, description: e.target.value})}
-                  className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 h-32 resize-none"
+                  className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 h-20 resize-none"
                   placeholder="Complete project details"
                 />
               </div>
@@ -448,6 +713,158 @@ const ProjectManagement = () => {
                 className="px-6 py-3 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition-colors"
               >
                 Create project
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {selectedProjectForEdit && (
+        <div className="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50">
+          <div className="bg-white rounded-2xl p-6 w-full max-w-6xl mx-4 shadow-xl max-h-[90vh] overflow-y-auto">
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-2xl font-bold text-gray-800">Edit project</h2>
+              <button
+                onClick={() => setSelectedProjectForEdit(null)}
+                className="text-gray-400 hover:text-gray-600 text-2xl"
+              >
+                ×
+              </button>
+            </div>
+
+            <div className="grid grid-cols-3 gap-4">
+              <div className="col-span-3">
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Project name
+                </label>
+                <input
+                  type="text"
+                  value={editProject.title}
+                  onChange={(e) => setEditProject({...editProject, title: e.target.value})}
+                  className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  placeholder="Enter project name"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Category
+                </label>
+                <select 
+                  value={editProject.category}
+                  onChange={(e) => setEditProject({...editProject, category: e.target.value})}
+                  className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  disabled={dynamicDataLoading}
+                >
+                  {projectCategories.map((category) => (
+                    <option key={category} value={category}>{category}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Data Types
+                </label>
+                <select 
+                  value={editProject.dataTypes}
+                  onChange={(e) => setEditProject({...editProject, dataTypes: e.target.value})}
+                  className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  disabled={dynamicDataLoading}
+                >
+                  {dataTypeOptions.map((dataType) => (
+                    <option key={dataType} value={dataType}>{dataType}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Select a team
+                </label>
+                <select 
+                  value={editProject.team}
+                  onChange={(e) => setEditProject({...editProject, team: e.target.value})}
+                  className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  disabled={dynamicDataLoading}
+                >
+                  {teamOptions.map((team) => (
+                    <option key={team} value={team}>{team}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Access Level
+                </label>
+                <select 
+                  value={editProject.accessLevel}
+                  onChange={(e) => setEditProject({...editProject, accessLevel: e.target.value})}
+                  className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  <option>Public</option>
+                  <option>LGU Restricted</option>
+                  <option>Private</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Location
+                </label>
+                <input
+                  type="text"
+                  value={editProject.location}
+                  onChange={(e) => setEditProject({...editProject, location: e.target.value})}
+                  className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  placeholder="Enter project location"
+                />
+              </div>
+
+              
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Current Status
+                </label>
+                <select 
+                  value={editProject.status}
+                  onChange={(e) => setEditProject({...editProject, status: e.target.value})}
+                  className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="Draft">Draft</option>
+                  <option value="In Progress">In Progress</option>
+                  <option value="Published">Published</option>
+                  <option value="Syncing">Syncing</option>
+                  <option value="Failed">Failed</option>
+                </select>
+              </div>
+
+              <div className="col-span-3">
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Description
+                </label>
+                <textarea
+                  value={editProject.description}
+                  onChange={(e) => setEditProject({...editProject, description: e.target.value})}
+                  className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 h-20 resize-none"
+                  placeholder="Complete project details"
+                />
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-4 mt-8">
+              <button
+                onClick={() => setSelectedProjectForEdit(null)}
+                className="px-6 py-3 border border-gray-300 text-gray-700 rounded-xl hover:bg-gray-50 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleUpdateProject}
+                className="px-6 py-3 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition-colors"
+              >
+                Update project
               </button>
             </div>
           </div>

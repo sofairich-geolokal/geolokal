@@ -23,6 +23,8 @@ export default function GeoPortalMap() {
   });
 
   const [mapView, setMapView] = useState<{ lat: number; lng: number; zoom: number } | null>(null);
+  const [layerBounds, setLayerBounds] = useState<[[number, number], [number, number]] | null>(null);
+  const [fitToBounds, setFitToBounds] = useState<[[number, number], [number, number]] | null>(null);
   const [bufferData, setBufferData] = useState<any>(null);
   const [legendsOpen, setLegendsOpen] = useState(true);
   const mapContainerRef = useRef<HTMLDivElement>(null);
@@ -81,6 +83,12 @@ export default function GeoPortalMap() {
     if (!isNaN(lat) && !isNaN(lng)) {
       setMapView({ lat, lng, zoom: 15 });
     }
+  };
+
+  // Handle bounds from admin boundary layer and auto-zoom
+  const handleBoundaryBounds = (bounds: [[number, number], [number, number]]) => {
+    setLayerBounds(bounds);
+    setFitToBounds(bounds);
   };
 
   // Calculate distance between two points using Haversine formula
@@ -176,6 +184,8 @@ export default function GeoPortalMap() {
             roadNetworkLayerHighlighted={false}
             waterwaysLayerVisible={layers.rivers}
             waterwaysLayerHighlighted={false}
+            onBoundaryBoundsReady={layers.adminBoundary ? handleBoundaryBounds : undefined}
+            fitToBounds={fitToBounds}
           />
         </div>
 

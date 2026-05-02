@@ -7,6 +7,7 @@ import L from 'leaflet';
 interface WaterwaysLayerProps {
   isVisible: boolean;
   isHighlighted?: boolean;
+  onBoundsReady?: (bounds: [[number, number], [number, number]]) => void;
 }
 
 // PRS92 Philippines Zone III coordinate system parameters
@@ -165,7 +166,8 @@ const waterwayMarkers = [
 
 const WaterwaysLayer: React.FC<WaterwaysLayerProps> = ({ 
   isVisible, 
-  isHighlighted = false 
+  isHighlighted = false,
+  onBoundsReady 
 }) => {
   const [waterwaysData, setWaterwaysData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
@@ -197,6 +199,15 @@ const WaterwaysLayer: React.FC<WaterwaysLayerProps> = ({
         }
         
         setWaterwaysData(geoData);
+        
+        // Calculate and report bounds when data is loaded
+        if (geoData && onBoundsReady) {
+          const transformed = transformCoordinates(geoData);
+          if (transformed && transformed.features && transformed.features.length > 0) {
+            const bounds = L.geoJSON(transformed).getBounds();
+            onBoundsReady([[bounds.getSouth(), bounds.getWest()], [bounds.getNorth(), bounds.getEast()]]);
+          }
+        }
       } catch (error) {
         console.error('Error fetching waterways data:', error);
       } finally {

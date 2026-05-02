@@ -74,16 +74,46 @@ export default function ShapefileUpload() {
     setError(null);
 
     try {
-      const shpFile = files.find(f => f.name.toLowerCase().endsWith('.shp'));
+      let filesToProcess = files;
+      
+      // Check if a zip file is uploaded
+      const zipFile = files.find(f => f.name.toLowerCase().endsWith('.zip'));
+      if (zipFile) {
+        const zip = new JSZip();
+        const zipBuffer = await zipFile.arrayBuffer();
+        const loadedZip = await zip.loadAsync(zipBuffer);
+        
+        // Extract all files from zip
+        const extractedFiles: File[] = [];
+        for (const [filename, file] of Object.entries(loadedZip.files)) {
+          if (!file.dir) {
+            const blob = await file.async('blob');
+            const extractedFile = new File([blob], filename, { type: blob.type });
+            extractedFiles.push(extractedFile);
+          }
+        }
+        filesToProcess = extractedFiles;
+      }
+
+      const shpFile = filesToProcess.find(f => f.name.toLowerCase().endsWith('.shp'));
+      const shxFile = filesToProcess.find(f => f.name.toLowerCase().endsWith('.shx'));
+      const dbfFile = filesToProcess.find(f => f.name.toLowerCase().endsWith('.dbf'));
+
       if (!shpFile) {
-        throw new Error("Missing .shp file.");
+        throw new Error("Missing .shp file. Please select all required shapefile components (.shp, .shx, .dbf) or a zip file containing them.");
+      }
+      if (!shxFile) {
+        throw new Error("Missing .shx file. Please select all required shapefile components (.shp, .shx, .dbf) or a zip file containing them.");
+      }
+      if (!dbfFile) {
+        throw new Error("Missing .dbf file. Please select all required shapefile components (.shp, .shx, .dbf) or a zip file containing them.");
       }
       
       const baseName = shpFile.name.replace(/\.[^/.]+$/, "");
 
-      // Zip files together using JSZip
+      // Zip files together using JSZip for shpjs
       const zip = new JSZip();
-      await Promise.all(files.map(async (file) => {
+      await Promise.all(filesToProcess.map(async (file) => {
         const buffer = await file.arrayBuffer();
         zip.file(file.name, buffer);
       }));
@@ -98,7 +128,7 @@ export default function ShapefileUpload() {
       setShowAddLayerModal(true);
     } catch (err: any) {
       console.error(err);
-      setError("Failed to parse shapefile. Ensure you included .shp, .shx, and .dbf files.");
+      setError(err.message || "Failed to parse shapefile. Ensure you included .shp, .shx, and .dbf files.");
     } finally {
       setIsProcessing(false);
       if (fileInputRef.current) fileInputRef.current.value = '';
@@ -135,26 +165,22 @@ export default function ShapefileUpload() {
           is_downloadable: false
         };
 
-        console.log('Saving layer with payload:', payload);
         const response = await fetch('/api/layers', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(payload)
         });
 
-        console.log('Response status:', response.status);
-        const responseText = await response.text();
-        console.log('Response text:', responseText);
+        const result = await response.json();
 
         if (!response.ok) {
-          throw new Error(`Failed to save layer: ${response.status} - ${responseText}`);
+          setError(`Failed to save layer: ${result.error || 'Unknown error'}. Layer added locally only.`);
+        } else {
+          newLayer.id = result.data.id.toString();
         }
-
-        const result = JSON.parse(responseText);
-        newLayer.id = result.data.id.toString();
       } catch (err: any) {
         console.error('Error saving layer:', err);
-        setError(`Failed to save layer to database: ${err.message}. Layer added locally only.`);
+        setError(`Failed to save layer to database. Layer added locally only.`);
       } finally {
         setIsSaving(false);
       }
@@ -182,7 +208,7 @@ export default function ShapefileUpload() {
               ref={fileInputRef}
               type="file"
               multiple
-              accept=".shp,.shx,.dbf,.prj,.cpg"
+              accept=".shp,.shx,.dbf,.prj,.cpg,.zip"
               onChange={handleProcessFiles}
               className="hidden"
               id="shp-upload"
@@ -192,8 +218,8 @@ export default function ShapefileUpload() {
               className="w-full flex flex-col items-center justify-center border-2 border-dashed border-gray-300 rounded-xl py-6 px-4 hover:border-[#318855] hover:bg-green-50 cursor-pointer transition-all"
             >
               <Upload className="text-gray-400 mb-2" />
-              <span className="text-sm font-medium text-gray-600 text-center">Select individual files or drag them here</span>
-              <span className="text-xs text-gray-400 mt-1">(.shp, .shx, .dbf)</span>
+              <span className="text-sm font-medium text-gray-600 text-center">Select shapefile files or a zip file</span>
+              <span className="text-xs text-gray-400 mt-1">Required: .shp, .shx, .dbf (optional: .prj, .cpg) or upload a .zip file</span>
             </label>
             {isProcessing && <p className="text-xs text-[#318855] mt-2 animate-pulse">Processing geometry...</p>}
             {error && (
@@ -246,7 +272,7 @@ export default function ShapefileUpload() {
         </div>
 
         {/* Basemap Toggle */}
-        <div className="absolute bottom-6 right-6 z-[1000] flex bg-white rounded-lg shadow-lg p-1 border border-gray-200">
+        <div className="absolute top-6 right-6 z-[1000] flex bg-white rounded-lg shadow-lg p-1 border border-gray-200">
           <button onClick={() => setMapType('none')} className={`px-3 py-1 text-xs rounded-md ${mapType === 'none' ? 'bg-gray-800 text-white' : 'text-gray-600'}`}>Structure</button>
           <button onClick={() => setMapType('osm')} className={`px-3 py-1 text-xs rounded-md ${mapType === 'osm' ? 'bg-gray-800 text-white' : 'text-gray-600'}`}>Map</button>
         </div>
