@@ -1,0 +1,14 @@
+# Netlify Environment Variables for Aiven PostgreSQL
+# Copy these to your Netlify site environment variables
+
+# Database Configuration
+DB_USER=your-aiven-username
+DB_HOST=your-aiven-hostname
+DB_NAME=your-aiven-database-name
+DB_PASSWORD=your-aiven-password
+DB_PORT=16443
+DB_SSL=true
+
+# Additional Configuration (if needed)
+NEXTAUTH_URL=https://your-site-name.netlify.app
+NEXTAUTH_SECRET=your-nextauth-secret-key
