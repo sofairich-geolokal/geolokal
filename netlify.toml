@@ -7,7 +7,7 @@
   NPM_VERSION = "10"
 
 [functions]
-  node_version = "20"
+  node_version = { major = 20 }
   included_files = ["**/.next/static/**"]
 
 [[redirects]]
