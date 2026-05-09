@@ -126,7 +126,7 @@ export default function SuperadminCards() {
   if (loading) {
     return (
       <div className="p-0 sm:p-6 bg-white h-full">
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 max-w-7xl mx-auto">
+        <div className="grid grid-cols-4 sm:grid-cols-2 lg:grid-cols-4 gap-6 max-w-7xl mx-auto">
           {[...Array(4)].map((_, index) => (
             <div key={index} className="p-6 rounded-3xl shadow-sm border border-gray-100 animate-pulse">
               <div className="h-4 bg-gray-200 rounded mb-2"></div>

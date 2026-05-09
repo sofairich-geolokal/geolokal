@@ -360,7 +360,7 @@ const UserManagement = () => {
           </form>
         </div>
 
-        <div className="col-span-1 grid grid-cols-2 lg:grid-cols-4 gap-4 w-full">
+        <div className="col-span-1 grid grid-cols-2 lg:grid-cols-2 gap-4 w-full">
           {statsCards.map((stat: { label: string; value: string; color: string }) => (
             <div 
               key={stat.label} 

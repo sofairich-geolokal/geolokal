@@ -8,6 +8,7 @@ export async function GET(request: Request) {
     // Check for superadmin direct access header
     const headers = request.headers;
     const superadminAccess = headers.get('x-superadmin-direct-access');
+    const lguUserId = headers.get('x-lgu-user-id');
     
     if (superadminAccess === 'true') {
       // Superadmin direct access - return all active users
@@ -19,6 +20,22 @@ export async function GET(request: Request) {
         WHERE u.is_active = true
         ORDER BY u.created_at DESC
       `, []);
+      
+      return NextResponse.json(result.rows || []);
+    }
+    
+    if (lguUserId) {
+      // LGU user access via superadmin - return only viewer users created by this LGU
+      const result = await query(`
+        SELECT u.username, u.email, u.password_hash, u.role, 
+               to_char(u.created_at, 'Mon DD, YYYY HH:MI AM') as created,
+               u.created_by
+        FROM users u
+        WHERE u.created_by = (
+          SELECT username FROM users WHERE id = $1
+        ) AND u.is_active = true AND u.role = 'viewer'
+        ORDER BY u.created_at DESC
+      `, [lguUserId]);
       
       return NextResponse.json(result.rows || []);
     }
