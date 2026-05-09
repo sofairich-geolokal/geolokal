@@ -66,9 +66,9 @@ export default function Dashboard(){
                     <div className="flex-1 rounded-2xl">
                         <ProjectCountByCategory />
                     </div>
-                    <div className="flex-1 rounded-2xl">
+                    {/* <div className="flex-1 rounded-2xl">
                         <DataChartWrapper />
-                    </div>
+                    </div> */}
                 </div>
         {/* <GeoMap /> */}
         </div>

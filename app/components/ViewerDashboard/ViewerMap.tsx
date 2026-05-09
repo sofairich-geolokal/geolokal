@@ -23,20 +23,29 @@ export default function ViewerMap() {
 
   const [leftPanelOpen, setLeftPanelOpen] = useState(true);
   const [activeRightPanel, setActiveRightPanel] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState('Layer Name');
   const [searchQuery, setSearchQuery] = useState('');
+  const [searchResults, setSearchResults] = useState<any[]>([]);
+  const [isSearching, setIsSearching] = useState(false);
+  const [showSearchResults, setShowSearchResults] = useState(false);
 
   // Viewer-specific layers - will be fetched from GeoPortal API
   const [availableLayers, setAvailableLayers] = useState<any[]>([]);
   const [loadingLayers, setLoadingLayers] = useState(false);
 
-  // State for managing boundary, road network, and waterways layers
-  const [boundaryLayerVisible, setBoundaryLayerVisible] = useState(false);
-  const [boundaryLayerHighlighted, setBoundaryLayerHighlighted] = useState(false);
-  const [roadNetworkLayerVisible, setRoadNetworkLayerVisible] = useState(false);
-  const [roadNetworkLayerHighlighted, setRoadNetworkLayerHighlighted] = useState(false);
-  const [waterwaysLayerVisible, setWaterwaysLayerVisible] = useState(false);
-  const [waterwaysLayerHighlighted, setWaterwaysLayerHighlighted] = useState(false);
+  // State for managing the 3 specific layers
+  const [adminBoundaryVisible, setAdminBoundaryVisible] = useState(true);
+  const [roadNetworksVisible, setRoadNetworksVisible] = useState(true);
+  const [riversVisible, setRiversVisible] = useState(true);
+  const [boundaryHovered, setBoundaryHovered] = useState(false);
+  const [roadNetworksHovered, setRoadNetworksHovered] = useState(false);
+  const [riversHovered, setRiversHovered] = useState(false);
+  
+  // Hover states for right toolbar icons
+  const [layersHovered, setLayersHovered] = useState(false);
+  const [basemapHovered, setBasemapHovered] = useState(false);
+  const [measureHovered, setMeasureHovered] = useState(false);
+  const [xyHovered, setXyHovered] = useState(false);
+  const [headerHovered, setHeaderHovered] = useState(false);
 
   // Three main layers that should always be available (same as superadmin)
   const mainLayers = [
@@ -110,6 +119,80 @@ export default function ViewerMap() {
       is_main_layer: true
     }
   ];
+
+  // Search functionality
+  const searchLocations = async (query: string) => {
+    if (!query.trim()) {
+      setSearchResults([]);
+      setShowSearchResults(false);
+      return;
+    }
+
+    setIsSearching(true);
+    try {
+      // Using Nominatim API for geocoding (free and open source)
+      const response = await fetch(
+        `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}&limit=5&countrycodes=PH`,
+        {
+          headers: {
+            'User-Agent': 'GeoLokal/1.0'
+          }
+        }
+      );
+      
+      if (response.ok) {
+        const data = await response.json();
+        const results = data.map((item: any) => ({
+          display_name: item.display_name,
+          lat: parseFloat(item.lat),
+          lng: parseFloat(item.lon),
+          type: item.type,
+          importance: item.importance
+        }));
+        setSearchResults(results);
+        setShowSearchResults(true);
+      }
+    } catch (error) {
+      console.error('Search error:', error);
+      setSearchResults([]);
+    } finally {
+      setIsSearching(false);
+    }
+  };
+
+  const handleSearchSelect = (result: any) => {
+    setMapView({ lat: result.lat, lng: result.lng, zoom: 15 });
+    setShowSearchResults(false);
+    setSearchQuery(result.display_name);
+  };
+
+  const handleSearchInputChange = (value: string) => {
+    setSearchQuery(value);
+    if (value.length > 2) {
+      const timeoutId = setTimeout(() => {
+        searchLocations(value);
+      }, 300);
+      return () => clearTimeout(timeoutId);
+    } else {
+      setSearchResults([]);
+      setShowSearchResults(false);
+    }
+  };
+
+  // Close search results when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      const target = event.target as Element;
+      if (!target.closest('.search-container')) {
+        setShowSearchResults(false);
+      }
+    };
+
+    if (showSearchResults) {
+      document.addEventListener('mousedown', handleClickOutside);
+      return () => document.removeEventListener('mousedown', handleClickOutside);
+    }
+  }, [showSearchResults]);
 
   // Check GeoServer status
   const checkGeoServerStatus = async () => {
@@ -386,11 +469,10 @@ export default function ViewerMap() {
     certify_info: false
   });
 
-  // Available basemaps
+  // Available basemaps - matching the image exactly
   const availableBasemaps = [
     'Open Street Map',
-    'Satellite Map', 
-    'Terrain Map'
+    'Satellite (Esri)'
   ];
 
   const [xyInput, setXyInput] = useState({ lat: '', lng: '' });
@@ -500,39 +582,11 @@ export default function ViewerMap() {
       // Generate unique color per layer
       const randomColor = `#${Math.floor(Math.random()*16777215).toString(16).padStart(6, '0')}`;
       setLoadedLayers([{ ...layer, visible: true, opacity: 0.7, color: randomColor }, ...loadedLayers]);
-      
-      // Automatically enable corresponding layer visibility for main layers
-      if (layer.title.includes('Administrative') || layer.title.includes('Boundary')) {
-        setBoundaryLayerVisible(true);
-      } else if (layer.title.includes('Road') || layer.title.includes('Network')) {
-        setRoadNetworkLayerVisible(true);
-      } else if (layer.title.includes('Water') || layer.title.includes('River') || layer.title.includes('Waterway')) {
-        setWaterwaysLayerVisible(true);
-      }
     }
   };
 
   const removeLayer = (id: number) => {
-    // Find the layer being removed to check if it's a main layer
-    const removedLayer = loadedLayers.find(l => l.id === id);
-    
-    // Hide corresponding layer visibility for main layers
-    if (removedLayer) {
-      if (removedLayer.title.includes('Administrative') || removedLayer.title.includes('Boundary')) {
-        setBoundaryLayerVisible(false);
-      } else if (removedLayer.title.includes('Road') || removedLayer.title.includes('Network')) {
-        setRoadNetworkLayerVisible(false);
-      } else if (removedLayer.title.includes('Water') || removedLayer.title.includes('River') || removedLayer.title.includes('Waterway')) {
-        setWaterwaysLayerVisible(false);
-      }
-    }
-    
     setLoadedLayers(loadedLayers.filter(l => l.id !== id));
-  };
-
-  // Remove Administrative Boundaries layer specifically
-  const removeAdministrativeBoundaries = () => {
-    setLoadedLayers(loadedLayers.filter(l => l.id !== 1));
   };
 
   const updateLayerOpacity = (id: number, opacity: number) => {
@@ -549,6 +603,27 @@ export default function ViewerMap() {
 
   const isLayerLoaded = (layerId: number) => {
     return loadedLayers.some(l => l.id === layerId);
+  };
+
+  // Function to get consistent layer colors based on layer type/title
+  const getLayerColor = (layerTitle: string) => {
+    if (layerTitle.includes('Administrative') || layerTitle.includes('Boundary')) {
+      return '#3b82f6'; // Blue for boundaries
+    } else if (layerTitle.includes('Road') || layerTitle.includes('Network')) {
+      return '#16a34a'; // Green for roads
+    } else if (layerTitle.includes('Water') || layerTitle.includes('River') || layerTitle.includes('Waterway')) {
+      return '#0ea5e9'; // Sky blue for water
+    } else if (layerTitle.includes('Hazard') || layerTitle.includes('Risk')) {
+      return '#dc2626'; // Red for hazards
+    } else if (layerTitle.includes('Land Use')) {
+      return '#86efac'; // Light green for land use
+    } else if (layerTitle.includes('Population')) {
+      return '#fca5a5'; // Light red for population
+    } else if (layerTitle.includes('Infrastructure')) {
+      return '#c084fc'; // Purple for infrastructure
+    } else {
+      return '#6b7280'; // Gray for other layers
+    }
   };
 
   // Check if user is logged in
@@ -717,8 +792,6 @@ export default function ViewerMap() {
   // Initialize saved maps
   useEffect(() => {
     fetchSavedMaps();
-    // Remove Administrative Boundaries layer on component mount
-    removeAdministrativeBoundaries();
   }, []);
 
   const handleGotoXY = () => {
@@ -909,135 +982,126 @@ export default function ViewerMap() {
         
         {/* Left Panel */}
         <div 
-          className={`absolute top-0 left-0 h-full z-[1500] transition-transform duration-300 bg-white shadow-2xl border-r
-            ${leftPanelOpen ? 'translate-x-0' : '-translate-x-full'}`}
-          style={{ width: '320px' }}
+          className={`absolute top-0 left-0 m-4  z-[1500] transition-transform duration-300 
+           rounded-lg bg-white border-r`}
+          style={{ width: '280px' }}
         >
-          <div style={{ backgroundColor: brandColor }} className="p-2 flex items-center gap-1 text-white">
-            <Layers size={20} />
-            <input 
-              type="text" 
-              placeholder="Search layer"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="flex-1 h-8 px-2 text-md rounded text-white outline-none"
-              suppressHydrationWarning={true}
-            />
-            <button onClick={() => setLeftPanelOpen(false)} className="ml-1 p-1 hover:bg-black/10 rounded" suppressHydrationWarning={true}>
-              <ChevronLeft size={18} />
-            </button>
-          </div>
+         
 
-          <div className="flex text-xs font-bold border-b bg-gray-50">
-            <button
-              onClick={() => setActiveTab('Layer Name')}
-              className={`flex-1 py-3 border-b-2 ${activeTab === 'Layer Name' ? `border-[#318855] text-[#318855] bg-white` : 'border-transparent text-gray-500'}`}
-              suppressHydrationWarning={true}
-            >
-              Available Layers
-            </button>
-            {loadingLayers && (
-              <div className="px-2 py-1 text-blue-600 text-xs">
-                <span className="inline-block animate-spin rounded-full h-3 w-3 border-b-2 border-blue-600"></span>
-                Loading...
+          <div className="p-4 rounded-full bg-white">
+            {/* Search Bar */}
+            <div className="mb-6 search-container">
+              <div className="relative">
+                <input
+                  type="text"
+                  placeholder="Search locations..."
+                  value={searchQuery}
+                  onChange={(e) => handleSearchInputChange(e.target.value)}
+                  onFocus={() => setShowSearchResults(true)}
+                  className="w-full px-3 py-2 pr-10 text-sm border border-gray-300 accent-orange-500 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#f1a10d] focus:border-transparent"
+                />
+                {isSearching ? (
+                  <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
+                    <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-[#f1a10d]"></div>
+                  </div>
+                ) : (
+                  <div className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400">
+                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                    </svg>
+                  </div>
+                )}
               </div>
-            )}
-          </div>
+              
+              {/* Search Results Dropdown */}
+              {showSearchResults && searchResults.length > 0 && (
+                <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-48 overflow-y-auto z-[1001]">
+                  {searchResults.map((result, index) => (
+                    <div
+                      key={index}
+                      onClick={() => handleSearchSelect(result)}
+                      className="px-3 py-2 hover:bg-gray-50 cursor-pointer border-b border-gray-100 last:border-b-0"
+                    >
+                      <div className="text-xs font-medium text-gray-900">{result.display_name}</div>
+                      <div className="text-xs text-gray-500 capitalize">{result.type}</div>
+                    </div>
+                  ))}
+                </div>
+              )}
+              
+              {/* No Results */}
+              {showSearchResults && searchResults.length === 0 && !isSearching && searchQuery.length > 2 && (
+                <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg z-[1001]">
+                  <div className="px-3 py-2 text-xs text-gray-500">
+                    No locations found
+                  </div>
+                </div>
+              )}
+            </div>
 
-          <div className="flex-1 overflow-y-auto p-2 bg-gray-50 max-h-[50vh]">
-            {/* {!loadingLayers && availableLayers.length > 0 && (
-              <div className="mb-2 p-2 bg-blue-50 border border-blue-200 rounded text-xs">
+            {/* Basemap Selecti
+            on - Radio Buttons */}
+            <div className="mb-6">
+              <h4 className="text-sm font-semibold text-gray-700 mb-3">Base Map</h4>
+              <div className="space-y-2">
+                <label className="flex items-center gap-3 cursor-pointer">
+                  <input 
+                    type="radio" 
+                    name="basemap"
+                    className="w-4 h-4 text-orange-600 focus:ring-orange-500" 
+                    checked={basemap === 'Open Street Map'}
+                    onChange={() => setBasemap('Open Street Map')}
+                  />
+                  <span className="text-sm text-gray-700">Open Street Map</span>
+                </label>
+                <label className="flex items-center gap-3 cursor-pointer">
+                  <input 
+                    type="radio" 
+                    name="basemap"
+                    className="w-4 h-4 text-orange-600 focus:ring-orange-500" 
+                    checked={basemap === 'Satellite (Esri)'}
+                    onChange={() => setBasemap('Satellite (Esri)')}
+                  />
+                  <span className="text-sm text-gray-700">Satellite (Esri)</span>
+                </label>
               </div>
-            )} */}
-            
-            <ul className="space-y-1">
-              {availableLayers.filter(l => l.title.toLowerCase().includes(searchQuery.toLowerCase())).map(layer => {
-                const isLoaded = isLayerLoaded(layer.id);
-                const isMainLayer = layer.title.includes('Administrative') || layer.title.includes('Boundary') || 
-                                  layer.title.includes('Road') || layer.title.includes('Network') || 
-                                  layer.title.includes('Water') || layer.title.includes('River') || layer.title.includes('Waterway');
-                
-                return (
-                  <li 
-                    key={layer.id} 
-                    onClick={() => !isLoaded && addLayer(layer)}
-                    className={`p-2 border rounded text-xs group transition-colors ${
-                      isLoaded 
-                        ? 'bg-green-50 border-green-300 cursor-not-allowed' 
-                        : isMainLayer
-                          ? 'bg-blue-50 border-blue-300 hover:border-blue-500 cursor-pointer hover:bg-blue-100'
-                          : 'bg-white hover:border-[#318855] cursor-pointer'
-                    }`}
-                  >
-                    <div className="flex justify-between items-start mb-1">
-                      <span className={`font-medium ${isLoaded ? 'text-green-700' : isMainLayer ? 'text-blue-700' : 'text-gray-700'}`}>
-                        {layer.title}
-                        {isMainLayer && !isLoaded && (
-                          <span className="ml-2 text-xs bg-blue-200 text-blue-800 px-1 rounded">Click to Apply</span>
-                        )}
-                      </span>
-                      {!isLoaded && (
-                        <button 
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            addLayer(layer);
-                          }} 
-                          style={{ color: brandColor }} 
-                          className="opacity-0 group-hover:opacity-100 font-bold"
-                        >
-                          + Add
-                        </button>
-                      )}
-                      {isLoaded && (
-                        <span className="text-green-600 font-bold text-xs">Applied</span>
-                      )}
-                    </div>
-                    <div className={`text-xs ${isLoaded ? 'text-green-600' : isMainLayer ? 'text-blue-600' : 'text-gray-500'}`}>
-                      {layer.description}
-                    </div>
-                    <div className={`text-xs mt-1 flex items-center gap-1 ${isLoaded ? 'text-green-500' : isMainLayer ? 'text-blue-500' : 'text-gray-400'}`}>
-                      <span>{layer.agency}</span>
-                      {layer.category && (
-                        <span className="text-xs bg-blue-100 text-blue-700 px-1 rounded">{layer.category}</span>
-                      )}
-                      {layer.layer_type && (
-                        <span className="text-xs bg-gray-100 text-gray-700 px-1 rounded">{layer.layer_type}</span>
-                      )}
-                      {layer.is_downloadable && (
-                        <span className="text-xs bg-green-100 text-green-700 px-1 rounded">Downloadable</span>
-                      )}
-                      {layer.is_geoportal && (
-                        <span className="text-xs bg-purple-100 text-purple-700 px-1 rounded">GeoPortal</span>
-                      )}
-                    </div>
-                  </li>
-                );
-              })}
-            </ul>
+            </div>
+
+            {/* Layer Selection - Checkboxes */}
+            <div>
+              <h4 className="text-sm font-semibold text-gray-700 mb-3">Layers</h4>
+              <div className="space-y-2">
+                <label className="flex items-center gap-3 cursor-pointer">
+                  <input 
+                    type="checkbox" 
+                    className="w-4 h-4 rounded border-gray-300 text-orange-600 focus:ring-orange-500" 
+                    checked={adminBoundaryVisible}
+                    onChange={(e) => setAdminBoundaryVisible(e.target.checked)}
+                  />
+                  <span className="text-sm text-gray-700">Admin Boundary</span>
+                </label>
+                                <label className="flex items-center gap-3 cursor-pointer">
+                  <input 
+                    type="checkbox" 
+                    className="w-4 h-4 rounded border-gray-300 text-orange-600 focus:ring-orange-500" 
+                    checked={roadNetworksVisible}
+                    onChange={(e) => setRoadNetworksVisible(e.target.checked)}
+                  />
+                  <span className="text-sm text-gray-700">Road Networks</span>
+                </label>
+                <label className="flex items-center gap-3 cursor-pointer">
+                  <input 
+                    type="checkbox" 
+                    className="w-4 h-4 rounded border-gray-300 text-orange-600 focus:ring-orange-500" 
+                    checked={riversVisible}
+                    onChange={(e) => setRiversVisible(e.target.checked)}
+                  />
+                  <span className="text-sm text-gray-700">Rivers</span>
+                </label>
+                              </div>
+            </div>
           </div>
 
-          <div style={{ borderTop: `4px solid ${brandColor}` }} className="flex-1 bg-white flex flex-col">
-             <div style={{ backgroundColor: brandColor }} className="p-2 text-xs font-bold flex items-center text-white">
-               <Layers size={14} className="mr-2" /> Active Layers
-             </div>
-             <div className="flex-1 overflow-y-auto p-1">
-               {loadedLayers.length === 0 ? (
-                 <div className="p-4 text-center text-gray-400 text-xs">
-                   No layers loaded. Select layers from above to view them on the map.
-                 </div>
-               ) : (
-                 loadedLayers.map((layer) => (
-                   <div key={layer.id} className="flex items-center gap-2 p-2 border-b text-[11px] hover:bg-gray-50">
-                     <button onClick={() => removeLayer(layer.id)} className="text-red-500 font-bold text-lg leading-none">×</button>
-                     <input type="checkbox" checked={layer.visible} onChange={() => toggleLayerVisibility(layer.id)} className="accent-[#318855]" />
-                     <div className="w-3 h-3 rounded-full" style={{ backgroundColor: layer.color }}></div>
-                     <span className="flex-1 font-medium truncate">{layer.title}</span>
-                     <input type="range" value={layer.opacity} onChange={(e) => updateLayerOpacity(layer.id, parseFloat(e.target.value))} className="w-12 accent-[#318855]" min="0.1" max="1" step="0.1" />
-                   </div>
-                 ))
-               )}
-             </div>
-          </div>
         </div>
 
         {!leftPanelOpen && (
@@ -1045,6 +1109,7 @@ export default function ViewerMap() {
             <ChevronRight size={24} color={brandColor} />
           </button>
         )}
+
 
         <div className="w-full h-full z-0">
           <MapRenderer 
@@ -1056,12 +1121,12 @@ export default function ViewerMap() {
             onMapClick={handleMapClick}
             isMeasuring={measureInput.isMeasuring}
             measureVisualElements={measureInput.visualElements}
-            boundaryLayerVisible={boundaryLayerVisible}
-            boundaryLayerHighlighted={boundaryLayerHighlighted}
-            roadNetworkLayerVisible={roadNetworkLayerVisible}
-            roadNetworkLayerHighlighted={roadNetworkLayerHighlighted}
-            waterwaysLayerVisible={waterwaysLayerVisible}
-            waterwaysLayerHighlighted={waterwaysLayerHighlighted}
+            boundaryLayerVisible={adminBoundaryVisible}
+            boundaryLayerHighlighted={false}
+            roadNetworkLayerVisible={roadNetworksVisible}
+            roadNetworkLayerHighlighted={false}
+            waterwaysLayerVisible={riversVisible}
+            waterwaysLayerHighlighted={false}
             initialZoom={15}
           />
         </div>
@@ -1088,10 +1153,80 @@ export default function ViewerMap() {
 
         {/* Right Toolbar - Limited for viewers */}
         <div className="absolute top-4 right-4 z-[1000] flex flex-col space-y-1">
-          <ToolIcon active={activeRightPanel === 'layers'} onClick={() => setActiveRightPanel('layers')} icon={<Layers size={18} />} brandColor={brandColor} />
-          <ToolIcon active={activeRightPanel === 'basemap'} onClick={() => setActiveRightPanel('basemap')} icon={<Globe size={18} />} brandColor={brandColor} />
-          <ToolIcon active={activeRightPanel === 'measure'} onClick={() => setActiveRightPanel('measure')} icon={<Ruler size={18} />} brandColor={brandColor} />
-          <ToolIcon active={activeRightPanel === 'xy'} onClick={() => setActiveRightPanel('xy')} label="XY" brandColor={brandColor} />
+          <div className="relative">
+            <ToolIcon 
+              active={activeRightPanel === 'layers'} 
+              onClick={() => setActiveRightPanel('layers')} 
+              icon={<Layers size={18} />} 
+              brandColor={brandColor} 
+              title="Layers - Control map layers visibility"
+              onMouseEnter={() => setLayersHovered(true)}
+              onMouseLeave={() => setLayersHovered(false)}
+            />
+            {layersHovered && (
+              <div className="absolute -bottom-10 
+              left-8 bg-white px-2 py-1 rounded 
+              shadow-lg border border-gray-300 text-xs 
+              z-[1001] min-w-[180px]">
+                <div className="font-bold text-blue-700">Layers</div>
+                <div className="text-gray-600">Control map layers visibility</div>
+              </div>
+            )}
+          </div>
+          
+          <div className="relative">
+            <ToolIcon 
+              active={activeRightPanel === 'basemap'} 
+              onClick={() => setActiveRightPanel('basemap')} 
+              icon={<Globe size={18} />} 
+              brandColor={brandColor} 
+              title="Basemap - Change map base layer"
+              onMouseEnter={() => setBasemapHovered(true)}
+              onMouseLeave={() => setBasemapHovered(false)}
+            />
+            {(activeRightPanel === 'basemap' || basemapHovered) && (
+              <div className="absolute -top-10 left-full bg-white px-2 py-1 rounded shadow-lg border border-gray-300 text-xs z-[1001] min-w-[120px]">
+                <div className="font-bold text-blue-700">Basemap</div>
+                <div className="text-gray-600">Change map base layer</div>
+              </div>
+            )}
+          </div>
+          
+          <div className="relative">
+            <ToolIcon 
+              active={activeRightPanel === 'measure'} 
+              onClick={() => setActiveRightPanel('measure')} 
+              icon={<Ruler size={18} />} 
+              brandColor={brandColor} 
+              title="Measure - Measure distances and areas"
+              onMouseEnter={() => setMeasureHovered(true)}
+              onMouseLeave={() => setMeasureHovered(false)}
+            />
+            {(activeRightPanel === 'measure' || measureHovered) && (
+              <div className="absolute -top-10 left-full bg-white px-2 py-1 rounded shadow-lg border border-gray-300 text-xs z-[1001] min-w-[120px]">
+                <div className="font-bold text-blue-700">Measure</div>
+                <div className="text-gray-600">Measure distances and areas</div>
+              </div>
+            )}
+          </div>
+          
+          <div className="relative">
+            <ToolIcon 
+              active={activeRightPanel === 'xy'} 
+              onClick={() => setActiveRightPanel('xy')} 
+              label="XY" 
+              brandColor={brandColor} 
+              title="XY - Navigate to coordinates"
+              onMouseEnter={() => setXyHovered(true)}
+              onMouseLeave={() => setXyHovered(false)}
+            />
+            {(activeRightPanel === 'xy' || xyHovered) && (
+              <div className="absolute -top-10 left-full bg-white px-2 py-1 rounded shadow-lg border border-gray-300 text-xs z-[1001] min-w-[120px]">
+                <div className="font-bold text-blue-700">XY</div>
+                <div className="text-gray-600">Navigate to coordinates</div>
+              </div>
+            )}
+          </div>
         </div>
 
         {/* Legends Box - Right Side */}
@@ -1247,7 +1382,13 @@ export default function ViewerMap() {
         {/* Right Panel Body */}
         {activeRightPanel && (
           <div className="absolute top-4 right-16 z-[1000] w-64 bg-[#333] text-white shadow-2xl border border-gray-600">
-            <div style={{ backgroundColor: brandColor }} className="text-white px-3 py-1.5 flex items-center justify-between font-bold text-xs uppercase">
+            <div 
+            style={{ backgroundColor: brandColor }} 
+            className="text-white px-3 py-1.5 flex items-center justify-between font-bold text-xs uppercase cursor-pointer"
+            onMouseEnter={() => setHeaderHovered(true)}
+            onMouseLeave={() => setHeaderHovered(false)}
+            title={`Current Panel: ${activeRightPanel || 'None'}`}
+          >
               <div className="flex items-center"><ChevronRight size={14} className="mr-1 stroke-[3px]" /> {activeRightPanel}</div>
               <button onClick={() => setActiveRightPanel(null)}><X size={18} /></button>
             </div>
@@ -1261,43 +1402,52 @@ export default function ViewerMap() {
                   </div>
                   
                   {/* Boundary Layer Control */}
-                  <div className="flex items-center justify-between p-2 bg-gray-700 rounded">
+                  <div className="flex items-center justify-between p-2 bg-gray-700 rounded"
+                    onMouseEnter={() => setBoundaryHovered(true)}
+                    onMouseLeave={() => setBoundaryHovered(false)}
+                  >
                     <div className="flex items-center gap-2">
                       <div className="w-3 h-3 rounded-full" style={{ backgroundColor: 'rgb(24, 49, 88)' }}></div>
                       <span className="text-white">Administrative Boundaries</span>
                     </div>
                     <input 
                       type="checkbox" 
-                      checked={boundaryLayerVisible} 
-                      onChange={(e) => setBoundaryLayerVisible(e.target.checked)}
+                      checked={adminBoundaryVisible} 
+                      onChange={(e) => setAdminBoundaryVisible(e.target.checked)}
                       className="w-4 h-4 accent-blue-600"
                     />
                   </div>
 
                   {/* Road Networks Layer Control */}
-                  <div className="flex items-center justify-between p-2 bg-gray-700 rounded">
+                  <div className="flex items-center justify-between p-2 bg-gray-700 rounded"
+                    onMouseEnter={() => setRoadNetworksHovered(true)}
+                    onMouseLeave={() => setRoadNetworksHovered(false)}
+                  >
                     <div className="flex items-center gap-2">
                       <div className="w-3 h-3 rounded-full" style={{ backgroundColor: '#06a506ee' }}></div>
                       <span className="text-white">Road Networks</span>
                     </div>
                     <input 
                       type="checkbox" 
-                      checked={roadNetworkLayerVisible} 
-                      onChange={(e) => setRoadNetworkLayerVisible(e.target.checked)}
+                      checked={roadNetworksVisible} 
+                      onChange={(e) => setRoadNetworksVisible(e.target.checked)}
                       className="w-4 h-4 accent-green-600"
                     />
                   </div>
 
                   {/* Waterways Layer Control */}
-                  <div className="flex items-center justify-between p-2 bg-gray-700 rounded">
+                  <div className="flex items-center justify-between p-2 bg-gray-700 rounded"
+                    onMouseEnter={() => setRiversHovered(true)}
+                    onMouseLeave={() => setRiversHovered(false)}
+                  >
                     <div className="flex items-center gap-2">
                       <div className="w-3 h-3 rounded-full" style={{ backgroundColor: '#2563eb' }}></div>
                       <span className="text-white">Waterways</span>
                     </div>
                     <input 
                       type="checkbox" 
-                      checked={waterwaysLayerVisible} 
-                      onChange={(e) => setWaterwaysLayerVisible(e.target.checked)}
+                      checked={riversVisible} 
+                      onChange={(e) => setRiversVisible(e.target.checked)}
                       className="w-4 h-4 accent-blue-500"
                     />
                   </div>
@@ -1305,9 +1455,43 @@ export default function ViewerMap() {
                   <div className="border-t border-gray-600 pt-3">
                     <div className="text-gray-400 text-xs">
                       <div> Layers are fetched dynamically from</div>
-                      <div> the database with real geographic data</div>
+                      <div> database with real geographic data</div>
                     </div>
                   </div>
+                  
+                  {/* Hover Labels */}
+                  {boundaryHovered && (
+                    <div className="absolute -top-10 left-4 bg-white px-3 py-2 rounded-lg shadow-xl border border-gray-300 text-sm z-[1002] min-w-[180px]">
+                      <div className="flex items-center gap-2 mb-1">
+                        <div className="w-3 h-3 rounded-full bg-blue-600"></div>
+                        <div className="font-bold text-blue-700">Administrative Boundaries</div>
+                      </div>
+                      <div className="text-gray-600 text-xs">Administrative boundaries of Ibaan municipality</div>
+                      <div className="text-gray-500 text-xs mt-1">Click to toggle visibility</div>
+                    </div>
+                  )}
+                  
+                  {roadNetworksHovered && (
+                    <div className="absolute -top-10 left-4 bg-white px-3 py-2 rounded-lg shadow-xl border border-gray-300 text-sm z-[1002] min-w-[180px]">
+                      <div className="flex items-center gap-2 mb-1">
+                        <div className="w-3 h-3 rounded-full bg-green-600"></div>
+                        <div className="font-bold text-green-700">Road Networks</div>
+                      </div>
+                      <div className="text-gray-600 text-xs">Transportation infrastructure</div>
+                      <div className="text-gray-500 text-xs mt-1">Click to toggle visibility</div>
+                    </div>
+                  )}
+                  
+                  {riversHovered && (
+                    <div className="absolute -top-10 left-4 bg-white px-3 py-2 rounded-lg shadow-xl border border-gray-300 text-sm z-[1002] min-w-[180px]">
+                      <div className="flex items-center gap-2 mb-1">
+                        <div className="w-3 h-3 rounded-full bg-blue-500"></div>
+                        <div className="font-bold text-blue-700">Waterways</div>
+                      </div>
+                      <div className="text-gray-600 text-xs">Rivers, streams, and water bodies</div>
+                      <div className="text-gray-500 text-xs mt-1">Click to toggle visibility</div>
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -1321,9 +1505,34 @@ export default function ViewerMap() {
 
               {activeRightPanel === 'xy' && (
                 <div className="space-y-3">
-                   <div className="flex items-center justify-between"><label>Latitude</label><input type="text" value={xyInput.lat} onChange={(e) => setXyInput({...xyInput, lat: e.target.value})} className="w-32 text-white p-1 rounded bg-gray-700" /></div>
-                   <div className="flex items-center justify-between"><label>Longitude</label><input type="text" value={xyInput.lng} onChange={(e) => setXyInput({...xyInput, lng: e.target.value})} className="w-32 text-white p-1 rounded bg-gray-700" /></div>
-                   <button onClick={handleGotoXY} style={{ backgroundColor: brandColor }} className="w-full text-white font-bold py-2 mt-2 rounded">Go</button>
+                   <div className="flex items-center justify-between">
+                     <label className="text-gray-300 text-sm">Latitude</label>
+                     <input 
+                       type="text" 
+                       value={xyInput.lat} 
+                       onChange={(e) => setXyInput({...xyInput, lat: e.target.value})} 
+                       className="w-32 text-white p-1 rounded bg-gray-700" 
+                       title="Enter latitude coordinate"
+                     />
+                   </div>
+                   <div className="flex items-center justify-between">
+                     <label className="text-gray-300 text-sm">Longitude</label>
+                     <input 
+                       type="text" 
+                       value={xyInput.lng} 
+                       onChange={(e) => setXyInput({...xyInput, lng: e.target.value})} 
+                       className="w-32 text-white p-1 rounded bg-gray-700" 
+                       title="Enter longitude coordinate"
+                     />
+                   </div>
+                   <button 
+                     onClick={handleGotoXY} 
+                     style={{ backgroundColor: brandColor }} 
+                     className="w-full text-white font-bold py-2 mt-2 rounded"
+                     title="Navigate to entered coordinates"
+                   >
+                     Go
+                   </button>
                 </div>
               )}
 
@@ -1341,6 +1550,7 @@ export default function ViewerMap() {
                             ? 'bg-white text-gray-800' 
                             : 'bg-gray-600 text-white hover:bg-gray-500'
                         }`}
+                        title="Distance - Measure straight-line distance between two points"
                       >
                         Distance
                       </button>
@@ -1351,6 +1561,7 @@ export default function ViewerMap() {
                             ? 'bg-white text-gray-800' 
                             : 'bg-gray-600 text-white hover:bg-gray-500'
                         }`}
+                        title="Area - Measure area of polygon or region"
                       >
                         Area
                       </button>
@@ -1361,6 +1572,7 @@ export default function ViewerMap() {
                             ? 'bg-white text-gray-800' 
                             : 'bg-gray-600 text-white hover:bg-gray-500'
                         }`}
+                        title="Bearing - Calculate compass bearing between two points"
                       >
                         Bearing
                       </button>
@@ -1371,6 +1583,7 @@ export default function ViewerMap() {
                             ? 'bg-white text-gray-800' 
                             : 'bg-gray-600 text-white hover:bg-gray-500'
                         }`}
+                        title="Perimeter - Calculate perimeter of polygon or region"
                       >
                         Perimeter
                       </button>

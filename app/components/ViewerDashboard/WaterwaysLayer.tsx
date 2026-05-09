@@ -281,12 +281,49 @@ const WaterwaysLayer: React.FC<WaterwaysLayerProps> = ({
   const onEachWaterwayFeature = (feature: any, layer: any) => {
     layer.on({
       mouseover: (e: any) => { 
-        e.target.setStyle({ weight: 5, color: '#f97316', fillOpacity: 0.7 }); 
+        e.target.setStyle({ weight: 5, color: '#f97316', fillOpacity: 0.7 });
+        
+        // Show hover label
+        const props = feature.properties || {};
+        const labelContent = `<div class="bg-white px-2 py-1 rounded shadow-lg border border-gray-200 text-xs font-medium" style="position: absolute; z-index: 1000; pointer-events: none;">
+          <div class="font-bold text-blue-700">${props.Name || 'Waterway'}</div>
+          ${props.Type ? `<div class="text-gray-600">${props.Type}</div>` : ''}
+        </div>`;
+        
+        // Create and show hover label
+        const hoverLabel = L.divIcon({
+          html: labelContent,
+          className: 'waterway-hover-label',
+          iconSize: [180, 40],
+          iconAnchor: [90, -10]
+        });
+        
+        const hoverMarker = L.marker(e.latlng, { icon: hoverLabel, zIndexOffset: 1000 });
+        hoverMarker.addTo(e.target._map);
+        e.target._hoverMarker = hoverMarker;
       },
       mouseout: (e: any) => { 
-        e.target.setStyle(geoPortalWaterwayStyle(feature)); 
+        e.target.setStyle(geoPortalWaterwayStyle(feature));
+        
+        // Remove hover label
+        if (e.target._hoverMarker) {
+          e.target._map.removeLayer(e.target._hoverMarker);
+          e.target._hoverMarker = null;
+        }
+      },
+      click: (e: any) => {
+        const props = feature.properties || {};
+        const content = `<div class="p-3 min-w-[200px] text-xs">
+          <h4 class="font-bold mb-2">Waterway Details</h4>
+          ${props.Name ? `<div><b>Name:</b> ${props.Name}</div>` : ''}
+          ${props.Type ? `<div><b>Type:</b> ${props.Type}</div>` : ''}
+          <div><b>Geometry:</b> ${feature.geometry.type}</div>
+        </div>`;
+        layer.bindPopup(content).openPopup();
       }
     });
+    
+    // Default popup for when not clicked
     layer.bindPopup(`<h4 class="font-bold">${feature.properties?.Name || 'Waterway'}</h4>`);
   };
 

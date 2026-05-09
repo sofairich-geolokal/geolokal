@@ -13,7 +13,7 @@ const GISUploadComponent = () => {
     const fileList = files.files;
 
     if (!fileList || fileList.length === 0) {
-      setMessage({ type: 'error', text: 'Please select at least the .dbf file.' });
+      setMessage({ type: 'error', text: 'Please select at least one file (.zip, .shp, .dbf, .prj, etc.)' });
       return;
     }
 
@@ -23,13 +23,12 @@ const GISUploadComponent = () => {
     // 1. Add metadata for Dashboard/Database categorization
     formData.append('layerType', layerType);
 
-    // 2. Append all associated files (.dbf, .prj, .shp, etc.)
+    // 2. Append all files (.zip, .shp, .dbf, .prj, etc.)
     for (let i = 0; i < fileList.length; i++) {
       formData.append('files', fileList[i]);
     }
 
     try {
-      // Replace with your actual API endpoint
       const response = await fetch('/api/spatial/upload', {
         method: 'POST',
         body: formData,
@@ -40,10 +39,15 @@ const GISUploadComponent = () => {
       if (response.ok) {
         setMessage({ 
           type: 'success', 
-          text: `Successfully processed ${result.count} new ${layerType} features. Duplicates ignored.` 
+          text: `Successfully uploaded ${result.count} layers to database and added to map layer list!` 
         });
+        
+        // Refresh the map layers list
+        setTimeout(() => {
+          window.location.reload();
+        }, 2000);
       } else {
-        throw new Error(result.message || 'Upload failed');
+        throw new Error(result.error || result.message || 'Upload failed');
       }
     } catch (err: unknown) {
       const errorMessage = err instanceof Error ? err.message : 'Unknown error occurred';
@@ -78,13 +82,13 @@ const GISUploadComponent = () => {
             type="file" 
             name="gisFiles" 
             multiple 
-            accept=".dbf,.prj,.shp,.qmd"
+            accept=".zip,.shp,.shx,.dbf,.prj,.cpg,.qmd"
             className="hidden" 
             id="file-upload"
           />
           <label htmlFor="file-upload" className="cursor-pointer">
             <span className="text-blue-600 font-semibold">Click to upload</span> or drag and drop
-            <p className="text-xs text-gray-500 mt-1">Upload .dbf and .prj files for {layerType}</p>
+            <p className="text-xs text-gray-500 mt-1">Upload .zip files or individual shapefile components (.shp, .dbf, .prj, etc.)</p>
           </label>
         </div>
 

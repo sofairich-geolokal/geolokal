@@ -229,11 +229,36 @@ const BoundaryLayer: React.FC<BoundaryLayerProps> = ({
           fillOpacity: 0.2,
           dashArray: ''
         });
+        
+        // Show hover label
+        const props = feature.properties || {};
+        const labelContent = `<div class="bg-white px-2 py-1 rounded shadow-lg border border-gray-200 text-xs font-medium" style="position: absolute; z-index: 1000; pointer-events: none;">
+          <div class="font-bold text-blue-700">${props.brgy || 'Administrative Boundary'}</div>
+          ${props.lotno ? `<div class="text-gray-600">Lot: ${props.lotno}</div>` : ''}
+        </div>`;
+        
+        // Create and show hover label
+        const hoverLabel = L.divIcon({
+          html: labelContent,
+          className: 'boundary-hover-label',
+          iconSize: [200, 40],
+          iconAnchor: [100, -10]
+        });
+        
+        const hoverMarker = L.marker(e.latlng, { icon: hoverLabel, zIndexOffset: 1000 });
+        hoverMarker.addTo(e.target._map);
+        e.target._hoverMarker = hoverMarker;
       },
       mouseout: (e: any) => {
         // Reset style on mouseout
         const isSelected = feature.id === selectedBoundaryId;
         e.target.setStyle(adminBoundaryStyle(feature));
+        
+        // Remove hover label
+        if (e.target._hoverMarker) {
+          e.target._map.removeLayer(e.target._hoverMarker);
+          e.target._hoverMarker = null;
+        }
       }
     });
     

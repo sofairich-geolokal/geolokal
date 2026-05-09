@@ -14,14 +14,17 @@ export default function MapsDashboard() {
   const [activeRightPanel, setActiveRightPanel] = useState<string | null>(null);
   const [mapType, setMapType] = useState('osm');
   
+  // Search functionality
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchResults, setSearchResults] = useState<any[]>([]);
+  const [isSearching, setIsSearching] = useState(false);
+  const [showSearchResults, setShowSearchResults] = useState(false);
+  
   // Layer visibility state matching viewer dashboard
   const [layers, setLayers] = useState({
     adminBoundary: true,
-    evacuationCenter: true,
-    hazardArea: true,
     roadNetworks: true,
     rivers: true,
-    riverBoundary: true,
   });
 
   const [mapView, setMapView] = useState<{ lat: number; lng: number; zoom: number } | null>({ lat: 13.86, lng: 121.15, zoom: 16 });
@@ -139,6 +142,80 @@ export default function MapsDashboard() {
     });
   };
 
+  // Search functionality
+  const searchLocations = async (query: string) => {
+    if (!query.trim()) {
+      setSearchResults([]);
+      setShowSearchResults(false);
+      return;
+    }
+
+    setIsSearching(true);
+    try {
+      // Using Nominatim API for geocoding (free and open source)
+      const response = await fetch(
+        `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}&limit=5&countrycodes=PH`,
+        {
+          headers: {
+            'User-Agent': 'GeoLokal/1.0'
+          }
+        }
+      );
+      
+      if (response.ok) {
+        const data = await response.json();
+        const results = data.map((item: any) => ({
+          display_name: item.display_name,
+          lat: parseFloat(item.lat),
+          lng: parseFloat(item.lon),
+          type: item.type,
+          importance: item.importance
+        }));
+        setSearchResults(results);
+        setShowSearchResults(true);
+      }
+    } catch (error) {
+      console.error('Search error:', error);
+      setSearchResults([]);
+    } finally {
+      setIsSearching(false);
+    }
+  };
+
+  const handleSearchSelect = (result: any) => {
+    setMapView({ lat: result.lat, lng: result.lng, zoom: 15 });
+    setShowSearchResults(false);
+    setSearchQuery(result.display_name);
+  };
+
+  const handleSearchInputChange = (value: string) => {
+    setSearchQuery(value);
+    if (value.length > 2) {
+      const timeoutId = setTimeout(() => {
+        searchLocations(value);
+      }, 300);
+      return () => clearTimeout(timeoutId);
+    } else {
+      setSearchResults([]);
+      setShowSearchResults(false);
+    }
+  };
+
+  // Close search results when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      const target = event.target as Element;
+      if (!target.closest('.search-container')) {
+        setShowSearchResults(false);
+      }
+    };
+
+    if (showSearchResults) {
+      document.addEventListener('mousedown', handleClickOutside);
+      return () => document.removeEventListener('mousedown', handleClickOutside);
+    }
+  }, [showSearchResults]);
+
   useEffect(() => {
     const fetchSavedLayers = async () => {
       try {
@@ -173,37 +250,136 @@ export default function MapsDashboard() {
     <div className="relative h-screen w-full bg-[#f8f9fa] overflow-hidden flex flex-col font-sans">
       <main className="flex-1 relative overflow-hidden">
         
-        {/* Layer Control Panel - Top Left (matching viewer dashboard) */}
-        <div className="absolute top-6 left-6 z-[1000] bg-white rounded-2xl shadow-lg p-5 w-60 border border-gray-100">
-          <div className="space-y-3">
-            <label className="flex items-center gap-3 cursor-pointer">
-              <input type="radio" name="mapType" checked={mapType === 'osm'} onChange={() => setMapType('osm')} className="w-4 h-4 accent-gray-600" />
-              <span className="text-sm font-medium text-gray-700">Street Map</span>
-            </label>
-            <label className="flex items-center gap-3 cursor-pointer">
-              <input type="radio" name="mapType" checked={mapType === 'satellite'} onChange={() => setMapType('satellite')} className="w-4 h-4 accent-orange-500" />
-              <span className="text-sm font-medium text-gray-700">Satellite</span>
-            </label>
-            <label className="flex items-center gap-3 cursor-pointer">
-              <input type="radio" name="mapType" checked={mapType === 'terrain'} onChange={() => setMapType('terrain')} className="w-4 h-4 accent-orange-500" />
-              <span className="text-sm font-medium text-gray-700">Terrain</span>
-            </label>
-            <div className="h-px bg-gray-100 my-2" />
-            {Object.entries(layers).map(([key, value]) => (
-              <label key={key} className="flex items-center gap-3 cursor-pointer">
-                <input type="checkbox" checked={value} onChange={() => setLayers(prev => ({ ...prev, [key]: !value }))} className="w-4 h-4 accent-orange-500 rounded" />
-                <span className="text-sm font-medium text-gray-700 capitalize">{key.replace(/([A-Z])/g, ' $1').trim()}</span>
-              </label>
-            ))}
+        {/* Left Panel - Matching ViewerMap exactly */}
+        <div 
+          className={`absolute top-0 left-0 m-4 h-full z-[1500] transition-transform duration-300 rounded-lg bg-white border-r
+            translate-x-0`}
+          style={{ width: '280px' }}
+        >
+         
+
+          <div className="p-4 rounded-full bg-white">
+            {/* Search Bar */}
+            <div className="mb-6 search-container">
+              <div className="relative">
+                <input
+                  type="text"
+                  placeholder="Search locations..."
+                  value={searchQuery}
+                  onChange={(e) => handleSearchInputChange(e.target.value)}
+                  onFocus={() => setShowSearchResults(true)}
+                  className="w-full px-3 py-2 pr-10 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#318855] focus:border-transparent"
+                />
+                {isSearching ? (
+                  <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
+                    <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-[#318855]"></div>
+                  </div>
+                ) : (
+                  <div className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400">
+                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                    </svg>
+                  </div>
+                )}
+              </div>
+              
+              {/* Search Results Dropdown */}
+              {showSearchResults && searchResults.length > 0 && (
+                <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-48 overflow-y-auto z-[1001]">
+                  {searchResults.map((result, index) => (
+                    <div
+                      key={index}
+                      onClick={() => handleSearchSelect(result)}
+                      className="px-3 py-2 hover:bg-gray-50 cursor-pointer border-b border-gray-100 last:border-b-0"
+                    >
+                      <div className="text-xs font-medium text-gray-900">{result.display_name}</div>
+                      <div className="text-xs text-gray-500 capitalize">{result.type}</div>
+                    </div>
+                  ))}
+                </div>
+              )}
+              
+              {/* No Results */}
+              {showSearchResults && searchResults.length === 0 && !isSearching && searchQuery.length > 2 && (
+                <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg z-[1001]">
+                  <div className="px-3 py-2 text-xs text-gray-500">
+                    No locations found
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Basemap Selection - Radio Buttons */}
+            <div className="mb-6">
+              <h4 className="text-sm font-semibold text-gray-700 mb-3">Base Map</h4>
+              <div className="space-y-2">
+                <label className="flex items-center gap-3 cursor-pointer">
+                  <input 
+                    type="radio" 
+                    name="basemap"
+                    className="w-4 h-4 text-[#318855] focus:ring-[#318855]" 
+                    checked={mapType === 'osm'}
+                    onChange={() => setMapType('osm')}
+                  />
+                  <span className="text-sm text-gray-700">Open Street Map</span>
+                </label>
+                <label className="flex items-center gap-3 cursor-pointer">
+                  <input 
+                    type="radio" 
+                    name="basemap"
+                    className="w-4 h-4 text-[#318855] focus:ring-[#318855]" 
+                    checked={mapType === 'satellite'}
+                    onChange={() => setMapType('satellite')}
+                  />
+                  <span className="text-sm text-gray-700">Satellite (Esri)</span>
+                </label>
+              </div>
+            </div>
+
+            {/* Layer Selection - Checkboxes */}
+            <div>
+              <h4 className="text-sm font-semibold text-gray-700 mb-3">Layers</h4>
+              <div className="space-y-2">
+                <label className="flex items-center gap-3 cursor-pointer">
+                  <input 
+                    type="checkbox" 
+                    className="w-4 h-4 rounded border-gray-300 text-[#318855] focus:ring-[#318855]" 
+                    checked={layers.adminBoundary}
+                    onChange={(e) => setLayers(prev => ({ ...prev, adminBoundary: e.target.checked }))}
+                  />
+                  <span className="text-sm text-gray-700">Admin Boundary</span>
+                </label>
+                                <label className="flex items-center gap-3 cursor-pointer">
+                  <input 
+                    type="checkbox" 
+                    className="w-4 h-4 rounded border-gray-300 text-[#318855] focus:ring-[#318855]" 
+                    checked={layers.roadNetworks}
+                    onChange={(e) => setLayers(prev => ({ ...prev, roadNetworks: e.target.checked }))}
+                  />
+                  <span className="text-sm text-gray-700">Road Networks</span>
+                </label>
+                <label className="flex items-center gap-3 cursor-pointer">
+                  <input 
+                    type="checkbox" 
+                    className="w-4 h-4 rounded border-gray-300 text-[#318855] focus:ring-[#318855]" 
+                    checked={layers.rivers}
+                    onChange={(e) => setLayers(prev => ({ ...prev, rivers: e.target.checked }))}
+                  />
+                  <span className="text-sm text-gray-700">Rivers</span>
+                </label>
+                              </div>
+            </div>
           </div>
+
         </div>
+
 
         <div className="w-full h-full z-0" ref={mapContainerRef}>
           <MapRenderer 
             layers={savedLayers} 
             mapView={mapView} 
             bufferData={bufferData} 
-            basemap={mapType}
+            basemap={mapType === 'osm' ? 'Open Street Map' : 'Satellite (Esri)'}
             onMapClick={handleMapClick}
             isMeasuring={measureInput.isMeasuring}
             measureVisualElements={measureInput.visualElements}
@@ -213,7 +389,7 @@ export default function MapsDashboard() {
             roadNetworkLayerHighlighted={false}
             waterwaysLayerVisible={layers.rivers}
             waterwaysLayerHighlighted={false}
-            initialZoom={3}
+            initialZoom={15}
           />
         </div>
 
@@ -285,7 +461,6 @@ export default function MapsDashboard() {
 
         {/* Right Toolbar */}
         <div className="absolute top-4 right-4 z-[1000] flex flex-col space-y-1">
-          <ToolIcon active={activeRightPanel === 'basemap'} onClick={() => setActiveRightPanel('basemap')} icon={<Globe size={18} />} brandColor={brandColor} />
           <ToolIcon active={activeRightPanel === 'measure'} onClick={() => setActiveRightPanel('measure')} icon={<Ruler size={18} />} brandColor={brandColor} />
           <ToolIcon active={activeRightPanel === 'xy'} onClick={() => setActiveRightPanel('xy')} label="XY" brandColor={brandColor} />
           <ToolIcon active={activeRightPanel === 'buffer'} onClick={() => setActiveRightPanel('buffer')} icon={<CircleDot size={18} />} brandColor={brandColor} />
@@ -300,22 +475,6 @@ export default function MapsDashboard() {
             </div>
 
             <div className="p-4 space-y-4 text-xs">
-              {activeRightPanel === 'basemap' && (
-                <div className="space-y-2">
-                  <label className="flex items-center gap-2 cursor-pointer">
-                    <input type="radio" name="basemap" checked={mapType === 'osm'} onChange={() => setMapType('osm')} className="accent-white" />
-                    <span>Open Street Map</span>
-                  </label>
-                  <label className="flex items-center gap-2 cursor-pointer">
-                    <input type="radio" name="basemap" checked={mapType === 'satellite'} onChange={() => setMapType('satellite')} className="accent-white" />
-                    <span>Satellite (Esri)</span>
-                  </label>
-                  <label className="flex items-center gap-2 cursor-pointer">
-                    <input type="radio" name="basemap" checked={mapType === 'terrain'} onChange={() => setMapType('terrain')} className="accent-white" />
-                    <span>Terrain Map</span>
-                  </label>
-                </div>
-              )}
 
               {activeRightPanel === 'xy' && (
                 <div className="space-y-3">

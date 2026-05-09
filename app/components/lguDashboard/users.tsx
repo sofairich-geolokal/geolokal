@@ -43,7 +43,23 @@ const UserManagement = () => {
 
   const fetchUsers = async () => {
     try {
-      const response = await fetch('/api/users');
+      const headers: HeadersInit = { 'Content-Type': 'application/json' };
+      
+      // Check if in superadmin access mode (either direct or via LGU user)
+      const isSuperadminDirect = localStorage.getItem('superadminDirectAccess') === 'true';
+      const isSuperadminViaLGU = localStorage.getItem('superadminAccess') === 'true';
+      
+      if (isSuperadminDirect) {
+        headers['x-superadmin-direct-access'] = 'true';
+      } else if (isSuperadminViaLGU) {
+        // For LGU user access, use the LGU user ID from tempLGUUser
+        const tempLGUUser = JSON.parse(localStorage.getItem('tempLGUUser') || '{}');
+        if (tempLGUUser.id) {
+          headers['x-lgu-user-id'] = tempLGUUser.id;
+        }
+      }
+      
+      const response = await fetch('/api/users', { headers });
       if (!response.ok) throw new Error("Server Error");
       const data = await response.json();
       setUsers(Array.isArray(data) ? data : []);
@@ -58,8 +74,25 @@ const UserManagement = () => {
   const fetchStats = async () => {
     try {
       console.log("Frontend - Fetching stats...");
+      
+      const headers: HeadersInit = { 'Content-Type': 'application/json' };
+      
+      // Check if in superadmin access mode (either direct or via LGU user)
+      const isSuperadminDirect = localStorage.getItem('superadminDirectAccess') === 'true';
+      const isSuperadminViaLGU = localStorage.getItem('superadminAccess') === 'true';
+      
+      if (isSuperadminDirect) {
+        headers['x-superadmin-direct-access'] = 'true';
+      } else if (isSuperadminViaLGU) {
+        // For LGU user access, use LGU user ID from tempLGUUser
+        const tempLGUUser = JSON.parse(localStorage.getItem('tempLGUUser') || '{}');
+        if (tempLGUUser.id) {
+          headers['x-lgu-user-id'] = tempLGUUser.id;
+        }
+      }
+      
       // Use original stats endpoint with debugging
-      const response = await fetch('/api/users/stats');
+      const response = await fetch('/api/users/stats', { headers });
       console.log("Frontend - Stats response status:", response.status);
       
       if (!response.ok) {
@@ -85,7 +118,23 @@ const UserManagement = () => {
   const fetchRemovedUsers = async () => {
     setRemovedLoading(true);
     try {
-      const response = await fetch('/api/users/removed');
+      const headers: HeadersInit = { 'Content-Type': 'application/json' };
+      
+      // Check if in superadmin access mode (either direct or via LGU user)
+      const isSuperadminDirect = localStorage.getItem('superadminDirectAccess') === 'true';
+      const isSuperadminViaLGU = localStorage.getItem('superadminAccess') === 'true';
+      
+      if (isSuperadminDirect) {
+        headers['x-superadmin-direct-access'] = 'true';
+      } else if (isSuperadminViaLGU) {
+        // For LGU user access, use LGU user ID from tempLGUUser
+        const tempLGUUser = JSON.parse(localStorage.getItem('tempLGUUser') || '{}');
+        if (tempLGUUser.id) {
+          headers['x-lgu-user-id'] = tempLGUUser.id;
+        }
+      }
+      
+      const response = await fetch('/api/users/removed', { headers });
       if (!response.ok) throw new Error("Server Error");
       const data = await response.json();
       setRemovedUsers(Array.isArray(data) ? data : []);
@@ -118,9 +167,25 @@ const UserManagement = () => {
     const strongPassword = generateStrongPassword();
 
     try {
+      const headers: HeadersInit = { 'Content-Type': 'application/json' };
+      
+      // Check if in superadmin access mode (either direct or via LGU user)
+      const isSuperadminDirect = localStorage.getItem('superadminDirectAccess') === 'true';
+      const isSuperadminViaLGU = localStorage.getItem('superadminAccess') === 'true';
+      
+      if (isSuperadminDirect) {
+        headers['x-superadmin-direct-access'] = 'true';
+      } else if (isSuperadminViaLGU) {
+        // For LGU user access, use LGU user ID from tempLGUUser
+        const tempLGUUser = JSON.parse(localStorage.getItem('tempLGUUser') || '{}');
+        if (tempLGUUser.id) {
+          headers['x-lgu-user-id'] = tempLGUUser.id;
+        }
+      }
+      
       const response = await fetch('/api/users', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: headers,
         body: JSON.stringify({
           ...formData,
           password: strongPassword, // Reverted to 'password' for the API request payload
@@ -158,8 +223,25 @@ const UserManagement = () => {
     if (!confirmDelete) return;
 
     try {
+      const headers: HeadersInit = { 'Content-Type': 'application/json' };
+      
+      // Check if in superadmin access mode (either direct or via LGU user)
+      const isSuperadminDirect = localStorage.getItem('superadminDirectAccess') === 'true';
+      const isSuperadminViaLGU = localStorage.getItem('superadminAccess') === 'true';
+      
+      if (isSuperadminDirect) {
+        headers['x-superadmin-direct-access'] = 'true';
+      } else if (isSuperadminViaLGU) {
+        // For LGU user access, use LGU user ID from tempLGUUser
+        const tempLGUUser = JSON.parse(localStorage.getItem('tempLGUUser') || '{}');
+        if (tempLGUUser.id) {
+          headers['x-lgu-user-id'] = tempLGUUser.id;
+        }
+      }
+      
       const response = await fetch('/api/users', {
         method: 'DELETE',
+        headers: headers,
       });
 
       if (response.ok) {
@@ -183,8 +265,25 @@ const UserManagement = () => {
     if (!confirmDelete) return;
 
     try {
+      const headers: HeadersInit = { 'Content-Type': 'application/json' };
+      
+      // Check if in superadmin access mode (either direct or via LGU user)
+      const isSuperadminDirect = localStorage.getItem('superadminDirectAccess') === 'true';
+      const isSuperadminViaLGU = localStorage.getItem('superadminAccess') === 'true';
+      
+      if (isSuperadminDirect) {
+        headers['x-superadmin-direct-access'] = 'true';
+      } else if (isSuperadminViaLGU) {
+        // For LGU user access, use LGU user ID from tempLGUUser
+        const tempLGUUser = JSON.parse(localStorage.getItem('tempLGUUser') || '{}');
+        if (tempLGUUser.id) {
+          headers['x-lgu-user-id'] = tempLGUUser.id;
+        }
+      }
+      
       const response = await fetch(`/api/users?username=${encodeURIComponent(username)}`, {
         method: 'DELETE',
+        headers: headers,
       });
 
       if (response.ok) {
@@ -261,7 +360,7 @@ const UserManagement = () => {
           </form>
         </div>
 
-        <div className="lg:col-span-1 grid grid-cols-2 gap-4">
+        <div className="col-span-1 grid grid-cols-2 lg:grid-cols-4 gap-4 w-full">
           {statsCards.map((stat: { label: string; value: string; color: string }) => (
             <div 
               key={stat.label} 
@@ -319,7 +418,7 @@ const UserManagement = () => {
                 ))
               ) : (
                 <tr>
-                  <td colSpan={6} className="px-6 py-10 text-center text-gray-400 italic">No users found.</td>
+                  <td colSpan={6} className="px-6 py-10 text-center text-gray-400 italic hidden">No users found.</td>
                 </tr>
               )}
             </tbody>
@@ -406,7 +505,7 @@ const UserManagement = () => {
                   </tbody>
                 </table>
               ) : (
-                <div className="text-center py-10 text-gray-400 italic">No removed viewers found.</div>
+                <div className="text-center py-10 text-gray-400 italic hidden">No removed viewers found.</div>
               )}
             </div>
           </div>

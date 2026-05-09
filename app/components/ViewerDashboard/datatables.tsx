@@ -2,35 +2,119 @@
 
 import { useState, useEffect } from "react";
 
+interface Layer {
+  id: number;
+  layer_name: string;
+  layer_type: string;
+  category_id?: number;
+  lgu_id?: number;
+  metadata?: any;
+  is_visible: boolean;
+}
+
+interface LayerAttribute {
+  id: number;
+  layer_id: number;
+  attribute_name: string;
+  attribute_type: string;
+  attribute_value: any;
+  created_at?: string;
+}
+
 const Datatables = () => {
   const [currentPage, setCurrentPage] = useState(1);
   const [allData, setAllData] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [layers, setLayers] = useState<Layer[]>([]);
+  const [selectedLayer, setSelectedLayer] = useState<string>('all');
+  const [layerAttributes, setLayerAttributes] = useState<LayerAttribute[]>([]);
+  const [loadingLayers, setLoadingLayers] = useState(true);
   
-  // Fetch demographic data from API
+  // Initialize with mock data on component mount
   useEffect(() => {
-    const fetchDemographics = async () => {
-      try {
-        setLoading(true);
-        const response = await fetch('/api/viewer/demographics');
-        const result = await response.json();
-        
-        if (result.success) {
-          setAllData(result.data);
-        } else {
-          setError('Failed to fetch demographic data');
-        }
-      } catch (err) {
-        console.error('Error fetching demographics:', err);
-        setError('Error loading demographic data');
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchDemographics();
+    initializeMockData();
   }, []);
+
+  // Fetch attributes when layer selection changes
+  useEffect(() => {
+    if (selectedLayer && selectedLayer !== 'all') {
+      fetchLayerAttributes(selectedLayer);
+    }
+  }, [selectedLayer]);
+
+  const initializeMockData = () => {
+    const mockLayers = [
+      {
+        id: 1,
+        layer_name: 'Ibaan Boundary',
+        layer_type: 'boundary',
+        is_visible: true,
+        category_id: 1,
+        lgu_id: 1,
+        metadata: { source: 'official', year: 2023 }
+      },
+      {
+        id: 2,
+        layer_name: 'Ibaan Road Network',
+        layer_type: 'road',
+        is_visible: true,
+        category_id: 2,
+        lgu_id: 1,
+        metadata: { source: 'GIS', year: 2023 }
+      },
+      {
+        id: 3,
+        layer_name: 'Ibaan Waterways',
+        layer_type: 'waterway',
+        is_visible: true,
+        category_id: 3,
+        lgu_id: 1,
+        metadata: { source: 'hydrology', year: 2023 }
+      },
+      {
+        id: 4,
+        layer_name: 'Buildings',
+        layer_type: 'building',
+        is_visible: true,
+        category_id: 4,
+        lgu_id: 1,
+        metadata: { source: 'satellite', year: 2023 }
+      },
+      {
+        id: 5,
+        layer_name: 'Land Use',
+        layer_type: 'landuse',
+        is_visible: true,
+        category_id: 5,
+        lgu_id: 1,
+        metadata: { source: 'planning', year: 2023 }
+      }
+    ];
+    setLayers(mockLayers);
+    setLoadingLayers(false);
+  };
+
+  const fetchLayerAttributes = async (layerId: string) => {
+    try {
+      setLoading(true);
+      const response = await fetch(`/api/layer-attributes?layerId=${layerId}`);
+      const result = await response.json();
+      
+      if (result.success) {
+        setLayerAttributes(result.data);
+        setAllData(result.data);
+      } else {
+        setError('Failed to fetch layer attributes');
+      }
+    } catch (err) {
+      console.error('Error fetching layer attributes:', err);
+      setError('Error loading layer attributes');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   
   const itemsPerPage = 15;
   const totalItems = allData.length;
@@ -41,22 +125,49 @@ const Datatables = () => {
   const currentData = allData.slice(indexOfFirstItem, indexOfLastItem);
   const totalPages = Math.ceil(totalItems / itemsPerPage);
 
-  const getStatusColor = (status: string) => {
-    switch(status) {
-      case 'Good': return 'text-green-600';
-      case 'Moderate': return 'text-orange-600';
-      case 'Bad': return 'text-red-600';
-      default: return 'text-gray-600';
-    }
-  };
 
   return (
-    <div className="flex flex-col  bg-white">
+    <div className="flex flex-col bg-white">
+      {/* Layer Selector */}
+      <div className="bg-white border-b border-gray-200 px-6 py-4">
+        <div className="flex items-center space-x-4">
+          <label htmlFor="layer-select" className="text-sm font-medium text-gray-700">
+            Select Layer:
+          </label>
+          <select
+            id="layer-select"
+            value={selectedLayer}
+            onChange={(e) => {
+              setSelectedLayer(e.target.value);
+              setCurrentPage(1); // Reset to first page when layer changes
+            }}
+            disabled={loadingLayers}
+            className="px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
+          >
+            <option value="all">Select a layer...</option>
+            {layers.map((layer) => (
+              <option key={layer.id} value={layer.id.toString()}>
+                {layer.layer_name} ({layer.layer_type})
+              </option>
+            ))}
+          </select>
+          {loadingLayers && (
+            <span className="text-sm text-gray-500">Loading layers...</span>
+          )}
+        </div>
+      </div>
+
       {/* Data Table Card */}
       <div className="flex-1 bg-white rounded-xl shadow-sm overflow-hidden">
         {loading ? (
           <div className="flex items-center justify-center py-12">
-            <div className="text-gray-500">Loading demographic data...</div>
+            <div className="text-gray-500">
+              Loading layer attributes...
+            </div>
+          </div>
+        ) : selectedLayer === 'all' || !selectedLayer ? (
+          <div className="flex items-center justify-center py-12">
+            <div className="text-gray-500">Please select a layer to view its attributes</div>
           </div>
         ) : error ? (
           <div className="flex items-center justify-center py-12">
@@ -67,69 +178,56 @@ const Datatables = () => {
             <table className="min-w-full">
               <thead className="font-bold">
                 <tr className="bg-gray-50 border-b border-gray-200">
-                  <th className="px-2 py-2 text-left text-sm font-semibold text-gray-700">
-                    Location
+                  <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">
+                    Attribute
                   </th>
-                  <th className="px-2 py-2 text-left text-sm font-semibold text-gray-700">
-                    Population
-                  </th>
-                  <th className="px-2 py-2 text-left text-sm font-semibold text-gray-700">
-                    Households
-                  </th>
-                  <th className="px-2 py-2 text-left text-sm font-semibold text-gray-700">
-                    Poverty
-                  </th>
-                  <th className="px-2 py-2 text-left text-sm font-semibold text-gray-700">
-                    Employment
-                  </th>
-                  <th className="px-2 py-2 text-left text-sm font-semibold text-gray-700">
-                    Status
-                  </th>
-                  <th className="px-2 py-2 text-left text-sm font-semibold text-gray-700">
-                    Agency
-                  </th>
-                  <th className="px-2 py-2 text-left text-sm font-semibold text-gray-700">
-                    Category
-                  </th>
-                  <th className="px-2 py-2 text-left text-sm font-semibold text-gray-700">
-                    Layer Type
-                  </th>
+                  {currentData.map((item, index) => (
+                    <th key={item.id || index} className="px-4 py-3 text-left text-sm font-semibold text-gray-700">
+                      {item.attribute_name}
+                    </th>
+                  ))}
                 </tr>
               </thead>
               <tbody>
-                {currentData.map((item, index) => (
-                  <tr key={item.layerType} className={index % 2 === 0 ? "bg-white border-b border-gray-100" : "bg-blue-50 border-b border-gray-100"}>
-                    <td className="px-2 py-2 text-sm text-gray-900 font-medium">
-                      {item.location}
+                <tr className="bg-white border-b border-gray-100">
+                  <td className="px-4 py-3 text-sm font-medium text-gray-700 bg-gray-50 border-r border-gray-200">
+                    Value
+                  </td>
+                  {currentData.map((item, index) => (
+                    <td key={`value-${item.id || index}`} className="px-4 py-3 text-sm text-gray-900">
+                      {item.attribute_type === 'date' 
+                        ? new Date(item.attribute_value).toLocaleDateString()
+                        : item.attribute_type === 'number'
+                        ? typeof item.attribute_value === 'number' 
+                          ? item.attribute_value.toLocaleString()
+                          : item.attribute_value
+                        : item.attribute_value
+                      }
                     </td>
-                    <td className="px-2 py-2 text-sm text-gray-600">
-                      {item.population.toLocaleString()}
-                    </td>
-                    <td className="px-2 py-2 text-sm text-gray-600">
-                      {item.households.toLocaleString()}
-                    </td>
-                    <td className="px-2 py-2 text-sm text-gray-600">
-                      {item.povertyRate}
-                    </td>
-                    <td className="px-2 py-2 text-sm text-gray-600">
-                      {item.employmentRate}
-                    </td>
-                    <td className="px-2 py-2 text-sm">
-                      <span className={`font-medium ${getStatusColor(item.status)}`}>
-                        {item.status}
+                  ))}
+                </tr>
+                <tr className="bg-blue-50 border-b border-gray-100">
+                  <td className="px-4 py-3 text-sm font-medium text-gray-700 bg-gray-50 border-r border-gray-200">
+                    Type
+                  </td>
+                  {currentData.map((item, index) => (
+                    <td key={`type-${item.id || index}`} className="px-4 py-3 text-sm text-gray-600">
+                      <span className="px-2 py-1 text-xs rounded-full bg-gray-100 text-gray-700">
+                        {item.attribute_type}
                       </span>
                     </td>
-                    <td className="px-2 py-2 text-sm text-gray-600">
-                      {item.agency}
+                  ))}
+                </tr>
+                <tr className="bg-white border-b border-gray-100">
+                  <td className="px-4 py-3 text-sm font-medium text-gray-700 bg-gray-50 border-r border-gray-200">
+                    Created Date
+                  </td>
+                  {currentData.map((item, index) => (
+                    <td key={`date-${item.id || index}`} className="px-4 py-3 text-sm text-gray-600">
+                      {item.created_at ? new Date(item.created_at).toLocaleDateString() : 'N/A'}
                     </td>
-                    <td className="px-2 py-2 text-sm text-gray-600">
-                      {item.category}
-                    </td>
-                    <td className="px-2  py-2 text-sm text-gray-600">
-                      {item.area}
-                    </td>
-                  </tr>
-                ))}
+                  ))}
+                </tr>
               </tbody>
             </table>
           </div>

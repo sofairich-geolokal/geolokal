@@ -116,18 +116,13 @@ export default function Cards() {
         };
       case 'Map Layers':
         return {
-          endpoint: '/api/lgu/map-layers',
+          endpoint: '/api/stats/map-layers',
           columns: [
-            { key: 'area', label: 'Area/Layer Name' },
-            { key: 'location', label: 'Location' },
-            { key: 'layerType', label: 'Layer Type' },
-            { key: 'agency', label: 'Agency' },
-            { key: 'category', label: 'Category' },
-            { key: 'population', label: 'Population' },
-            { key: 'households', label: 'Households' },
-            { key: 'povertyRate', label: 'Poverty Rate' },
-            { key: 'employmentRate', label: 'Employment Rate' },
-            { key: 'status', label: 'Status' }
+            { key: 'layer_type', label: 'Layer Type' },
+            { key: 'count', label: 'Number of Layers' },
+            { key: 'first_created', label: 'First Created', format: 'date' },
+            { key: 'last_created', label: 'Last Created', format: 'date' },
+            { key: 'sample_layers', label: 'Sample Layer Names' }
           ]
         };
       case 'Data Sources':
@@ -163,10 +158,10 @@ export default function Cards() {
         const usersData = await usersResponse.json();
         const usersCount = Array.isArray(usersData) ? usersData.length : 0;
 
-        // Fetch map layers count
+        // Fetch map layers count (total types)
         const mapsResponse = await fetch('/api/stats/map-layers');
         const mapsData = await mapsResponse.json();
-        const mapsCount = Array.isArray(mapsData) ? mapsData.length : 0;
+        const mapsCount = mapsData.total_types || 0;
 
         // Fetch data sources count
         const sourcesResponse = await fetch('/api/stats/sources');

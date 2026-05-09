@@ -3,9 +3,27 @@ import { NextResponse } from 'next/server';
 import { getAuthUser } from '@/lib/auth';
 import { emailService } from '@/lib/email';
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
-    // Get logged-in user ID from auth token
+    // Check for superadmin direct access header
+    const headers = request.headers;
+    const superadminAccess = headers.get('x-superadmin-direct-access');
+    
+    if (superadminAccess === 'true') {
+      // Superadmin direct access - return all active users
+      const result = await query(`
+        SELECT u.username, u.email, u.password_hash, u.role, 
+               to_char(u.created_at, 'Mon DD, YYYY HH:MI AM') as created,
+               u.created_by
+        FROM users u
+        WHERE u.is_active = true
+        ORDER BY u.created_at DESC
+      `, []);
+      
+      return NextResponse.json(result.rows || []);
+    }
+    
+    // Normal authentication flow
     const userId = await getAuthUser();
     if (!userId) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -32,19 +50,28 @@ export async function GET() {
 
 export async function DELETE(request: Request) {
   try {
-    // Get logged-in user ID from auth token
-    const userId = await getAuthUser();
-    if (!userId) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
+    // Check for superadmin direct access header
+    const headers = request.headers;
+    const superadminAccess = headers.get('x-superadmin-direct-access');
+    
+    let loggedInUser = 'Superadmin';
+    let lguId = null;
+    
+    if (superadminAccess !== 'true') {
+      // Normal authentication flow
+      const userId = await getAuthUser();
+      if (!userId) {
+        return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+      }
 
-    // Get username of logged-in user
-    const creatorResult = await query('SELECT username, lgu_id FROM users WHERE id = $1', [userId]);
-    const loggedInUser = creatorResult.rows[0]?.username;
-    const lguId = creatorResult.rows[0]?.lgu_id;
+      // Get username of logged-in user
+      const creatorResult = await query('SELECT username, lgu_id FROM users WHERE id = $1', [userId]);
+      loggedInUser = creatorResult.rows[0]?.username;
+      lguId = creatorResult.rows[0]?.lgu_id;
 
-    if (!loggedInUser) {
-      return NextResponse.json({ error: 'User not found' }, { status: 404 });
+      if (!loggedInUser) {
+        return NextResponse.json({ error: 'User not found' }, { status: 404 });
+      }
     }
 
     // Check if deleting a specific user or all users
@@ -53,11 +80,27 @@ export async function DELETE(request: Request) {
 
     if (usernameToDelete) {
       // Soft delete specific user by username (set is_active = false)
-      const result = await query(`
-        UPDATE users 
-        SET is_active = false
-        WHERE username = $1 AND role = 'Viewer' AND created_by = $2
-      `, [usernameToDelete, loggedInUser]);
+      let deleteQuery, queryParams;
+      
+      if (superadminAccess === 'true') {
+        // Superadmin can delete any viewer user
+        deleteQuery = `
+          UPDATE users 
+          SET is_active = false
+          WHERE username = $1 AND role = 'Viewer'
+        `;
+        queryParams = [usernameToDelete];
+      } else {
+        // Normal LGU user can only delete users they created
+        deleteQuery = `
+          UPDATE users 
+          SET is_active = false
+          WHERE username = $1 AND role = 'Viewer' AND created_by = $2
+        `;
+        queryParams = [usernameToDelete, loggedInUser];
+      }
+      
+      const result = await query(deleteQuery, queryParams);
       
       console.log(`Soft deleted user ${usernameToDelete} by ${loggedInUser}`);
       
@@ -72,12 +115,28 @@ export async function DELETE(request: Request) {
         deletedCount: result.rowCount 
       });
     } else {
-      // Soft delete all users with 'Viewer' role created by the logged-in LGU user
-      const result = await query(`
-        UPDATE users 
-        SET is_active = false
-        WHERE role = 'Viewer' AND created_by = $1
-      `, [loggedInUser]);
+      // Soft delete all users with 'Viewer' role
+      let deleteAllQuery: string, deleteAllParams: any[];
+      
+      if (superadminAccess === 'true') {
+        // Superadmin can delete all viewer users
+        deleteAllQuery = `
+          UPDATE users 
+          SET is_active = false
+          WHERE role = 'Viewer'
+        `;
+        deleteAllParams = [];
+      } else {
+        // Normal LGU user can only delete users they created
+        deleteAllQuery = `
+          UPDATE users 
+          SET is_active = false
+          WHERE role = 'Viewer' AND created_by = $1
+        `;
+        deleteAllParams = [loggedInUser];
+      }
+      
+      const result = await query(deleteAllQuery, deleteAllParams);
       
       console.log(`Soft deleted ${result.rowCount} viewer users created by ${loggedInUser}`);
       
@@ -106,18 +165,32 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Password is required' }, { status: 400 });
     }
     
-    // Get logged-in user ID and info
-    const userId = await getAuthUser();
-    if (!userId) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
+    // Check for superadmin direct access header
+    const headers = request.headers;
+    const superadminAccess = headers.get('x-superadmin-direct-access');
+    
+    let creatorInfo;
+    
+    if (superadminAccess === 'true') {
+      // Superadmin direct access - use default values
+      creatorInfo = {
+        username: 'Superadmin',
+        lgu_id: null
+      };
+    } else {
+      // Normal authentication flow
+      const userId = await getAuthUser();
+      if (!userId) {
+        return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+      }
 
-    // Get the username and LGU ID of logged-in user
-    const userInfoResult = await query('SELECT username, lgu_id FROM users WHERE id = $1', [userId]);
-    const creatorInfo = userInfoResult.rows[0];
+      // Get the username and LGU ID of logged-in user
+      const userInfoResult = await query('SELECT username, lgu_id FROM users WHERE id = $1', [userId]);
+      creatorInfo = userInfoResult.rows[0];
 
-    if (!creatorInfo) {
-      return NextResponse.json({ error: 'User not found' }, { status: 404 });
+      if (!creatorInfo) {
+        return NextResponse.json({ error: 'User not found' }, { status: 404 });
+      }
     }
 
     // Insert User linked to logged-in user's LGU

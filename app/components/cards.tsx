@@ -153,7 +153,7 @@ export default function Cards() {
 
   return (
     <div className="p-0 sm:p-6 bg-white h-full">
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 max-w-7xl mx-auto">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-2 gap-6 max-w-7xl mx-auto">
         {stats.length === 0 ? (
           ['Total Projects', 'Map Layers', 'Audits', 'Active Users'].map((title, index) => (
             <motion.div 

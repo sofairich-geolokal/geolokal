@@ -35,7 +35,11 @@ export default function DataTablePopup({
           const response = await fetch(endpoint);
           const result = await response.json();
           
-          if (Array.isArray(result)) {
+          // Handle map-layers API structure which returns { layer_types: [...] }
+          if (endpoint.includes('/api/stats/map-layers') && result.layer_types) {
+            setData(result.layer_types);
+            setCurrentPage(1); // Reset to first page when new data loads
+          } else if (Array.isArray(result)) {
             setData(result);
             setCurrentPage(1); // Reset to first page when new data loads
           } else {
@@ -80,14 +84,21 @@ export default function DataTablePopup({
     }).format(numValue);
   };
 
-  const getFormatFunction = (format?: 'date' | 'currency') => {
+  const getFormatFunction = (format?: 'date' | 'currency', key?: string) => {
     switch (format) {
       case 'date':
         return formatDate;
       case 'currency':
         return formatCurrency;
       default:
-        return (value: string | number | boolean | null) => value?.toString() || '';
+        return (value: string | number | boolean | null) => {
+          // Handle array fields like sample_layers
+          if (key === 'sample_layers' && Array.isArray(value)) {
+            const arrValue = value as any[];
+            return arrValue.slice(0, 3).join(', ') + (arrValue.length > 3 ? '...' : '');
+          }
+          return value?.toString() || '';
+        };
     }
   };
 
@@ -156,7 +167,7 @@ export default function DataTablePopup({
                       {currentData.map((row, rowIndex) => (
                         <tr key={rowIndex} className={rowIndex % 2 === 0 ? "bg-white border-b border-gray-100" : "bg-blue-50 border-b border-gray-100"}>
                           {columns.map((column, colIndex) => {
-                            const formatFunction = getFormatFunction(column.format);
+                            const formatFunction = getFormatFunction(column.format, column.key);
                             const value = row[column.key];
                             return (
                               <td key={colIndex} className="px-4 py-3 text-sm text-gray-900">

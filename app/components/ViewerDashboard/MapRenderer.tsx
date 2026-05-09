@@ -143,6 +143,7 @@ const MapRenderer = ({
     switch (basemapName) {
       case 'Google Map': return 'https://mt1.google.com/vt/lyrs=m&x={x}&y={y}&z={z}';
       case 'Satellite Map':
+      case 'Satellite (Esri)':
       case 'satellite': return 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}';
       case 'Open Street Map':
       case 'osm': return 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png';
@@ -181,10 +182,74 @@ const MapRenderer = ({
               weight: 3,
             };
 
+            const createHoverLabel = (feature: any, latlng: any) => {
+              const labelContent = `<div class="bg-white px-3 py-2 rounded-lg shadow-xl border border-gray-300 text-sm font-semibold" style="position: absolute; z-index: 1000; pointer-events: none; min-width: 180px;">
+                <div class="flex items-center gap-2 mb-1">
+                  <div class="w-3 h-3 rounded-full" style="background-color: ${
+                    feature.layer_type === 'boundary' ? '#3b82f6' : 
+                    feature.layer_type === 'road' ? '#16a34a' : '#0ea5e9'
+                  }"></div>
+                  <div class="font-bold text-blue-700">${feature.title || layer.title}</div>
+                </div>
+                ${feature.layer_type ? `<div class="text-gray-600 text-xs">${feature.layer_type}</div>` : ''}
+                ${layer.agency ? `<div class="text-gray-500 text-xs">${layer.agency}</div>` : ''}
+                <div class="text-gray-400 text-xs mt-1">Hover to explore</div>
+              </div>`;
+              
+              const hoverLabel = L.divIcon({
+                html: labelContent,
+                className: 'map-hover-label',
+                iconSize: [220, 70],
+                iconAnchor: [110, -25]
+              });
+              
+              const hoverMarker = L.marker(latlng, { icon: hoverLabel, zIndexOffset: 1000 });
+              return hoverMarker;
+            };
+
             return layer.geometry?.type === 'FeatureCollection' ? (
-              <GeoJSON key={layer.id} data={layer.geometry} style={style} />
+              <GeoJSON 
+                key={layer.id} 
+                data={layer.geometry} 
+                style={style}
+                onEachFeature={(feature: any, layer: any) => {
+                  layer.on({
+                    mouseover: (e: any) => {
+                      if (e.target._hoverMarker) {
+                        e.target._map.removeLayer(e.target._hoverMarker);
+                      }
+                      const hoverMarker = createHoverLabel(feature, e.latlng);
+                      hoverMarker.addTo(e.target._map);
+                      e.target._hoverMarker = hoverMarker;
+                    },
+                    mouseout: (e: any) => {
+                      if (e.target._hoverMarker) {
+                        e.target._map.removeLayer(e.target._hoverMarker);
+                        e.target._hoverMarker = null;
+                      }
+                    }
+                  });
+                }}
+              />
             ) : (
-              <Polygon key={layer.id} positions={layer.geometry} pathOptions={style}>
+              <Polygon 
+                key={layer.id} 
+                positions={layer.geometry} 
+                pathOptions={style}
+                eventHandlers={{
+                  mouseover: (e: any) => {
+                    const hoverMarker = createHoverLabel({ title: layer.title, layer_type: layer.layer_type, agency: layer.agency }, e.latlng);
+                    hoverMarker.addTo(e.target._map);
+                    e.target._hoverMarker = hoverMarker;
+                  },
+                  mouseout: (e: any) => {
+                    if (e.target._hoverMarker) {
+                      e.target._map.removeLayer(e.target._hoverMarker);
+                      e.target._hoverMarker = null;
+                    }
+                  }
+                }}
+              >
                 <Popup>
                   <div className="p-1">
                     <h3 className="font-bold">{layer.title}</h3>

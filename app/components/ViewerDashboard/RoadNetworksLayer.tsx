@@ -249,10 +249,35 @@ const RoadNetworksLayer: React.FC<RoadNetworksLayerProps> = ({
   const onEachRoadFeature = (feature: any, layer: any) => {
     layer.on({
       mouseover: (e: any) => { 
-        e.target.setStyle({ weight: 5, color: '#eab308' }); 
+        e.target.setStyle({ weight: 5, color: '#eab308' });
+        
+        // Show hover label
+        const props = feature.properties || {};
+        const labelContent = `<div class="bg-white px-2 py-1 rounded shadow-lg border border-gray-200 text-xs font-medium" style="position: absolute; z-index: 1000; pointer-events: none;">
+          <div class="font-bold text-blue-700">${props.Name || 'Road Segment'}</div>
+          ${props.Type ? `<div class="text-gray-600">${props.Type}</div>` : ''}
+        </div>`;
+        
+        // Create and show hover label
+        const hoverLabel = L.divIcon({
+          html: labelContent,
+          className: 'road-hover-label',
+          iconSize: [200, 40],
+          iconAnchor: [100, -10]
+        });
+        
+        const hoverMarker = L.marker(e.latlng, { icon: hoverLabel, zIndexOffset: 1000 });
+        hoverMarker.addTo(e.target._map);
+        e.target._hoverMarker = hoverMarker;
       },
       mouseout: (e: any) => { 
-        e.target.setStyle(geoPortalRoadStyle()); 
+        e.target.setStyle(geoPortalRoadStyle());
+        
+        // Remove hover label
+        if (e.target._hoverMarker) {
+          e.target._map.removeLayer(e.target._hoverMarker);
+          e.target._hoverMarker = null;
+        }
       },
       click: (e: any) => {
         const props = feature.properties || {};

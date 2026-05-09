@@ -5,6 +5,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation"; // Added useRouter
 import { useState } from "react";
 import { ChevronRight, ChevronDown } from "lucide-react";
+import { logout } from "@/app/actions/auth";
 
 const Sidebar = () => {
   const pathname = usePathname();
@@ -42,7 +43,6 @@ const Sidebar = () => {
       window.location.href = '/';
     }
   };
-
   return (
     <aside className="w-[200px] bg-black text-white flex flex-col h-screen p-2 shrink-0">
       {/* LGU Circular Logo */}

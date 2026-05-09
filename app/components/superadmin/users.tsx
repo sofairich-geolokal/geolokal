@@ -29,7 +29,6 @@ const UserManagement = () => {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
-  const [roleFilter, setRoleFilter] = useState('all');
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [selectedUsers, setSelectedUsers] = useState<string[]>([]);
@@ -51,13 +50,19 @@ const UserManagement = () => {
   // Fetch users from superadmin API
   const fetchUsers = async () => {
     try {
+      console.log("Fetching users from /api/superadmin/users");
       const response = await fetch('/api/superadmin/users', {
         credentials: 'include'
       });
+      console.log("Response status:", response.status);
+      
       if (!response.ok) {
-        throw new Error('Failed to fetch users');
+        const errorData = await response.json().catch(() => ({}));
+        console.error("API Error:", errorData);
+        throw new Error(errorData.error || `HTTP ${response.status}: Failed to fetch users`);
       }
       const data = await response.json();
+      console.log("Users data received:", data);
       setUsers(Array.isArray(data) ? data : []);
     } catch (err: any) {
       console.error("Fetch users error:", err);
@@ -73,7 +78,7 @@ const UserManagement = () => {
   }, []);
 
   useEffect(() => {
-    let filtered = users;
+    let filtered = users.filter(user => user.role.toLowerCase() === 'lgu');
 
     if (searchTerm) {
       filtered = filtered.filter(user => 
@@ -83,13 +88,9 @@ const UserManagement = () => {
       );
     }
 
-    if (roleFilter !== 'all') {
-      filtered = filtered.filter(user => user.role.toLowerCase() === roleFilter);
-    }
-
     setFilteredUsers(filtered);
     setCurrentPage(1);
-  }, [users, searchTerm, roleFilter]);
+  }, [users, searchTerm]);
 
   const generateStrongPassword = () => {
     const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*";
@@ -154,6 +155,14 @@ const UserManagement = () => {
       location: user.location || ''
     });
     setShowEditModal(true);
+  };
+
+  // Handle viewing LGU admin dashboard
+  const handleViewDashboard = (user: User) => {
+    // Open the LGU admin dashboard in a new tab using superadmin bypass route
+    const tempToken = `superadmin_lgu_access_${user.id}_${Date.now()}`;
+    const dashboardUrl = `/lgu-dashboard/superadmin-access?userId=${user.id}&token=${tempToken}`;
+    window.open(dashboardUrl, '_blank');
   };
 
   // Handle user creation
@@ -350,14 +359,7 @@ const UserManagement = () => {
   return (
     <div className="bg-white rounded-xl p-6">
       <div className="flex justify-between items-center mb-6">
-        <h1 className="text-2xl font-bold text-gray-900">User Management</h1>
-        <button
-          onClick={() => setShowCreateModal(true)}
-          className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700"
-        >
-          <UserPlus className="h-4 w-4" />
-          Add User
-        </button>
+        <h1 className="text-2xl font-bold text-gray-900">LGU Admin Management</h1>
       </div>
 
       {error && (
@@ -378,23 +380,12 @@ const UserManagement = () => {
           <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
           <input
             type="text"
-            placeholder="Search users..."
+            placeholder="Search LGU admins..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
           />
         </div>
-        
-        <select
-          value={roleFilter}
-          onChange={(e) => setRoleFilter(e.target.value)}
-          className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-        >
-          <option value="all">All Roles</option>
-          <option value="superadmin">Superadmin</option>
-          <option value="lgu">LGU User</option>
-          <option value="viewer">Viewer</option>
-        </select>
 
         {selectedUsers.length > 0 && (
           <button
@@ -429,10 +420,7 @@ const UserManagement = () => {
               <th className="text-left p-3 font-semibold text-gray-900">User</th>
               <th className="text-left p-3 font-semibold text-gray-900">Email</th>
               <th className="text-left p-3 font-semibold text-gray-900">Password</th>
-              <th className="text-left p-3 font-semibold text-gray-900">Role</th>
-              <th className="text-left p-3 font-semibold text-gray-900">Location</th>
-              <th className="text-left p-3 font-semibold text-gray-900">Created At</th>
-              <th className="text-left p-3 font-semibold text-gray-900">Created By</th>
+              <th className="text-left p-3 font-semibold text-gray-900">LGU Name</th>
               <th className="text-left p-3 font-semibold text-gray-900">Actions</th>
             </tr>
           </thead>
@@ -485,36 +473,35 @@ const UserManagement = () => {
                 </td>
                 <td className="p-3">
                   <div className="flex items-center gap-2">
-                    
-                    <span className={`px-2 py-1 rounded-full text-xs font-medium ${getRoleBadgeColor(user.role)}`}>
-                      {user.role}
+                    <Users className="h-4 w-4 text-blue-600" />
+                    <span className="px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                      LGU Admin
                     </span>
                   </div>
                 </td>
                 <td className="p-3">
-                  <div>
-                    <div className="text-sm text-gray-900">{user.location || 'No location'}</div>
-                  </div>
-                </td>
-                <td className="p-3">
-                  <div className="text-sm text-gray-600">{user.created}</div>
-              
-                </td>
-                <td className="p-3">
-                  <div className="text-sm text-gray-500">by {user.created_by}</div>
-                 
+                  <div className="text-sm text-gray-900">{user.lgu_name || 'No LGU assigned'}</div>
                 </td>
                 <td className="p-3">
                   <div className="flex gap-2">
                     <button 
+                      onClick={() => handleViewDashboard(user)}
+                      className="bg-green-600 text-white hover:bg-green-700 rounded-full p-2"
+                      title="View Dashboard"
+                    >
+                      <EyeIcon className="h-4 w-4" />
+                    </button>
+                    <button 
                       onClick={() => handleEditClick(user)}
                       className="bg-blue-600 text-white hover:bg-blue-700 rounded-full p-2"
+                      title="Edit User"
                     >
                       <Edit className="h-4 w-4" />
                     </button>
                     <button 
                       onClick={() => toggleUserSelection(user.id)}
                       className="bg-red-600 text-white hover:bg-red-700 rounded-full p-2"
+                      title="Delete User"
                     >
                       <Trash2 className="h-4 w-4" />
                     </button>
@@ -733,7 +720,6 @@ const UserManagement = () => {
                   <option value="superadmin">Superadmin</option>
                 </select>
               </div>
-              
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Location</label>
                 <select
