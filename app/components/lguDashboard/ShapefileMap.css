@@ -1,0 +1,44 @@
+/* Custom Layer Controls for LGU Map */
+.leaflet-control-layers {
+  background: white;
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+  padding: 8px;
+  max-height: 300px;
+  overflow-y: auto;
+  min-width: 200px;
+}
+
+.layer-control-item {
+  display: flex;
+  align-items: center;
+  padding: 4px 0;
+  border-bottom: 1px solid #eee;
+  transition: background-color 0.2s;
+}
+
+.layer-control-item:hover {
+  background-color: #f8f9fa;
+}
+
+.layer-control-item label {
+  cursor: pointer;
+  font-size: 12px;
+  color: #333;
+  user-select: none;
+}
+
+.layer-control-item input[type="checkbox"] {
+  margin-right: 8px;
+}
+
+.layer-control-item span {
+  font-weight: 500;
+}
+
+/* Ensure controls are positioned correctly */
+.leaflet-top-right {
+  top: 10px !important;
+  right: 10px !important;
+  z-index: 1000 !important;
+}

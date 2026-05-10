@@ -8,10 +8,12 @@ import {
   ChevronLeft, X, MoveUp, Save, Eye, ZoomIn, ZoomOut
 } from 'lucide-react';
 
-// Import the layer components
+// Import layer components
 import BoundaryLayer from './BoundaryLayer';
 import RoadNetworksLayer from './RoadNetworksLayer';
 import WaterwaysLayer from './WaterwaysLayer';
+import { GeoPortalService } from '@/lib/geoportal';
+import GeoPortalSync from '../GeoPortalSync';
 
 const MapRenderer = dynamic(() => import('./MapRenderer'), { 
   ssr: false, 
@@ -36,9 +38,13 @@ export default function ViewerMap() {
   const [adminBoundaryVisible, setAdminBoundaryVisible] = useState(true);
   const [roadNetworksVisible, setRoadNetworksVisible] = useState(true);
   const [riversVisible, setRiversVisible] = useState(true);
+  const [landCoverVisible, setLandCoverVisible] = useState(true);
+  const [climateTypeVisible, setClimateTypeVisible] = useState(true);
   const [boundaryHovered, setBoundaryHovered] = useState(false);
   const [roadNetworksHovered, setRoadNetworksHovered] = useState(false);
   const [riversHovered, setRiversHovered] = useState(false);
+  const [landCoverHovered, setLandCoverHovered] = useState(false);
+  const [climateTypeHovered, setClimateTypeHovered] = useState(false);
   
   // Hover states for right toolbar icons
   const [layersHovered, setLayersHovered] = useState(false);
@@ -110,13 +116,39 @@ export default function ViewerMap() {
           [coord.center[1] - size, coord.center[0] - size],
           [coord.center[1] + size, coord.center[0] - size],
           [coord.center[1] + size, coord.center[0] + size],
-          [coord.center[1] - size, coord.center[0] - size]
+          [coord.center[1] - size, coord.center[0] + size]
         ];
       })[0],
       layer_type: 'waterway',
       opacity: 0.7,
       category: 'Environmental',
       is_main_layer: true
+    },
+    {
+      id: 10004,
+      title: 'Land Cover (NAMRIA 2020)',
+      agency: 'NAMRIA',
+      description: 'Land Cover map of the entire Philippines from NAMRIA 2020 dataset',
+      geometry: null, // Will be fetched from ArcGIS API
+      layer_type: 'landcover',
+      opacity: 0.7,
+      category: 'Environmental',
+      is_main_layer: true,
+      is_external: true,
+      external_url: 'https://services3.arcgis.com/pNwij5WvjK23c10k/ArcGIS/rest/services/Land_Cover__NAMRIA_2020_/FeatureServer/0'
+    },
+    {
+      id: 10005,
+      title: 'Climate Type (PAGASA)',
+      agency: 'PAGASA',
+      description: 'Philippine Climate Type Classification from PAGASA showing rainfall distribution patterns',
+      geometry: null, // Will be fetched from ArcGIS API
+      layer_type: 'climate',
+      opacity: 0.7,
+      category: 'Environmental',
+      is_main_layer: true,
+      is_external: true,
+      external_url: 'https://services.arcgis.com/P3ePLMYs2RVChkJx/ArcGIS/rest/services/Philippine_Climate_Type/FeatureServer/0'
     }
   ];
 
@@ -237,13 +269,12 @@ export default function ViewerMap() {
   };
 
   // Fetch real layers from Philippine GeoPortal API and database
-  useEffect(() => {
-    const fetchGeoPortalLayers = async () => {
-      setLoadingLayers(true);
-      try {
-        // Check GeoServer status first
-        const geoServerRunning = await checkGeoServerStatus();
-        console.log('GeoServer Status:', geoServerRunning ? 'Running' : 'Not Running');
+  const fetchGeoPortalLayers = async () => {
+    setLoadingLayers(true);
+    try {
+      // Check GeoServer status first
+      const geoServerRunning = await checkGeoServerStatus();
+      console.log('GeoServer Status:', geoServerRunning ? 'Running' : 'Not Running');
         
         // Fetch dynamic layers from database
         const dbResponse = await fetch('/api/layers?visible=true');
@@ -328,66 +359,72 @@ export default function ViewerMap() {
             opacity: 0.7,
             category: 'Environmental',
             is_main_layer: true
+          },
+          {
+            id: 10004,
+            title: 'Land Cover (NAMRIA 2020)',
+            agency: 'NAMRIA',
+            description: 'Land Cover map of the entire Philippines from NAMRIA 2020 dataset',
+            geometry: null, // Will be fetched from ArcGIS API
+            layer_type: 'landcover',
+            opacity: 0.7,
+            category: 'Environmental',
+            is_main_layer: true,
+            is_external: true,
+            external_url: 'https://services3.arcgis.com/pNwij5WvjK23c10k/ArcGIS/rest/services/Land_Cover__NAMRIA_2020_/FeatureServer/0'
+          },
+          {
+            id: 10005,
+            title: 'Climate Type (PAGASA)',
+            agency: 'PAGASA',
+            description: 'Philippine Climate Type Classification from PAGASA showing rainfall distribution patterns',
+            geometry: null, // Will be fetched from ArcGIS API
+            layer_type: 'climate',
+            opacity: 0.7,
+            category: 'Environmental',
+            is_main_layer: true,
+            is_external: true,
+            external_url: 'https://services.arcgis.com/P3ePLMYs2RVChkJx/ArcGIS/rest/services/Philippine_Climate_Type/FeatureServer/0'
           }
         ];
 
         // Combine database layers with main layers
         const allLayers = [...mainLayers, ...dbLayers];
 
-        // Also try GeoPortal API for additional layers
+        // Fetch GeoPortal layers using our service
         try {
-          const controller = new AbortController();
-          const timeoutId = setTimeout(() => controller.abort(), 5000); // 5 second timeout
+          const geoPortalLayers = await GeoPortalService.fetchAllLayers();
           
-          const response = await fetch('https://geoportal.gov.ph/api/v2/layers', {
-            signal: controller.signal,
-            headers: {
-              'Accept': 'application/json',
-            }
-          });
-          
-          clearTimeout(timeoutId);
-          
-          if (response.ok) {
-            const data = await response.json();
-            
-            // Transform GeoPortal data to our layer format
-            const geoPortalLayers = data.slice(0, 2).map((layer: any, index: number) => ({
-              id: 2000 + index, // Use high IDs to avoid conflicts with main layers
-              title: layer.title || layer.name || `GeoPortal Layer ${index + 1}`,
-              agency: layer.organization || 'GeoPortal PH',
-              description: layer.description || layer.abstract || 'Philippine geographic data layer',
-              geometry: (() => {
-                const baseCoords = [
-                  { center: [13.4124, 122.5619], offset: 0.5 },  // Manila area
-                  { center: [14.5995, 120.9842], offset: 0.4 },  // Batangas area  
-                  { center: [15.1570, 120.6344], offset: 0.3 },  // Bulacan area
-                  { center: [10.3157, 123.8854], offset: 0.6 }   // Cebu area
-                ];
-                
-                const coord = baseCoords[(index + 10) % baseCoords.length];
-                const size = 0.3 + ((index + 10) * 0.1);
-                
-                return [
-                  [coord.center[1] - size, coord.center[0] - size],
-                  [coord.center[1] + size, coord.center[0] - size],
-                  [coord.center[1] + size, coord.center[0] + size],
-                  [coord.center[1] - size, coord.center[0] - size]
-                ];
-              })(),
+          // Transform GeoPortal layers to our format
+          const formattedGeoPortalLayers = geoPortalLayers.map((layer, index) => ({
+            id: 2000 + index, // Use high IDs to avoid conflicts with main layers
+            title: layer.title,
+            agency: layer.attribution,
+            description: layer.description,
+            geometry: layer.geometry || null,
+            layer_type: layer.service === 'ArcGIS REST' ? 'arcgis' : 'wms', // Mark service type
+            style_config: layer.style,
+            opacity: layer.style.opacity || 0.7,
+            category: layer.category,
+            metadata: {
+              ...layer.properties,
+              wmsUrl: layer.wmsUrl,
+              wmsLayer: layer.wmsLayer,
+              arcgisUrl: layer.arcgisUrl,
+              service: layer.service,
+              layer: layer.layer,
               is_geoportal: true
-            }));
-            
-            // Combine all layers
-            setAvailableLayers([...allLayers, ...geoPortalLayers]);
-            console.log('Total layers loaded:', allLayers.length + geoPortalLayers.length);
-          } else {
-            throw new Error(`GeoPortal API responded with status: ${response.status}`);
-          }
+            }
+          }));
+          
+          // Combine all layers
+          const combinedLayers = [...availableLayers, ...formattedGeoPortalLayers];
+          setAvailableLayers(combinedLayers);
+          console.log('Total layers loaded:', combinedLayers.length);
         } catch (fetchError) {
-          console.log('GeoPortal API fetch failed, using only main layers:', fetchError instanceof Error ? fetchError.message : 'Unknown error');
-          // Use only main layers if API fails
-          setAvailableLayers(mainLayers);
+          console.log('GeoPortal service fetch failed, using only main layers:', fetchError instanceof Error ? fetchError.message : 'Unknown error');
+          // Use only main layers if service fails
+          setAvailableLayers(allLayers);
         }
         
       } catch (error) {
@@ -441,7 +478,20 @@ export default function ViewerMap() {
       }
     };
 
+  // Listen for layer updates from LayerUpload component
+  useEffect(() => {
     fetchGeoPortalLayers();
+  }, []);
+
+  // Listen for layer updates from LayerUpload component
+  useEffect(() => {
+    const handleLayersUpdated = () => {
+      console.log('Layers updated event received, refreshing layers...');
+      fetchGeoPortalLayers();
+    };
+
+    window.addEventListener('layersUpdated', handleLayersUpdated);
+    return () => window.removeEventListener('layersUpdated', handleLayersUpdated);
   }, []); 
 
   const [loadedLayers, setLoadedLayers] = useState<any[]>([]);
@@ -1098,6 +1148,24 @@ export default function ViewerMap() {
                   />
                   <span className="text-sm text-gray-700">Rivers</span>
                 </label>
+                <label className="flex items-center gap-3 cursor-pointer">
+                  <input 
+                    type="checkbox" 
+                    className="w-4 h-4 rounded border-gray-300 text-orange-600 focus:ring-orange-500" 
+                    checked={landCoverVisible}
+                    onChange={(e) => setLandCoverVisible(e.target.checked)}
+                  />
+                  <span className="text-sm text-gray-700">Land Cover (NAMRIA)</span>
+                </label>
+                <label className="flex items-center gap-3 cursor-pointer">
+                  <input 
+                    type="checkbox" 
+                    className="w-4 h-4 rounded border-gray-300 text-orange-600 focus:ring-orange-500" 
+                    checked={climateTypeVisible}
+                    onChange={(e) => setClimateTypeVisible(e.target.checked)}
+                  />
+                  <span className="text-sm text-gray-700">Climate Type (PAGASA)</span>
+                </label>
                               </div>
             </div>
           </div>
@@ -1114,7 +1182,7 @@ export default function ViewerMap() {
         <div className="w-full h-full z-0">
           <MapRenderer 
             key="viewer-map-instance"
-            layers={loadedLayers} 
+            layers={availableLayers} 
             mapView={mapView} 
             bufferData={bufferData} 
             basemap={basemap}
@@ -1127,6 +1195,15 @@ export default function ViewerMap() {
             roadNetworkLayerHighlighted={false}
             waterwaysLayerVisible={riversVisible}
             waterwaysLayerHighlighted={false}
+            landCoverLayerVisible={landCoverVisible}
+            landCoverLayerHighlighted={false}
+            climateTypeLayerVisible={climateTypeVisible}
+            climateTypeLayerHighlighted={false}
+            onBoundaryBoundsReady={null}
+            onRoadBoundsReady={null}
+            onWaterwayBoundsReady={null}
+            onLandCoverBoundsReady={null}
+            onClimateTypeBoundsReady={null}
             initialZoom={15}
           />
         </div>
@@ -1396,60 +1473,106 @@ export default function ViewerMap() {
             <div className="p-4 space-y-4 text-xs">
               {activeRightPanel === 'layers' && (
                 <div className="space-y-3">
+                  {/* GeoPortal Layers Sync */}
+                  <GeoPortalSync />
+                  
                   <div className="text-center text-white mb-2">
                     <div className="font-semibold">Geographic Layers</div>
                     <div className="text-gray-400">Data from database</div>
                   </div>
                   
-                  {/* Boundary Layer Control */}
-                  <div className="flex items-center justify-between p-2 bg-gray-700 rounded"
-                    onMouseEnter={() => setBoundaryHovered(true)}
-                    onMouseLeave={() => setBoundaryHovered(false)}
-                  >
-                    <div className="flex items-center gap-2">
-                      <div className="w-3 h-3 rounded-full" style={{ backgroundColor: 'rgb(24, 49, 88)' }}></div>
-                      <span className="text-white">Administrative Boundaries</span>
+                  {/* Database Layers */}
+                  {availableLayers.filter(layer => layer.id > 10000).map((layer) => (
+                    <div 
+                      key={layer.id}
+                      className="flex items-center justify-between p-2 bg-gray-700 rounded cursor-pointer hover:bg-gray-600 transition-colors"
+                      onClick={() => toggleLayerVisibility(layer.id)}
+                    >
+                      <div className="flex items-center gap-2">
+                        <div className="w-3 h-3 rounded-full" style={{ 
+                          backgroundColor: getLayerColor(layer.title) 
+                        }}></div>
+                        <span className="text-white text-xs">{layer.title}</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <input 
+                          type="checkbox" 
+                          checked={isLayerLoaded(layer.id)}
+                          onChange={() => toggleLayerVisibility(layer.id)}
+                          className="w-4 h-4 accent-blue-600"
+                          onClick={(e) => e.stopPropagation()}
+                        />
+                        {isLayerLoaded(layer.id) && (
+                          <input 
+                            type="range" 
+                            min="0" 
+                            max="1" 
+                            step="0.1"
+                            value={loadedLayers.find(l => l.id === layer.id)?.opacity || 0.7}
+                            onChange={(e) => updateLayerOpacity(layer.id, parseFloat(e.target.value))}
+                            className="w-16 h-4 accent-blue-600"
+                            onClick={(e) => e.stopPropagation()}
+                            title="Adjust opacity"
+                          />
+                        )}
+                      </div>
                     </div>
-                    <input 
-                      type="checkbox" 
-                      checked={adminBoundaryVisible} 
-                      onChange={(e) => setAdminBoundaryVisible(e.target.checked)}
-                      className="w-4 h-4 accent-blue-600"
-                    />
-                  </div>
+                  ))}
+                  
+                  {/* Default System Layers */}
+                  <div className="border-t border-gray-600 pt-3 mt-3">
+                    <div className="text-gray-400 text-xs mb-2">System Layers</div>
+                    
+                    {/* Boundary Layer Control */}
+                    <div className="flex items-center justify-between p-2 bg-gray-700 rounded"
+                      onMouseEnter={() => setBoundaryHovered(true)}
+                      onMouseLeave={() => setBoundaryHovered(false)}
+                    >
+                      <div className="flex items-center gap-2">
+                        <div className="w-3 h-3 rounded-full" style={{ backgroundColor: 'rgb(24, 49, 88)' }}></div>
+                        <span className="text-white">Administrative Boundaries</span>
+                      </div>
+                      <input 
+                        type="checkbox" 
+                        checked={adminBoundaryVisible} 
+                        onChange={(e) => setAdminBoundaryVisible(e.target.checked)}
+                        className="w-4 h-4 accent-blue-600"
+                      />
+                    </div>
 
-                  {/* Road Networks Layer Control */}
-                  <div className="flex items-center justify-between p-2 bg-gray-700 rounded"
-                    onMouseEnter={() => setRoadNetworksHovered(true)}
-                    onMouseLeave={() => setRoadNetworksHovered(false)}
-                  >
-                    <div className="flex items-center gap-2">
-                      <div className="w-3 h-3 rounded-full" style={{ backgroundColor: '#06a506ee' }}></div>
-                      <span className="text-white">Road Networks</span>
+                    {/* Road Networks Layer Control */}
+                    <div className="flex items-center justify-between p-2 bg-gray-700 rounded"
+                      onMouseEnter={() => setRoadNetworksHovered(true)}
+                      onMouseLeave={() => setRoadNetworksHovered(false)}
+                    >
+                      <div className="flex items-center gap-2">
+                        <div className="w-3 h-3 rounded-full" style={{ backgroundColor: '#06a506ee' }}></div>
+                        <span className="text-white">Road Networks</span>
+                      </div>
+                      <input 
+                        type="checkbox" 
+                        checked={roadNetworksVisible} 
+                        onChange={(e) => setRoadNetworksVisible(e.target.checked)}
+                        className="w-4 h-4 accent-green-600"
+                      />
                     </div>
-                    <input 
-                      type="checkbox" 
-                      checked={roadNetworksVisible} 
-                      onChange={(e) => setRoadNetworksVisible(e.target.checked)}
-                      className="w-4 h-4 accent-green-600"
-                    />
-                  </div>
 
-                  {/* Waterways Layer Control */}
-                  <div className="flex items-center justify-between p-2 bg-gray-700 rounded"
-                    onMouseEnter={() => setRiversHovered(true)}
-                    onMouseLeave={() => setRiversHovered(false)}
-                  >
-                    <div className="flex items-center gap-2">
-                      <div className="w-3 h-3 rounded-full" style={{ backgroundColor: '#2563eb' }}></div>
-                      <span className="text-white">Waterways</span>
+                    {/* Waterways Layer Control */}
+                    <div className="flex items-center justify-between p-2 bg-gray-700 rounded"
+                      onMouseEnter={() => setRiversHovered(true)}
+                      onMouseLeave={() => setRiversHovered(false)}
+                    >
+                      <div className="flex items-center gap-2">
+                        <div className="w-3 h-3 rounded-full" style={{ backgroundColor: '#2563eb' }}></div>
+                        <span className="text-white">Waterways</span>
+                      </div>
+                      <input 
+                        type="checkbox" 
+                        checked={riversVisible} 
+                        onChange={(e) => setRiversVisible(e.target.checked)}
+                        className="w-4 h-4 accent-blue-500"
+                      />
                     </div>
-                    <input 
-                      type="checkbox" 
-                      checked={riversVisible} 
-                      onChange={(e) => setRiversVisible(e.target.checked)}
-                      className="w-4 h-4 accent-blue-500"
-                    />
                   </div>
 
                   <div className="border-t border-gray-600 pt-3">

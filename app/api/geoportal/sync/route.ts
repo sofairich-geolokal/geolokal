@@ -219,7 +219,7 @@ async function storeLayerInDatabase(layer: GeoportalLayer) {
     }
 }
 
-// Main sync function
+// Main sync function for specific layers
 async function syncGeoportalData() {
     const startTime = Date.now();
     let totalProcessed = 0;
@@ -228,68 +228,99 @@ async function syncGeoportalData() {
     let errorMessage = null;
 
     try {
-        // Fetch all items from geoportal
-        console.log('Fetching data from geoportal...');
+        console.log('🚀 Starting GeoPortal sync for specific layers...');
         
-        // Try different endpoints to find available data
-        const endpoints = [
-            '/find/document?f=json&start=1&max=1000',
-            '/search?f=json&start=1&max=1000',
-            '/items?f=json&start=1&max=1000'
-        ];
-
-        let geoportalData = null;
-        let workingEndpoint = null;
-
-        for (const endpoint of endpoints) {
-            try {
-                geoportalData = await fetchFromGeoportal(endpoint);
-                workingEndpoint = endpoint;
-                console.log(`Successfully fetched data from: ${endpoint}`);
-                break;
-            } catch (error) {
-                console.log(`Failed to fetch from ${endpoint}, trying next...`);
-                continue;
-            }
-        }
-
-        if (!geoportalData) {
-            throw new Error('Unable to fetch data from any geoportal endpoint');
-        }
-
-        // Process the data based on response structure
-        let items = [];
+        // Import our updated GeoPortal service to fetch the three specific layers
+        const { GeoPortalService } = await import('@/lib/geoportal');
         
-        if (geoportalData.results) {
-            items = geoportalData.results;
-        } else if (geoportalData.items) {
-            items = geoportalData.items;
-        } else if (Array.isArray(geoportalData)) {
-            items = geoportalData;
-        } else {
-            console.log('Geoportal response structure:', Object.keys(geoportalData));
-            throw new Error('Unable to parse geoportal response structure');
-        }
+        // Fetch the three specific layers you requested
+        const [landCover, climateType, landslideSusceptibility] = await Promise.all([
+            GeoPortalService.fetchLandCoverRegion4A(),
+            GeoPortalService.fetchClimateType(),
+            GeoPortalService.fetchLandslideSusceptibility()
+        ]);
 
-        console.log(`Found ${items.length} items to process`);
+        const layers = [landCover, climateType, landslideSusceptibility].filter(Boolean);
+        
+        console.log(`📋 Found ${layers.length} GeoPortal layers to process`);
 
-        // Process each item
-        for (const item of items) {
+        // Process each layer
+        for (const layer of layers) {
             totalProcessed++;
             
             try {
-                const layer = extractLayerInfo(item);
-                if (layer && layer.id && layer.title) {
-                    const result = await storeLayerInDatabase(layer);
-                    if (result === 'inserted') {
-                        totalAdded++;
-                    } else if (result === 'updated') {
-                        totalUpdated++;
+                // Import prisma dynamically
+                const { prisma } = await import('@/lib/prisma');
+                
+                // Check if layer already exists in map_layers table
+                if (!layer || !layer.title) {
+                    console.log('⚠️ Skipping invalid layer');
+                    continue;
+                }
+
+                const existingLayer = await prisma.map_layers.findFirst({
+                    where: {
+                        layer_name: layer.title
                     }
+                });
+
+                if (existingLayer) {
+                    console.log(`🔄 Updating existing layer: ${layer.title}`);
+                    
+                    // Update existing layer with GeoPortal data
+                    const updatedLayer = await prisma.map_layers.update({
+                        where: { id: existingLayer.id },
+                        data: {
+                            layer_name: layer.title,
+                            layer_type: 'wms',
+                            metadata: {
+                                geojson: layer.geometry,
+                                source: 'geoportal',
+                                description: layer.description,
+                                properties: layer.properties,
+                                wmsUrl: layer.wmsUrl,
+                                wmsLayer: layer.wmsLayer,
+                                lastSync: new Date().toISOString()
+                            },
+                            style_config: layer.style,
+                            is_visible: true,
+                            is_downloadable: false,
+                            attribution: layer.attribution,
+                            updated_at: new Date()
+                        } as any,
+                    });
+
+                    totalUpdated++;
+                } else {
+                    console.log(`➕ Creating new layer: ${layer.title}`);
+                    
+                    // Create new layer
+                    const newLayer = await prisma.map_layers.create({
+                        data: {
+                            layer_name: layer.title,
+                            layer_type: 'wms',
+                            metadata: {
+                                geojson: layer.geometry,
+                                source: 'geoportal',
+                                description: layer.description,
+                                properties: layer.properties,
+                                wmsUrl: layer.wmsUrl,
+                                wmsLayer: layer.wmsLayer
+                            },
+                            style_config: layer.style,
+                            is_visible: true,
+                            is_downloadable: false,
+                            attribution: layer.attribution,
+                            // Create category if needed
+                            category_id: layer.category ? await getOrCreateCategory(layer.category) : null
+                        } as any,
+                    });
+
+                    totalAdded++;
                 }
             } catch (error) {
-                console.error(`Error processing item ${item.id || 'unknown'}:`, error);
-                // Continue processing other items
+                console.error(`❌ Failed to process layer ${layer?.title || 'unknown'}:`, error);
+                errorMessage = error instanceof Error ? error.message : 'Unknown error';
             }
         }
 
@@ -316,6 +347,36 @@ async function syncGeoportalData() {
         `, ['full_sync', 'error', totalProcessed, errorMessage, duration]);
 
         throw error;
+    }
+}
+
+// Helper function to get or create category
+async function getOrCreateCategory(categoryName: string): Promise<number> {
+    try {
+        // Check if category already exists
+        let category = await query(`
+            SELECT id FROM project_categories 
+            WHERE name = $1
+        `, [categoryName]);
+
+        if (category.rows.length === 0) {
+            // Create new category if it doesn't exist
+            const newCategory = await query(`
+                INSERT INTO project_categories (name)
+                VALUES ($1)
+                RETURNING id
+            `, [categoryName]);
+
+            const categoryId = newCategory.rows[0]?.id;
+            console.log(`✅ Created new category: ${categoryName} (ID: ${categoryId})`);
+            return categoryId || 1;
+        }
+
+        return category.rows[0]?.id || 1;
+    } catch (error) {
+        console.error('Error getting/creating category:', error);
+        // Return a default category ID or null
+        return 1; // Default category
     }
 }
 

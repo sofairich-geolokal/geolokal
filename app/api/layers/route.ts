@@ -1,6 +1,22 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 
+// Use dynamic import for simplify-geojson to avoid TypeScript issues
+const simplifyGeoJSON = (geojson: any, options?: {
+  tolerance?: number;
+  highQuality?: boolean;
+  mutate?: (original: any) => any;
+}): any => {
+  try {
+    // Dynamic import to avoid module declaration issues
+    const simplifyModule = require('simplify-geojson');
+    return simplifyModule(geojson, options);
+  } catch (error) {
+    console.error('Simplification module not available:', error);
+    return geojson; // Return original if simplification fails
+  }
+};
+
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
@@ -8,16 +24,18 @@ export async function GET(request: NextRequest) {
     const lguId = searchParams.get('lguId');
     const visible = searchParams.get('visible');
 
+    // Build where clause
     const whereClause: any = {};
-    
+  
     if (category) {
       whereClause.category_id = parseInt(category);
     }
-    
-    if (lguId) {
-      whereClause.lgu_id = parseInt(lguId);
-    }
-    
+  
+    // Temporarily disable lgu_id filter until database schema is fixed
+    // if (lguId) {
+    //   whereClause.lgu_id = parseInt(lguId);
+    // }
+  
     if (visible !== null) {
       whereClause.is_visible = visible === 'true';
     }
@@ -98,15 +116,110 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Validate required fields
+    if (!data.layer_name || data.layer_name.trim() === '') {
+      return NextResponse.json(
+        { success: false, error: 'Layer name is required' },
+        { status: 400 }
+      );
+    }
+
+    if (!data.layer_type) {
+      return NextResponse.json(
+        { success: false, error: 'Layer type is required' },
+        { status: 400 }
+      );
+    }
+
     // Try creating with minimal data first
     try {
+      // Clean and validate metadata
+      let cleanMetadata = data.metadata || {};
+      if (typeof cleanMetadata !== 'object') {
+        cleanMetadata = {};
+      }
+
+      // Simplify geometry if it's too large
+      if (cleanMetadata.geojson) {
+        try {
+          const originalSize = JSON.stringify(cleanMetadata.geojson).length;
+          console.log('Original GeoJSON size:', originalSize, 'bytes');
+          
+          let simplifiedGeoJSON = cleanMetadata.geojson;
+          let currentSize = originalSize;
+          const maxAllowedSize = 50000000; // 50MB limit
+          
+          // Progressive simplification with increasing tolerance
+          const tolerances = [0.0001, 0.001, 0.005, 0.01, 0.025, 0.05, 0.1];
+          
+          for (const tolerance of tolerances) {
+            if (currentSize <= maxAllowedSize) break;
+            
+            simplifiedGeoJSON = simplifyGeoJSON(simplifiedGeoJSON, {
+              tolerance: tolerance,
+              highQuality: tolerance <= 0.005, // Use high quality for smaller tolerances
+              mutate: (original: any) => original
+            });
+            
+            currentSize = JSON.stringify(simplifiedGeoJSON).length;
+            console.log(`Simplified with tolerance ${tolerance}:`, currentSize, 'bytes');
+            
+            if (currentSize <= maxAllowedSize) break;
+          }
+          
+          // If still too large, try feature reduction
+          if (currentSize > maxAllowedSize && simplifiedGeoJSON.features) {
+            const totalFeatures = simplifiedGeoJSON.features.length;
+            const maxFeatures = Math.floor(totalFeatures * (maxAllowedSize / currentSize));
+            
+            if (maxFeatures > 0 && maxFeatures < totalFeatures) {
+              simplifiedGeoJSON = {
+                ...simplifiedGeoJSON,
+                features: simplifiedGeoJSON.features.slice(0, maxFeatures)
+              };
+              currentSize = JSON.stringify(simplifiedGeoJSON).length;
+              console.log(`Reduced features from ${totalFeatures} to ${maxFeatures}:`, currentSize, 'bytes');
+            }
+          }
+          
+          const finalSizeReduction = ((originalSize - currentSize) / originalSize * 100).toFixed(1);
+          console.log('Final GeoJSON size:', currentSize, 'bytes');
+          console.log('Total size reduction:', finalSizeReduction + '%');
+          
+          cleanMetadata.geojson = simplifiedGeoJSON;
+          
+          // Final size check with higher limit
+          if (currentSize > maxAllowedSize) {
+            return NextResponse.json(
+              { 
+                success: false, 
+                error: `Layer data too large (${(currentSize / 1000000).toFixed(1)}MB). Please reduce geometry complexity or split into smaller layers. Maximum allowed size is 15MB.` 
+              },
+              { status: 400 }
+            );
+          }
+          
+        } catch (simplifyError) {
+          console.error('Geometry simplification failed:', simplifyError);
+          
+          // Check if original is still too large
+          const originalSize = JSON.stringify(cleanMetadata.geojson).length;
+          if (originalSize > 50000000) {
+            return NextResponse.json(
+              { 
+                success: false, 
+                error: 'Layer data too large even after simplification. Please reduce geometry complexity.' 
+              },
+              { status: 400 }
+            );
+          }
+        }
+      }
+
       const layer = await prisma.map_layers.create({
         data: {
-          layer_name: data.layer_name,
-          layer_type: data.layer_type,
-          metadata: data.metadata,
-          style_config: data.style_config,
-          is_visible: data.is_visible,
+          layer_name: data.layer_name.trim().substring(0, 100), // Limit to 100 chars
+          metadata: cleanMetadata,
         } as any,
       });
       console.log('Layer created successfully:', layer.id);
@@ -116,7 +229,21 @@ export async function POST(request: NextRequest) {
       });
     } catch (createError) {
       console.error('Error creating layer with minimal data:', createError);
-      throw createError;
+      console.error('Prisma error code:', (createError as any).code);
+      console.error('Prisma error meta:', (createError as any).meta);
+      
+      // Provide more specific error messages
+      let errorMessage = 'Failed to create layer';
+      if ((createError as any).code === 'P2002') {
+        errorMessage = 'Layer name already exists. Please use a different name.';
+      } else if ((createError as any).code?.startsWith('P')) {
+        errorMessage = `Database error: ${(createError as any).message}`;
+      }
+      
+      return NextResponse.json(
+        { success: false, error: errorMessage, details: createError instanceof Error ? createError.message : String(createError) },
+        { status: 500 }
+      );
     }
   } catch (error) {
     console.error('Error creating layer:', error);

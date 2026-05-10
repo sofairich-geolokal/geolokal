@@ -1,5 +1,7 @@
 import { NextResponse } from 'next/server';
 import { query } from '@/lib/db';
+import { GeoPortalService } from '@/lib/geoportal';
+import { prisma } from '@/lib/prisma';
 
 // Types for API responses
 interface GeoportalLayerResponse {

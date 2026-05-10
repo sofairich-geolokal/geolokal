@@ -13,6 +13,7 @@ interface DataTablePopupProps {
   title: string;
   endpoint: string;
   columns: { key: string; label: string; format?: 'date' | 'currency' | undefined }[];
+  headers?: HeadersInit;
 }
 
 export default function DataTablePopup({ 
@@ -20,7 +21,8 @@ export default function DataTablePopup({
   onClose, 
   title, 
   endpoint, 
-  columns 
+  columns,
+  headers 
 }: DataTablePopupProps) {
   const [data, setData] = useState<TableData[]>([]);
   const [loading, setLoading] = useState(true);
@@ -32,7 +34,7 @@ export default function DataTablePopup({
       const fetchData = async () => {
         try {
           setLoading(true);
-          const response = await fetch(endpoint);
+          const response = await fetch(endpoint, { headers });
           const result = await response.json();
           
           // Handle map-layers API structure which returns { layer_types: [...] }

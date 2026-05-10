@@ -1,10 +1,14 @@
 "use client";
 
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import dynamic from 'next/dynamic';
-import { Upload, X, Layers, Download, Trash2, Eye, MapPin } from 'lucide-react';
-import shp from 'shpjs';
 import JSZip from 'jszip';
+import shpjs from 'shpjs';
+import { 
+  Upload, FileText, Plus, X, Check, AlertCircle, 
+  Layers, Eye, EyeOff, Trash2, Save, Download, MapPin
+} from 'lucide-react';
+import { GeoPortalService } from '@/lib/geoportal';
 
 const ShapefileMap = dynamic(() => import('./ShapefileMap'), { 
   ssr: false, 
@@ -39,28 +43,49 @@ export default function ShapefileUpload() {
 
   useEffect(() => { setMounted(true); }, []);
 
-  useEffect(() => {
-    const fetchSavedLayers = async () => {
-      try {
-        const response = await fetch('/api/layers');
-        if (response.ok) {
-          const result = await response.json();
-          const savedLayers = result.data
-            .filter((layer: any) => layer.metadata?.geojson)
-            .map((layer: any) => ({
-              id: layer.id.toString(),
-              name: layer.layer_name,
-              geometry: layer.metadata.geojson,
-              color: layer.metadata.color || layer.style_config?.color || '#333333',
-              visible: layer.is_visible !== false
-            }));
-          setUploadedLayers(savedLayers);
-        }
-      } catch (err) {
-        console.error('Error fetching saved layers:', err);
+  const fetchSavedLayers = async () => {
+    try {
+      // Fetch database layers
+      const dbResponse = await fetch('/api/layers');
+      let dbLayers = [];
+      
+      if (dbResponse.ok) {
+        const result = await dbResponse.json();
+        dbLayers = result.data
+          .filter((layer: any) => layer.metadata?.geojson)
+          .map((layer: any) => ({
+            id: layer.id.toString(),
+            name: layer.layer_name,
+            geometry: layer.metadata.geojson,
+            color: layer.metadata.color || layer.style_config?.color || '#333333',
+            visible: layer.is_visible !== false,
+            source: 'database'
+          }));
       }
-    };
 
+      // Fetch GeoPortal layers
+      const geoPortalLayers = await GeoPortalService.fetchAllLayers();
+      const formattedGeoPortalLayers = geoPortalLayers.map((layer, index) => ({
+        id: `geoportal_${index}`,
+        name: layer.title,
+        geometry: layer.geometry,
+        color: layer.style.color,
+        visible: true,
+        source: 'geoportal',
+        wmsUrl: layer.wmsUrl,
+        wmsLayer: layer.wmsLayer
+      }));
+
+      // Combine database and GeoPortal layers
+      const allLayers = [...dbLayers, ...formattedGeoPortalLayers];
+      setUploadedLayers(allLayers);
+      console.log(`Loaded ${dbLayers.length} database layers and ${geoPortalLayers.length} GeoPortal layers`);
+    } catch (err) {
+      console.error('Error fetching saved layers:', err);
+    }
+  };
+
+  useEffect(() => {
     if (mounted) {
       fetchSavedLayers();
     }
@@ -121,7 +146,7 @@ export default function ShapefileUpload() {
       const zipBuffer = await zip.generateAsync({ type: 'arraybuffer' });
 
       // shpjs can parse zipped shapefiles
-      const geojson = await shp(zipBuffer);
+      const geojson = await shpjs(zipBuffer);
 
       setTempGeoJSON(geojson);
       setTempName(baseName);
@@ -147,6 +172,14 @@ export default function ShapefileUpload() {
     if (saveToDatabase) {
       setIsSaving(true);
       try {
+        // Pre-check size before sending to server
+        const geojsonSize = JSON.stringify(tempGeoJSON).length;
+        const sizeInMB = (geojsonSize / 1000000).toFixed(1);
+        
+        if (geojsonSize > 20000000) { // 20MB client-side check
+          setError(`Layer is very large (${sizeInMB}MB). This may take a while to process and could still fail. Consider splitting into smaller layers.`);
+        }
+
         const payload = {
           layer_name: tempName,
           layer_type: 'vector',
@@ -174,9 +207,15 @@ export default function ShapefileUpload() {
         const result = await response.json();
 
         if (!response.ok) {
-          setError(`Failed to save layer: ${result.error || 'Unknown error'}. Layer added locally only.`);
+          if (result.error?.includes('too large')) {
+            setError(`Layer too large for server (${sizeInMB}MB). Try splitting into smaller shapefiles or reducing geometry complexity. Layer added locally only.`);
+          } else {
+            setError(`Failed to save layer: ${result.error || 'Unknown error'}. Layer added locally only.`);
+          }
         } else {
           newLayer.id = result.data.id.toString();
+          // Refresh the layers list from database after successful save
+          await fetchSavedLayers();
         }
       } catch (err: any) {
         console.error('Error saving layer:', err);
@@ -230,35 +269,6 @@ export default function ShapefileUpload() {
           </div>
 
           <div className="h-px bg-gray-100 my-4" />
-
-          {/* Layer List */}
-          <div className="space-y-2">
-            <h3 className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-3">Layers</h3>
-            {uploadedLayers.length === 0 && (
-                <p className="text-xs text-gray-400 italic text-center py-4">No layers added yet.</p>
-            )}
-            {uploadedLayers.map((layer) => (
-              <div 
-                key={layer.id}
-                onClick={() => setSelectedLayerId(layer.id)}
-                className={`p-3 rounded-xl border cursor-pointer flex items-center justify-between transition-all ${selectedLayerId === layer.id ? 'border-[#318855] bg-green-50' : 'border-gray-100 bg-white hover:bg-gray-50'}`}
-              >
-                <div className="flex items-center space-x-3 overflow-hidden">
-                  <div className="w-3 h-3 rounded-full flex-shrink-0" style={{ backgroundColor: layer.color }} />
-                  <span className="text-sm font-semibold text-gray-700 truncate">{layer.name}</span>
-                </div>
-                <button 
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setUploadedLayers(uploadedLayers.filter(l => l.id !== layer.id));
-                  }}
-                  className="text-gray-300 hover:text-red-500"
-                >
-                  <X size={14} />
-                </button>
-              </div>
-            ))}
-          </div>
         </div>
 
         {/* Map View */}

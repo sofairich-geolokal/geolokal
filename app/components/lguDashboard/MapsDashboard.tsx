@@ -25,6 +25,8 @@ export default function MapsDashboard() {
     adminBoundary: true,
     roadNetworks: true,
     rivers: true,
+    landCover: false,
+    climateType: false,
   });
 
   const [mapView, setMapView] = useState<{ lat: number; lng: number; zoom: number } | null>({ lat: 13.86, lng: 121.15, zoom: 16 });
@@ -367,6 +369,24 @@ export default function MapsDashboard() {
                   />
                   <span className="text-sm text-gray-700">Rivers</span>
                 </label>
+                <label className="flex items-center gap-3 cursor-pointer">
+                  <input 
+                    type="checkbox" 
+                    className="w-4 h-4 rounded border-gray-300 text-[#318855] focus:ring-[#318855]" 
+                    checked={layers.landCover}
+                    onChange={(e) => setLayers(prev => ({ ...prev, landCover: e.target.checked }))}
+                  />
+                  <span className="text-sm text-gray-700">Land Cover (NAMRIA)</span>
+                </label>
+                <label className="flex items-center gap-3 cursor-pointer">
+                  <input 
+                    type="checkbox" 
+                    className="w-4 h-4 rounded border-gray-300 text-[#318855] focus:ring-[#318855]" 
+                    checked={layers.climateType}
+                    onChange={(e) => setLayers(prev => ({ ...prev, climateType: e.target.checked }))}
+                  />
+                  <span className="text-sm text-gray-700">Climate Type (PAGASA)</span>
+                </label>
                               </div>
             </div>
           </div>
@@ -389,6 +409,15 @@ export default function MapsDashboard() {
             roadNetworkLayerHighlighted={false}
             waterwaysLayerVisible={layers.rivers}
             waterwaysLayerHighlighted={false}
+            landCoverLayerVisible={layers.landCover}
+            landCoverLayerHighlighted={false}
+            climateTypeLayerVisible={layers.climateType}
+            climateTypeLayerHighlighted={false}
+            onBoundaryBoundsReady={null}
+            onRoadBoundsReady={null}
+            onWaterwayBoundsReady={null}
+            onLandCoverBoundsReady={null}
+            onClimateTypeBoundsReady={null}
             initialZoom={15}
           />
         </div>

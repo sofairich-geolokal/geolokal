@@ -10,6 +10,8 @@ import 'leaflet/dist/leaflet.css';
 import BoundaryLayer from './BoundaryLayer';
 import RoadNetworksLayer from './RoadNetworksLayer';
 import WaterwaysLayer from './WaterwaysLayer';
+import LandCoverLayer from './LandCoverLayer';
+import ClimateTypeLayer from './ClimateTypeLayer';
 
 // Fix Leaflet default icon issue
 delete (L.Icon.Default.prototype as any)._getIconUrl;
@@ -107,9 +109,15 @@ const MapRenderer = ({
   roadNetworkLayerHighlighted,
   waterwaysLayerVisible,
   waterwaysLayerHighlighted,
+  landCoverLayerVisible,
+  landCoverLayerHighlighted,
+  climateTypeLayerVisible,
+  climateTypeLayerHighlighted,
   onBoundaryBoundsReady,
   onRoadBoundsReady,
   onWaterwayBoundsReady,
+  onLandCoverBoundsReady,
+  onClimateTypeBoundsReady,
   fitToBounds,
   initialZoom = 18
 }: any) => {
@@ -160,11 +168,18 @@ const MapRenderer = ({
           className="h-full w-full z-0"
           zoomControl={true}
           ref={mapRef}
+          whenReady={() => {
+            // Map is ready, layers can now be safely added
+          }}
         >
-          <TileLayer 
-            key={basemap}
-            url={getBasemapUrl(basemap)} 
-          />
+          {basemap && (
+            <TileLayer 
+              key={basemap}
+              url={getBasemapUrl(basemap)} 
+              attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+              zIndex={1}
+            />
+          )}
 
           {/* Dynamic Layer Rendering */}
           {layers?.filter((l: any) => l.visible).map((layer: any) => {
@@ -276,6 +291,16 @@ const MapRenderer = ({
             isVisible={waterwaysLayerVisible} 
             isHighlighted={waterwaysLayerHighlighted} 
             onBoundsReady={onWaterwayBoundsReady}
+          />
+          <LandCoverLayer 
+            isVisible={landCoverLayerVisible} 
+            isHighlighted={landCoverLayerHighlighted} 
+            onBoundsReady={onLandCoverBoundsReady}
+          />
+          <ClimateTypeLayer 
+            isVisible={climateTypeLayerVisible} 
+            isHighlighted={climateTypeLayerHighlighted} 
+            onBoundsReady={onClimateTypeBoundsReady}
           />
 
           <MapEvents 

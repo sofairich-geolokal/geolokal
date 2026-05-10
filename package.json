@@ -39,7 +39,8 @@
     "react-dom": "19.2.3",
     "react-leaflet": "^5.0.0",
     "recharts": "^3.8.0",
-    "shpjs": "^6.2.0"
+    "shpjs": "^6.2.0",
+    "simplify-geojson": "^1.0.5"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",

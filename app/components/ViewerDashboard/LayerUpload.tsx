@@ -114,6 +114,14 @@ export default function LayerUpload() {
     if (saveToDatabase) {
       setIsSaving(true);
       try {
+        // Pre-check size before sending to server
+        const geojsonSize = JSON.stringify(tempGeoJSON).length;
+        const sizeInMB = (geojsonSize / 1000000).toFixed(1);
+        
+        if (geojsonSize > 20000000) { // 20MB client-side check
+          setError(`Layer is very large (${sizeInMB}MB). This may take a while to process and could still fail. Consider splitting into smaller layers.`);
+        }
+
         const payload = {
           layer_name: tempName,
           layer_type: 'vector',
@@ -141,10 +149,16 @@ export default function LayerUpload() {
         const result = await response.json();
 
         if (!response.ok) {
-          setError(`Failed to save layer: ${result.error || 'Unknown error'}. Layer added locally only.`);
+          if (result.error?.includes('too large')) {
+            setError(`Layer too large for server (${sizeInMB}MB). Try splitting into smaller shapefiles or reducing geometry complexity. Layer added locally only.`);
+          } else {
+            setError(`Failed to save layer: ${result.error || 'Unknown error'}. Layer added locally only.`);
+          }
         } else {
           newLayer.id = result.data.id.toString();
           setSuccess(`Layer "${tempName}" saved to database successfully!`);
+          // Trigger a global event to refresh layers in ViewerMap
+          window.dispatchEvent(new CustomEvent('layersUpdated', { detail: { timestamp: Date.now() } }));
         }
       } catch (err: any) {
         console.error('Error saving layer:', err);

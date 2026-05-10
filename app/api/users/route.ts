@@ -11,13 +11,13 @@ export async function GET(request: Request) {
     const lguUserId = headers.get('x-lgu-user-id');
     
     if (superadminAccess === 'true') {
-      // Superadmin direct access - return all active users
+      // Superadmin direct access - return only viewer users (excluding superadmin and LGU)
       const result = await query(`
         SELECT u.username, u.email, u.password_hash, u.role, 
                to_char(u.created_at, 'Mon DD, YYYY HH:MI AM') as created,
                u.created_by
         FROM users u
-        WHERE u.is_active = true
+        WHERE u.is_active = true AND u.role = 'Viewer'
         ORDER BY u.created_at DESC
       `, []);
       

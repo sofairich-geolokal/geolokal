@@ -73,16 +73,33 @@ export default function Cards() {
     isOpen: false,
     title: '',
     endpoint: '',
-    columns: [] as { key: string; label: string; format?: 'date' | 'currency' | undefined }[]
+    columns: [] as { key: string; label: string; format?: 'date' | 'currency' | undefined }[],
+    headers: undefined as HeadersInit | undefined
   });
 
   const openPopup = (title: string) => {
     const config = getPopupConfig(title);
+    
+    // Generate headers for LGU filtering
+    const headers: HeadersInit = { 'Content-Type': 'application/json' };
+    const isSuperadminDirect = localStorage.getItem('superadminDirectAccess') === 'true';
+    const isSuperadminViaLGU = localStorage.getItem('superadminAccess') === 'true';
+    
+    if (isSuperadminDirect) {
+      headers['x-superadmin-direct-access'] = 'true';
+    } else if (isSuperadminViaLGU) {
+      const tempLGUUser = JSON.parse(localStorage.getItem('tempLGUUser') || '{}');
+      if (tempLGUUser.id) {
+        headers['x-lgu-user-id'] = tempLGUUser.id;
+      }
+    }
+    
     setPopupState({
       isOpen: true,
       title,
       endpoint: config.endpoint,
-      columns: config.columns
+      columns: config.columns,
+      headers
     });
   };
 
@@ -153,8 +170,24 @@ export default function Cards() {
         const projectsData = await projectsResponse.json();
         const projectsCount = Array.isArray(projectsData) ? projectsData.length : 0;
 
-        // Fetch users count  
-        const usersResponse = await fetch('/api/users');
+        // Fetch users count with proper LGU filtering
+        const headers: HeadersInit = { 'Content-Type': 'application/json' };
+        
+        // Check if in superadmin access mode (either direct or via LGU user)
+        const isSuperadminDirect = localStorage.getItem('superadminDirectAccess') === 'true';
+        const isSuperadminViaLGU = localStorage.getItem('superadminAccess') === 'true';
+        
+        if (isSuperadminDirect) {
+          headers['x-superadmin-direct-access'] = 'true';
+        } else if (isSuperadminViaLGU) {
+          // For LGU user access, use the LGU user ID from tempLGUUser
+          const tempLGUUser = JSON.parse(localStorage.getItem('tempLGUUser') || '{}');
+          if (tempLGUUser.id) {
+            headers['x-lgu-user-id'] = tempLGUUser.id;
+          }
+        }
+        
+        const usersResponse = await fetch('/api/users', { headers });
         const usersData = await usersResponse.json();
         const usersCount = Array.isArray(usersData) ? usersData.length : 0;
 
@@ -215,7 +248,7 @@ export default function Cards() {
   if (loading) {
     return (
       <div className="p-0 sm:p-6 bg-white h-full">
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 max-w-7xl mx-auto">
+        <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-4 gap-4 max-w-none mx-auto">
           {[...Array(4)].map((_, index) => (
             <div key={index} className="p-6 rounded-3xl shadow-sm border border-gray-100 animate-pulse">
               <div className="h-4 bg-gray-200 rounded mb-2"></div>
@@ -229,7 +262,7 @@ export default function Cards() {
 
   return (
     <div className="p-0 sm:p-6 bg-white h-full">
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 max-w-7xl mx-auto">
+      <div className="grid grid-cols-4 sm:grid-cols-4 md:grid-cols-4 lg:grid-cols-4 xl:grid-cols-4 gap-4 ">
         {stats.map((stat, index) => (
           <motion.div 
             key={index}
@@ -263,6 +296,7 @@ export default function Cards() {
         title={popupState.title}
         endpoint={popupState.endpoint}
         columns={popupState.columns}
+        headers={popupState.headers}
       />
     </div>
   );
