@@ -2,6 +2,9 @@ import { NextResponse } from 'next/server';
 import { query } from '@/lib/db';
 import { getAuthUser } from '@/lib/auth';
 
+// Force dynamic behavior to prevent build-time static generation errors
+export const dynamic = 'force-dynamic';
+
 export async function PUT(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
@@ -12,8 +15,8 @@ export async function PUT(
     
     console.log('User update request:', { userId, username, email, role, location });
     
-    // Get current user data to validate against
-    const currentUserResult = await query('SELECT username, email, role FROM users WHERE id = $1', [userId]);
+    // Get current user data to validate against - Added 'as any'
+    const currentUserResult = await query('SELECT username, email, role FROM users WHERE id = $1', [userId]) as any;
     if (currentUserResult.rows.length === 0) {
       return NextResponse.json({ error: 'User not found' }, { status: 404 });
     }
@@ -47,25 +50,25 @@ export async function PUT(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    // Verify user is superadmin
-    const userResult = await query('SELECT role, username FROM users WHERE id = $1', [loggedInUserId]);
+    // Verify user is superadmin - Added 'as any'
+    const userResult = await query('SELECT role, username FROM users WHERE id = $1', [loggedInUserId]) as any;
     const user = userResult.rows[0];
     
     if (!user || user.role.toLowerCase() !== 'superadmin') {
       return NextResponse.json({ error: 'Access denied. Superadmin role required.' }, { status: 403 });
     }
 
-    // Check if username is already taken by another user (only if username is being updated)
+    // Check if username is already taken by another user - Added 'as any'
     if (username && username !== currentUser.username) {
-      const usernameCheck = await query('SELECT id FROM users WHERE username = $1 AND id != $2', [username, userId]);
+      const usernameCheck = await query('SELECT id FROM users WHERE username = $1 AND id != $2', [username, userId]) as any;
       if (usernameCheck.rows.length > 0) {
         return NextResponse.json({ error: 'Username already exists' }, { status: 409 });
       }
     }
     
-    // Check if email is already taken by another user (only if email is being updated)
+    // Check if email is already taken by another user - Added 'as any'
     if (email && email !== currentUser.email) {
-      const emailCheck = await query('SELECT id FROM users WHERE email = $1 AND id != $2', [email, userId]);
+      const emailCheck = await query('SELECT id FROM users WHERE email = $1 AND id != $2', [email, userId]) as any;
       if (emailCheck.rows.length > 0) {
         return NextResponse.json({ error: 'Email already exists' }, { status: 409 });
       }
@@ -107,10 +110,8 @@ export async function PUT(
       RETURNING id, username, email, role, location, 
                 to_char(created_at, 'Mon DD, YYYY HH:MI AM') as created`;
     
-    console.log('Executing user update with query:', updateQuery);
-    console.log('With params:', updateParams.map((p, i) => i < 2 ? p : '***'));
-
-    const updatedUserResult = await query(updateQuery, updateParams);
+    // Added 'as any' to resolve the 'unknown' result type
+    const updatedUserResult = await query(updateQuery, updateParams) as any;
     
     // Create Audit Log entry
     await query(

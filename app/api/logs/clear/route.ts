@@ -11,7 +11,8 @@ export async function DELETE() {
     }
 
     // Get the logged-in user's LGU ID
-    const userResult = await query('SELECT lgu_id FROM users WHERE id = $1', [userId]);
+    // Added 'as any' to allow access to .rows property
+    const userResult = await query('SELECT lgu_id FROM users WHERE id = $1', [userId]) as any;
     const loggedInUser = userResult.rows[0];
 
     if (!loggedInUser) {
@@ -19,7 +20,8 @@ export async function DELETE() {
     }
 
     // Delete only records from the logged-in user's LGU
-    const result = await query('DELETE FROM audit_logs WHERE lgu_id = $1', [loggedInUser.lgu_id]);
+    // Added 'as any' to allow access to .rowCount property
+    const result = await query('DELETE FROM audit_logs WHERE lgu_id = $1', [loggedInUser.lgu_id]) as any;
     
     console.log(`Deleted ${result.rowCount} audit log records from LGU ${loggedInUser.lgu_id}`);
     

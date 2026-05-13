@@ -180,10 +180,10 @@ const BoundaryLayer: React.FC<BoundaryLayerProps> = ({
     const hasCompleteData = feature.properties && feature.properties.brgy;
 
     return {
-      color: isSelected ? '#3b82f6' : 'rgb(24, 49, 88)', // Blue when selected, dark blue when not
+      color: isSelected ? '#000080' : '#000080', // Always navy blue outline
       weight: isSelected ? 4 : 2,
-      fillColor: '#5432ff99', // Always blue fill color
-      fillOpacity: hasCompleteData ? (isSelected ? 0.2 : 0.15) : 0, // Fill only if data is complete
+      fillColor: '#000080', // Navy blue fill color
+      fillOpacity: 0, // No transparent background - set to 0
       dashArray: isSelected ? '' : '5, 10', // Solid when selected, dotted when not
     };
   };
@@ -225,24 +225,48 @@ const BoundaryLayer: React.FC<BoundaryLayerProps> = ({
         // Highlight on hover
         e.target.setStyle({ 
           weight: 4, 
-          color: '#3b82f6', 
-          fillOpacity: 0.2,
+          color: '#000080', 
+          fillOpacity: 0,
           dashArray: ''
         });
         
-        // Show hover label
+        // Show detailed hover information box
         const props = feature.properties || {};
-        const labelContent = `<div class="bg-white px-2 py-1 rounded shadow-lg border border-gray-200 text-xs font-medium" style="position: absolute; z-index: 1000; pointer-events: none;">
-          <div class="font-bold text-blue-700">${props.brgy || 'Administrative Boundary'}</div>
-          ${props.lotno ? `<div class="text-gray-600">Lot: ${props.lotno}</div>` : ''}
+        const labelContent = `<div class="bg-white px-4 py-3 rounded-lg shadow-xl border border-gray-300 text-xs" style="position: absolute; z-index: 1000; pointer-events: none; min-width: 280px; max-width: 350px;">
+          <div class="border-b border-gray-200 pb-2 mb-2">
+            <div class="font-bold text-blue-800 text-sm mb-1">${props.brgy || 'Administrative Boundary'}</div>
+            <div class="text-gray-500 text-xs">Boundary Information</div>
+          </div>
+          
+          <div class="space-y-1">
+            ${props.brgy ? `<div class="flex justify-between"><span class="font-semibold text-gray-700">Barangay:</span><span class="text-gray-600">${props.brgy}</span></div>` : ''}
+            ${props.lotno ? `<div class="flex justify-between"><span class="font-semibold text-gray-700">Lot Number:</span><span class="text-gray-600">${props.lotno}</span></div>` : ''}
+            ${props.layer ? `<div class="flex justify-between"><span class="font-semibold text-gray-700">Layer:</span><span class="text-gray-600">${props.layer}</span></div>` : ''}
+            ${props.SHAPE_Leng ? `<div class="flex justify-between"><span class="font-semibold text-gray-700">Perimeter:</span><span class="text-gray-600">${props.SHAPE_Leng.toFixed(2)} m</span></div>` : ''}
+            ${props.Shape_Area ? `<div class="flex justify-between"><span class="font-semibold text-gray-700">Area:</span><span class="text-gray-600">${(props.Shape_Area / 10000).toFixed(2)} ha</span></div>` : ''}
+            ${props.Shape_Le_1 ? `<div class="flex justify-between"><span class="font-semibold text-gray-700">Secondary Perimeter:</span><span class="text-gray-600">${props.Shape_Le_1.toFixed(2)} m</span></div>` : ''}
+          </div>
+          
+          <div class="border-t border-gray-200 pt-2 mt-2">
+            <div class="text-gray-500 text-xs space-y-1">
+              <div class="flex justify-between"><span class="font-semibold">Boundary ID:</span><span>${feature.id}</span></div>
+              <div class="flex justify-between"><span class="font-semibold">Geometry:</span><span>${feature.geometry?.type || 'Polygon'}</span></div>
+              ${props.path ? `<div class="flex justify-between"><span class="font-semibold">Source:</span><span class="truncate">${props.path.split('\\').pop()}</span></div>` : ''}
+            </div>
+          </div>
+          
+          <div class="bg-blue-50 px-2 py-1 rounded mt-2 text-xs text-blue-700">
+            <div class="font-semibold">📍 Administrative Boundary</div>
+            <div class="text-xs">Ibaan, Batangas • CRS: PRS92 Zone III</div>
+          </div>
         </div>`;
         
         // Create and show hover label
         const hoverLabel = L.divIcon({
           html: labelContent,
           className: 'boundary-hover-label',
-          iconSize: [200, 40],
-          iconAnchor: [100, -10]
+          iconSize: [350, 200],
+          iconAnchor: [175, -20]
         });
         
         const hoverMarker = L.marker(e.latlng, { icon: hoverLabel, zIndexOffset: 1000 });
@@ -252,6 +276,7 @@ const BoundaryLayer: React.FC<BoundaryLayerProps> = ({
       mouseout: (e: any) => {
         // Reset style on mouseout
         const isSelected = feature.id === selectedBoundaryId;
+       
         e.target.setStyle(adminBoundaryStyle(feature));
         
         // Remove hover label

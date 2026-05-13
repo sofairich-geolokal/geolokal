@@ -2,12 +2,24 @@
 
 import { query } from '@/lib/db';
 
+// Define the interface for the database row structure
+interface ProjectCategoryRow {
+  category_name: string;
+  total_projects: string | number;
+  completed_projects: string | number;
+  in_progress_projects: string | number;
+  pending_projects: string | number;
+  on_hold_projects: string | number;
+  completion_percentage: string | number;
+}
+
 export async function fetchAccessData() {
   const startTime = Date.now();
   
   try {
     // Calculate project progress by category with optimized query
-    const result = await query(`
+    // Asserting the result type to solve the 'unknown' error
+    const result = (await query(`
       SELECT 
         pc.name as category_name,
         COUNT(p.id) as total_projects,
@@ -17,13 +29,13 @@ export async function fetchAccessData() {
         COUNT(CASE WHEN p.status = 'On Hold' THEN 1 END) as on_hold_projects,
         ROUND(
           (COUNT(CASE WHEN p.status = 'Completed' THEN 1 END) * 100.0 / 
-           NULLIF(COUNT(p.id), 0)), 2
+            NULLIF(COUNT(p.id), 0)), 2
         ) as completion_percentage
       FROM project_categories pc 
       LEFT JOIN projects p ON pc.id = p.category_id 
       GROUP BY pc.name 
       ORDER BY completion_percentage DESC
-    `);
+    `)) as { rows: ProjectCategoryRow[] };
 
     const queryTime = Date.now() - startTime;
     console.log(`Project progress query executed in ${queryTime}ms`);

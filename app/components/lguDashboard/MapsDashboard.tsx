@@ -479,6 +479,22 @@ export default function MapsDashboard() {
                       backgroundColor: 'rgba(135, 206, 235, 0.2)'
                     }}></div>
                   )}
+                  {key === 'landCover' && (
+                    <div className="flex items-center space-x-1">
+                      <div className="w-2 h-2 rounded-full" style={{ backgroundColor: '#228B22' }}></div>
+                      <div className="w-2 h-2 rounded-full" style={{ backgroundColor: '#FFD700' }}></div>
+                      <div className="w-2 h-2 rounded-full" style={{ backgroundColor: '#DC143C' }}></div>
+                      <div className="w-2 h-2 rounded-full" style={{ backgroundColor: '#4169E1' }}></div>
+                    </div>
+                  )}
+                  {key === 'climateType' && (
+                    <div className="flex items-center space-x-1">
+                      <div className="w-2 h-2 rounded-full" style={{ backgroundColor: '#FF6B35' }}></div>
+                      <div className="w-2 h-2 rounded-full" style={{ backgroundColor: '#4A90E2' }}></div>
+                      <div className="w-2 h-2 rounded-full" style={{ backgroundColor: '#50C878' }}></div>
+                      <div className="w-2 h-2 rounded-full" style={{ backgroundColor: '#9B59B6' }}></div>
+                    </div>
+                  )}
                   <div className="flex-1">
                     <div className="font-medium text-gray-700 capitalize">{key.replace(/([A-Z])/g, ' $1').trim()}</div>
                   </div>

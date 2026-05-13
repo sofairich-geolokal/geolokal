@@ -4,17 +4,27 @@ import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
 import { query } from '@/lib/db';
 
-export async function login(username: string, password: string, selectedCityId?: string, targetDashboard?: 'lgu' | 'viewer' | 'superadmin') {
+// Interface to fix the 'unknown' type error for the database result
+interface UserLoginResult {
+  id: string | number;
+  username: string;
+  lgu_id: string | null;
+  password_hash: string;
+  role: string;
+}
+
+export async function login(
+  username: string, 
+  password: string, 
+  selectedCityId?: string, 
+  targetDashboard?: 'lgu' | 'viewer' | 'superadmin'
+) {
   try {
-    console.log(' LOGIN ATTEMPT:', { username, selectedCityId, targetDashboard });
-    
-    // 1. Fetch User
-    const result = await query(
-      'SELECT id, username, lgu_id, password_hash, role FROM users WHERE username = $1',
+    // 1. Fetch User (Explicitly typed as UserLoginResult)
+    const result = (await query(
+      'SELECT id, username, lgu_id, password_hash, role FROM users WHERE username = $1 LIMIT 1',
       [username]
-    );
-    
-    console.log(' DB QUERY RESULT:', result.rows);
+    )) as { rows: UserLoginResult[] };
     
     const user = result.rows[0];
     
@@ -23,31 +33,30 @@ export async function login(username: string, password: string, selectedCityId?:
       return { success: false, error: 'User not found.' };
     }
 
-    // 2. Password Comparison (Plain text as per current setup)
+    // 2. Password Comparison (Plain text as per your setup)
     if (user.password_hash !== password) {
       return { success: false, error: 'Incorrect password.' };
     }
 
     // 3. Role validation for target dashboard
     if (targetDashboard) {
-      if (targetDashboard === 'lgu' && user.role.toLowerCase() === 'viewer') {
+      const userRole = user.role.toLowerCase();
+      if (targetDashboard === 'lgu' && userRole === 'viewer') {
         return { success: false, error: 'Viewer role cannot access LGU dashboard.' };
       }
-      if (targetDashboard === 'viewer' && user.role.toLowerCase() !== 'viewer') {
+      if (targetDashboard === 'viewer' && userRole !== 'viewer') {
         return { success: false, error: 'Only viewer role can access viewer dashboard.' };
       }
-      if (targetDashboard === 'superadmin' && user.role.toLowerCase() !== 'superadmin') {
+      if (targetDashboard === 'superadmin' && userRole !== 'superadmin') {
         return { success: false, error: 'Only superadmin role can access superadmin dashboard.' };
       }
     }
 
-    // 4. For viewer role, update their lgu_id and location with selected city if provided
-    // Note: Database uses mixed case roles ('Viewer', 'lgu')
+    // 4. Update viewer info if applicable
     let finalLguId = user.lgu_id;
     let finalLocation = null;
     
     if (user.role.toLowerCase() === 'viewer' && selectedCityId) {
-      // Map city ID to location name
       const locationMap: { [key: string]: string } = {
         '1': 'Ibaan, Batangas',
         '2': 'Teresa, Rizal', 
@@ -64,7 +73,7 @@ export async function login(username: string, password: string, selectedCityId?:
       finalLocation = locationName;
     }
     
-    // 4. Generate Token & Set Cookie
+    // 5. Generate Token & Set Cookie
     const authToken = `token_${user.id}_${Date.now()}`;
     const cookieStore = await cookies();
     
@@ -89,21 +98,13 @@ export async function login(username: string, password: string, selectedCityId?:
 
   } catch (error: any) {
     console.error('SERVER AUTH ERROR:', error.message);
-    console.error('FULL ERROR:', error);
-    
-    // Provide more specific error messages
-    if (error.message.includes('ECONNREFUSED') || error.message.includes('connect')) {
-      return { success: false, error: 'Database connection failed. Please try again later.' };
-    } else if (error.message.includes('password')) {
-      return { success: false, error: 'Authentication failed. Please check your credentials.' };
-    } else if (error.message.includes('user')) {
-      return { success: false, error: 'User not found. Please check your username.' };
-    } else {
-      return { success: false, error: `Login error: ${error.message}` };
-    }
+    return { success: false, error: 'An error occurred during login.' };
   }
 }
 
+/**
+ * Standard logout - Redirects to main page
+ */
 export async function logout() {
   try {
     const cookieStore = await cookies();
@@ -114,6 +115,9 @@ export async function logout() {
   redirect('/');
 }
 
+/**
+ * LGU logout - Now redirects to main page
+ */
 export async function logoutLgu() {
   try {
     const cookieStore = await cookies();
@@ -121,9 +125,12 @@ export async function logoutLgu() {
   } catch (error: any) {
     console.error('LOGOUT ERROR:', error.message);
   }
-  redirect('/lgu-dashboard/(login)');
+  redirect('/');
 }
 
+/**
+ * Superadmin logout - Now redirects to main page
+ */
 export async function logoutSuperadmin() {
   try {
     const cookieStore = await cookies();
@@ -131,5 +138,5 @@ export async function logoutSuperadmin() {
   } catch (error: any) {
     console.error('LOGOUT ERROR:', error.message);
   }
-  redirect('/superadmin/login');
+  redirect('/');
 }

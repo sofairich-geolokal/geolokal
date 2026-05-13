@@ -3,13 +3,13 @@ import { NextResponse } from 'next/server';
 
 export async function GET() {
   try {
-    // Since columns are already JSONB, we select them directly.
-    const result = await query(`SELECT properties, geometry FROM roadnetworks`);
+    // Cast the result to 'any' to resolve the 'unknown' type error
+    const result = (await query(`SELECT properties, geometry FROM roadnetworks`)) as any;
     
     const geojson = {
       type: "FeatureCollection",
-      features: result.rows.map((row, index) => {
-        // Safety check: parse if they come back as strings, otherwise use as objects
+      features: result.rows.map((row: any, index: number) => {
+        // Safety check: parse if they come back as strings, otherwise use as objects        
         const geometry = typeof row.geometry === 'string' 
           ? JSON.parse(row.geometry) 
           : row.geometry;

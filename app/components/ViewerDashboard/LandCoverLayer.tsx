@@ -10,28 +10,30 @@ interface LandCoverLayerProps {
   onBoundsReady?: (bounds: [[number, number], [number, number]]) => void;
 }
 
-// Land cover type colors - unified yellow color as requested
+// Land cover type colors with distinct colors for each type
 const landCoverColors: { [key: string]: string } = {
-  'Open Forest': '#FFFF00',
-  'Brush/Shrubs': '#FFFF00', 
-  'Grassland': '#FFFF00',
-  'Perennial Crop': '#FFFF00',
-  'Annual Crop': '#FFFF00',
-  'Built-up': '#FFFF00',
-  'Open/Barren': '#FFFF00',
-  'Fishpond': '#FFFF00',
-  'Inland Water': '#FFFF00',
-  'Mangrove Forest': '#FFFF00',
+  'Closed Forest': '#228B22',      // Forest Green
+  'Open Forest': '#32CD32',        // Lime Green  
+  'Mangrove Forest': '#006400',    // Dark Green
+  'Brush/Shrubs': '#8FBC8F',       // Dark Sea Green
+  'Grassland': '#90EE90',          // Light Green
+  'Perennial Crop': '#FFD700',     // Gold
+  'Annual Crop': '#FFA500',        // Orange
+  'Built-up': '#DC143C',           // Crimson
+  'Open/Barren': '#DEB887',        // Burlywood
+  'Marshland/Swamp': '#4682B4',    // Steel Blue
+  'Fishpond': '#00CED1',           // Dark Turquoise
+  'Inland Water': '#4169E1',       // Royal Blue
   // Fallback colors for legacy classifications
-  'Forest': '#FFFF00',
-  'Agriculture': '#FFFF00',
-  'Urban': '#FFFF00',
-  'Water': '#FFFF00',
-  'Wetland': '#FFFF00',
-  'Barren': '#FFFF00',
-  'Mangrove': '#FFFF00',
-  'Shrubland': '#FFFF00',
-  'default': '#FFFF00'
+  'Forest': '#228B22',
+  'Agriculture': '#FFD700',
+  'Urban': '#DC143C',
+  'Water': '#4169E1',
+  'Wetland': '#4682B4',
+  'Barren': '#DEB887',
+  'Mangrove': '#006400',
+  'Shrubland': '#8FBC8F',
+  'default': '#808080'
 };
 
 // Land cover style function
@@ -48,7 +50,7 @@ const getLandCoverStyle = (feature: any) => {
     weight: 1,
     opacity: 0.8,
     color: '#000000',
-    fillOpacity: 0.7,
+    fillOpacity: 0, // No background fill - borders only
     className: 'land-cover-polygon'
   };
 };

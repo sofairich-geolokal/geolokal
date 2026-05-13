@@ -3,7 +3,8 @@ import { query } from '@/lib/db';
 
 export async function GET() {
   try {
-    const result = await query(`
+    // Added "as any" to fix the 'result' is of type 'unknown' build error
+    const result = (await query(`
       SELECT 
         indicator_code,
         indicator_value,
@@ -12,7 +13,7 @@ export async function GET() {
       FROM cbms_indicators 
       ORDER BY updated_at DESC
       LIMIT 20
-    `);
+    `)) as any;
     
     return NextResponse.json(result.rows);
   } catch (error: any) {

@@ -2,6 +2,13 @@ import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 import { query } from '@/lib/db';
 
+// Define the shape of your database result to fix the "unknown" type error
+interface UserQueryResult {
+  rows: Array<{
+    role?: string;
+  }>;
+}
+
 // List of paths that don't require authentication
 const publicPaths = [
   '/',
@@ -14,7 +21,6 @@ const publicPaths = [
   '/_next',
   '/favicon.ico',
   '/api',
-  // GeoNode public paths
   '/geoserver',
   '/geonode',
 ];
@@ -25,12 +31,14 @@ const geonodePaths = [
   '/api/geoserver',
 ];
 
-async function getUserRole(userId: string) {
+async function getUserRole(userId: string): Promise<string | null> {
   try {
-    const result = await query(
+    // Cast the result to UserQueryResult to satisfy TypeScript
+    const result = (await query(
       'SELECT role FROM users WHERE id = $1',
       [userId]
-    );
+    )) as UserQueryResult;
+
     return result.rows[0]?.role?.toLowerCase() || null;
   } catch (error) {
     console.error('Error fetching user role:', error);
@@ -42,7 +50,7 @@ async function proxyToGeonode(request: NextRequest, pathname: string) {
   const geonodeUrl = process.env.GEONODE_URL || 'http://localhost:8000';
   const geoserverUrl = process.env.GEOSERVER_URL || 'http://localhost:8080/geoserver';
   
-  let targetUrl;
+  let targetUrl: string;
   if (pathname.startsWith('/geoserver/')) {
     targetUrl = `${geoserverUrl}${pathname.replace('/geoserver', '')}`;
   } else {
@@ -50,10 +58,8 @@ async function proxyToGeonode(request: NextRequest, pathname: string) {
   }
   
   const url = new URL(request.url);
-  const searchParams = url.searchParams;
-  
   const proxyUrl = new URL(targetUrl);
-  proxyUrl.search = searchParams.toString();
+  proxyUrl.search = url.searchParams.toString();
   
   try {
     const response = await fetch(proxyUrl.toString(), {
@@ -65,6 +71,7 @@ async function proxyToGeonode(request: NextRequest, pathname: string) {
         'X-Forwarded-Proto': request.nextUrl.protocol,
         'X-Forwarded-Host': request.nextUrl.host,
       },
+      // Middleware requires body to be handled carefully
       body: request.method !== 'GET' && request.method !== 'HEAD' ? await request.text() : undefined,
     });
     
@@ -73,7 +80,6 @@ async function proxyToGeonode(request: NextRequest, pathname: string) {
       responseHeaders.set(key, value);
     });
     
-    // Add CORS headers for geoserver
     if (pathname.startsWith('/geoserver/')) {
       responseHeaders.set('Access-Control-Allow-Origin', '*');
       responseHeaders.set('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
@@ -91,95 +97,77 @@ async function proxyToGeonode(request: NextRequest, pathname: string) {
   }
 }
 
+/**
+ * The main export must be named 'proxy' (if your file is proxy.ts) 
+ * or exported as default.
+ */
 export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
-  // Handle GeoNode proxy requests first
+  // 1. Handle GeoNode proxy requests first
   if (geonodePaths.some(path => pathname.startsWith(path))) {
     return await proxyToGeonode(request, pathname);
   }
 
-  // Check if the path is public
-  if (publicPaths.some(path => pathname.startsWith(path))) {
+  // 2. Check if the path is public
+  if (publicPaths.some(path => pathname === path || pathname.startsWith(path))) {
     return NextResponse.next();
   }
 
-  // Check for auth token
+  // 3. Check for auth token
   const authToken = request.cookies.get('auth_token')?.value;
 
-  // If no auth token and trying to access protected route, redirect to appropriate login
-  if (!authToken) {
-    // Determine which login page to redirect to based on the requested path
+  const handleAuthRedirect = () => {
     if (pathname.startsWith('/viewerDashboard')) {
-      const loginUrl = new URL('/viewerDashboard/viewerlogin', request.url);
-      return NextResponse.redirect(loginUrl);
+      return NextResponse.redirect(new URL('/viewerDashboard/viewerlogin', request.url));
     } else if (pathname.startsWith('/superadmin')) {
-      const loginUrl = new URL('/superadmin/login', request.url);
-      return NextResponse.redirect(loginUrl);
+      return NextResponse.redirect(new URL('/superadmin/login', request.url));
     } else {
-      const loginUrl = new URL('/lgu-login', request.url);
-      return NextResponse.redirect(loginUrl);
+      return NextResponse.redirect(new URL('/lgu-login', request.url));
     }
+  };
+
+  if (!authToken) {
+    return handleAuthRedirect();
   }
 
-  // Extract user ID from token
+  // 4. Extract user ID from token
   const tokenParts = authToken.split('_');
   if (tokenParts.length !== 3 || tokenParts[0] !== 'token') {
-    // Invalid token format, redirect to appropriate login
-    if (pathname.startsWith('/viewerDashboard')) {
-      const loginUrl = new URL('/viewerDashboard/viewerlogin', request.url);
-      return NextResponse.redirect(loginUrl);
-    } else if (pathname.startsWith('/superadmin')) {
-      const loginUrl = new URL('/superadmin/login', request.url);
-      return NextResponse.redirect(loginUrl);
-    } else {
-      const loginUrl = new URL('/lgu-login', request.url);
-      return NextResponse.redirect(loginUrl);
-    }
+    return handleAuthRedirect();
   }
 
   const userId = tokenParts[1];
   const userRole = await getUserRole(userId);
 
-  // Role-based access control
+  // 5. Role-based access control
   if (pathname.startsWith('/lgu-dashboard')) {
-    // Only allow LGU users (not superadmin or viewer)
     if (userRole !== 'lgu') {
-      const loginUrl = new URL('/lgu-login', request.url);
-      return NextResponse.redirect(loginUrl);
+      return NextResponse.redirect(new URL('/lgu-login', request.url));
     }
   } else if (pathname.startsWith('/superadmin')) {
-    // Only allow superadmin users
-    if (userRole !== 'superadmin') {
-      const loginUrl = new URL('/superadmin/login', request.url);
-      return NextResponse.redirect(loginUrl);
+    if (userRole !== 'superadmin' && !pathname.endsWith('/login')) {
+      return NextResponse.redirect(new URL('/superadmin/login', request.url));
     }
   } else if (pathname.startsWith('/viewerDashboard')) {
-    // Only allow viewer users
-    if (userRole !== 'viewer') {
-      const loginUrl = new URL('/viewerDashboard/viewerlogin', request.url);
-      return NextResponse.redirect(loginUrl);
+    const isLoginPage = pathname.includes('viewerlogin') || pathname.includes('location-selection');
+    if (userRole !== 'viewer' && !isLoginPage) {
+      return NextResponse.redirect(new URL('/viewerDashboard/viewerlogin', request.url));
     }
   }
 
-  // Allow access to protected routes
   return NextResponse.next();
 }
 
+// Ensure the config is exported correctly
 export const config = {
   matcher: [
     /*
      * Match all request paths except for the ones starting with:
-     * - api (API routes)
      * - _next/static (static files)
      * - _next/image (image optimization files)
      * - favicon.ico (favicon file)
-     * - lgu-login (login page)
-     * - superadmin/login (superadmin login page)
-     * - viewerDashboard/viewerlogin (viewer login page)
-     * - viewerDashboard/location-selection (city selection page)
-     * - / (root page)
      */
-    '/((?!api|_next/static|_next/image|favicon.ico|lgu-login|superadmin/login|viewerDashboard/viewerlogin|viewerDashboard/location-selection|$).*)/',
+    '/((?!_next/static|_next/image|favicon.ico).*)',
   ],
 };

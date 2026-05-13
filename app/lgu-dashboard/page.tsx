@@ -1,6 +1,5 @@
 import { redirect } from 'next/navigation';
 import { getAuthUser, getUserData } from '@/lib/auth';
-import Sidebar from '@/app/components/lguDashboard/Sidebar';
 
 export default async function LGUDashboard() {
   // Check if user is authenticated
@@ -16,10 +15,12 @@ export default async function LGUDashboard() {
     }
   }
   
-  // For non-superadmin users, show normal dashboard
+  // For non-superadmin users, show welcome message
+  // The layout already provides the sidebar structure
   return (
-    <div className="flex">
-      <Sidebar />
+    <div className="p-8">
+      <h1 className="text-3xl font-bold text-gray-800 mb-4">Welcome to LGU Dashboard</h1>
+      <p className="text-gray-600">Select a menu item from the sidebar to get started.</p>
     </div>
   );
 }

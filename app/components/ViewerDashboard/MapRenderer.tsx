@@ -10,6 +10,7 @@ import 'leaflet/dist/leaflet.css';
 import BoundaryLayer from './BoundaryLayer';
 import RoadNetworksLayer from './RoadNetworksLayer';
 import WaterwaysLayer from './WaterwaysLayer';
+import ParcelLotsLayer from './ParcelLotsLayer';
 import LandCoverLayer from './LandCoverLayer';
 import ClimateTypeLayer from './ClimateTypeLayer';
 
@@ -42,15 +43,19 @@ interface DemographicData {
 
 // Helper function to calculate area in Sq Km
 const calculateArea = (latlngs: number[][]) => {
-  const closedCoords = [...latlngs];
-  if (closedCoords.length > 0 && 
-      (closedCoords[0][0] !== closedCoords[closedCoords.length - 1][0] || 
-       closedCoords[0][1] !== closedCoords[closedCoords.length - 1][1])) {
-    closedCoords.push(closedCoords[0]);
+  try {
+    const closedCoords = [...latlngs];
+    if (closedCoords.length > 0 && 
+        (closedCoords[0][0] !== closedCoords[closedCoords.length - 1][0] || 
+         closedCoords[0][1] !== closedCoords[closedCoords.length - 1][1])) {
+      closedCoords.push(closedCoords[0]);
+    }
+    const poly = polygon([closedCoords]);
+    const calculatedArea = area(poly);
+    return (calculatedArea / 1000000).toFixed(2);
+  } catch (e) {
+    return "0.00";
   }
-  const poly = polygon([closedCoords]);
-  const calculatedArea = area(poly);
-  return (calculatedArea / 1000000).toFixed(2);
 };
 
 /**
@@ -69,11 +74,6 @@ const MapEvents = ({ mapView, onMapClick, isMeasuring, fitToBounds }: any) => {
   // Auto-zoom to dynamic layer boundaries
   useEffect(() => {
     if (fitToBounds && map) {
-      /**
-       * PADDING ADJUSTMENT:
-       * Setting a higher top padding (e.g., 100) helps center the area 
-       * vertically if it's currently appearing too high.
-       */
       map.fitBounds(fitToBounds, { 
         padding: [100, 50], 
         animate: true, 
@@ -109,15 +109,18 @@ const MapRenderer = ({
   roadNetworkLayerHighlighted,
   waterwaysLayerVisible,
   waterwaysLayerHighlighted,
-  landCoverLayerVisible,
+  // FIXED: Destructured to match exactly what parent (GeoPortalMap) passes
+  landCoverVisible, 
   landCoverLayerHighlighted,
-  climateTypeLayerVisible,
+  climateTypeVisible,
   climateTypeLayerHighlighted,
+  parcelLotsVisible,
   onBoundaryBoundsReady,
   onRoadBoundsReady,
   onWaterwayBoundsReady,
   onLandCoverBoundsReady,
   onClimateTypeBoundsReady,
+  onParcelLotsBoundsReady,
   fitToBounds,
   initialZoom = 18
 }: any) => {
@@ -168,20 +171,17 @@ const MapRenderer = ({
           className="h-full w-full z-0"
           zoomControl={true}
           ref={mapRef}
-          whenReady={() => {
-            // Map is ready, layers can now be safely added
-          }}
         >
           {basemap && (
             <TileLayer 
               key={basemap}
               url={getBasemapUrl(basemap)} 
-              attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+              attribution='&copy; OpenStreetMap contributors'
               zIndex={1}
             />
           )}
 
-          {/* Dynamic Layer Rendering */}
+          {/* User-uploaded Dynamic Layers */}
           {layers?.filter((l: any) => l.visible).map((layer: any) => {
             const style = layer.style_config ? {
               color: layer.style_config.color || '#0ea5e9',
@@ -191,7 +191,7 @@ const MapRenderer = ({
               opacity: layer.style_config.opacity || 1,
             } : {
               color: layer.layer_type === 'boundary' ? '#3b82f6' : 
-                     layer.layer_type === 'road' ? '#16a34a' : '#0ea5e9',
+                      layer.layer_type === 'road' ? '#16a34a' : '#0ea5e9',
               fillColor: layer.layer_type === 'road' ? 'transparent' : '#dbeafe',
               fillOpacity: 0.15,
               weight: 3,
@@ -227,8 +227,8 @@ const MapRenderer = ({
                 key={layer.id} 
                 data={layer.geometry} 
                 style={style}
-                onEachFeature={(feature: any, layer: any) => {
-                  layer.on({
+                onEachFeature={(feature: any, layerObj: any) => {
+                    layerObj.on({
                     mouseover: (e: any) => {
                       if (e.target._hoverMarker) {
                         e.target._map.removeLayer(e.target._hoverMarker);
@@ -277,6 +277,7 @@ const MapRenderer = ({
             );
           })}
 
+          {/* LGU Infrastructure Layers */}
           <BoundaryLayer 
             isVisible={boundaryLayerVisible} 
             isHighlighted={boundaryLayerHighlighted} 
@@ -292,15 +293,21 @@ const MapRenderer = ({
             isHighlighted={waterwaysLayerHighlighted} 
             onBoundsReady={onWaterwayBoundsReady}
           />
+
+          {/* Environmental & Parcel Layers - UPDATED PROPS */}
           <LandCoverLayer 
-            isVisible={landCoverLayerVisible} 
+            isVisible={landCoverVisible} 
             isHighlighted={landCoverLayerHighlighted} 
             onBoundsReady={onLandCoverBoundsReady}
           />
           <ClimateTypeLayer 
-            isVisible={climateTypeLayerVisible} 
+            isVisible={climateTypeVisible} 
             isHighlighted={climateTypeLayerHighlighted} 
             onBoundsReady={onClimateTypeBoundsReady}
+          />
+          <ParcelLotsLayer 
+            isVisible={parcelLotsVisible}
+            onBoundsReady={onParcelLotsBoundsReady}
           />
 
           <MapEvents 

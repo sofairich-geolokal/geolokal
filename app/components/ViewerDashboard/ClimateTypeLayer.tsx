@@ -43,7 +43,7 @@ export default function ClimateTypeLayer({ isVisible, isHighlighted = false, onB
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Fetch climate type data from ArcGIS API
+  // Fetch climate type data from PAGASA ArcGIS API
   const fetchClimateData = async () => {
     if (!isVisible) return; // Don't fetch if layer is not visible
     
@@ -51,74 +51,81 @@ export default function ClimateTypeLayer({ isVisible, isHighlighted = false, onB
     setError(null);
     
     try {
-      // For now, create mock climate data based on PAGASA classification
-      // TODO: Replace with actual ArcGIS service URL when available
-      console.log('ClimateTypeLayer: Creating mock climate data for Philippines');
+      // PAGASA ArcGIS REST API endpoint for Climate Type
+      const arcgisUrl = 'https://services3.arcgis.com/PDfv0I40sqpcaZxV/ArcGIS/rest/services/Philippine_ClimateType/FeatureServer/0/query';
       
-      // Mock climate zones for Philippines (simplified representation)
-      const mockClimateData: GeoJSON.FeatureCollection = {
+      // Build query parameters
+      const params = new URLSearchParams({
+        f: 'json',
+        where: '1=1', // Get all features
+        outFields: '*', // Get all fields
+        returnGeometry: 'true',
+        outSR: '4326', // WGS84 coordinate system
+        resultRecordCount: '1000' // Limit features for performance
+      });
+      
+      console.log('Fetching climate type data from PAGASA ArcGIS API...');
+      const response = await fetch(`${arcgisUrl}?${params.toString()}`, {
+        headers: {
+          'User-Agent': 'GeoLokal/1.0'
+        }
+      });
+      
+      if (!response.ok) {
+        throw new Error(`PAGASA API error: ${response.status} ${response.statusText}`);
+      }
+      
+      const arcgisData = await response.json();
+      console.log('PAGASA response received:', arcgisData);
+      
+      // Check for ArcGIS API errors
+      if (arcgisData.error) {
+        throw new Error(`PAGASA API Error: ${arcgisData.error.message || JSON.stringify(arcgisData.error)}`);
+      }
+      
+      // Transform ArcGIS features to GeoJSON format
+      const geoJsonData: GeoJSON.FeatureCollection = {
         type: 'FeatureCollection',
-        features: [
-          {
-            type: 'Feature',
-            properties: {
-              CLIMATE_TYPE: 'Type I',
-              DESCRIPTION: 'Two pronounced seasons - dry season from November to April',
-              REGION: 'Luzon',
-              PROVINCE: 'Ilocos Norte'
-            },
-            geometry: {
+        features: arcgisData.features?.map((feature: any) => {
+          const { attributes, geometry } = feature;
+          
+          // Convert ESRI polygon geometry to GeoJSON if needed
+          let geoJsonGeometry = geometry;
+          if (geometry && geometry.rings) {
+            // ESRI rings format: first ring is exterior, subsequent rings are holes
+            const coordinates = geometry.rings.map((ring: number[][]) => 
+              ring.map(coord => [coord[0], coord[1]]) // [longitude, latitude]
+            );
+            geoJsonGeometry = {
               type: 'Polygon',
-              coordinates: [[[120.5, 18.2], [120.8, 18.2], [120.8, 18.5], [120.5, 18.5], [120.5, 18.2]]]
-            }
-          },
-          {
-            type: 'Feature',
-            properties: {
-              CLIMATE_TYPE: 'Type II',
-              DESCRIPTION: 'No dry season, very pronounced maximum rain period from November to January',
-              REGION: 'Visayas',
-              PROVINCE: 'Eastern Samar'
-            },
-            geometry: {
-              type: 'Polygon',
-              coordinates: [[[125.3, 11.5], [125.6, 11.5], [125.6, 11.8], [125.3, 11.8], [125.3, 11.5]]]
-            }
-          },
-          {
-            type: 'Feature',
-            properties: {
-              CLIMATE_TYPE: 'Type III',
-              DESCRIPTION: 'Seasons not very pronounced, relatively dry from November to April',
-              REGION: 'Luzon',
-              PROVINCE: 'Cavite'
-            },
-            geometry: {
-              type: 'Polygon',
-              coordinates: [[[120.8, 14.2], [121.1, 14.2], [121.1, 14.5], [120.8, 14.5], [120.8, 14.2]]]
-            }
-          },
-          {
-            type: 'Feature',
-            properties: {
-              CLIMATE_TYPE: 'Type IV',
-              DESCRIPTION: 'Rainfall more or less evenly distributed throughout the year',
-              REGION: 'Mindanao',
-              PROVINCE: 'Davao Oriental'
-            },
-            geometry: {
-              type: 'Polygon',
-              coordinates: [[[126.2, 7.1], [126.5, 7.1], [126.5, 7.4], [126.2, 7.4], [126.2, 7.1]]]
-            }
+              coordinates: coordinates
+            };
           }
-        ]
+          
+          return {
+            type: 'Feature',
+            geometry: geoJsonGeometry,
+            properties: {
+              ...attributes,
+              // Keep original ArcGIS attributes
+              OBJECTID: attributes.OBJECTID,
+              CLIMATE_TYPE: attributes.CLIMATE_TYPE || attributes.Type || 'Unknown',
+              DESCRIPTION: attributes.DESCRIPTION || attributes.Description || '',
+              REGION: attributes.REGION || attributes.Region || '',
+              PROVINCE: attributes.PROVINCE || attributes.Province || '',
+              Shape__Area: attributes.Shape__Area,
+              Shape__Length: attributes.Shape__Length
+            }
+          };
+        }) || []
       };
       
-      setClimateData(mockClimateData);
+      console.log('Setting climate type data with', geoJsonData.features?.length, 'features');
+      setClimateData(geoJsonData);
       
       // Notify parent component about bounds if data is available
-      if (onBoundsReady && mockClimateData.features && mockClimateData.features.length > 0) {
-        const bounds = L.geoJSON(mockClimateData).getBounds();
+      if (onBoundsReady && geoJsonData.features && geoJsonData.features.length > 0) {
+        const bounds = L.geoJSON(geoJsonData).getBounds();
         if (bounds.isValid()) {
           onBoundsReady([
             [bounds.getSouth(), bounds.getWest()],

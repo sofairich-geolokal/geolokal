@@ -9,7 +9,9 @@ export async function GET() {
       ORDER BY name;
     `;
     
-    const result = await query(sql);
+    // Fix: cast 'result' to 'any' to access the .rows property
+    const result = await query(sql) as any;
+    
     return NextResponse.json(result.rows || []); 
   } catch (error: any) {
     console.error("Fetch Categories Error:", error.message);

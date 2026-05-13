@@ -10,14 +10,15 @@ export async function GET() {
       WHERE ml.is_active = true
     `;
     
-    const countResult = await query(countSql);
+    // Cast to any to resolve the 'unknown' type error
+    const countResult = (await query(countSql)) as any;
     const total = countResult.rows[0]?.total || 0;
     
     if (total === 0) {
       return NextResponse.json([]);
     }
 
-    // Get data grouped by layer types for the pie chart (since category_id doesn't exist)
+    // Get data grouped by layer types for the pie chart
     const sql = `
       SELECT 
         COALESCE(ml.layer_type, 'Unknown') AS label,
@@ -34,10 +35,11 @@ export async function GET() {
       ORDER BY value DESC;
     `;
 
-    const result = await query(sql, [total]);
+    // Cast to any to resolve the 'unknown' type error
+    const result = (await query(sql, [total])) as any;
     
     // Format the data to match the expected interface
-    const formattedData = result.rows.map(row => ({
+    const formattedData = result.rows.map((row: any) => ({
       label: row.label,
       value: parseInt(row.value),
       percentage: parseFloat(row.percentage),

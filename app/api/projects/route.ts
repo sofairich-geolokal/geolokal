@@ -23,7 +23,7 @@ JOIN city_muni_master m ON p.lgu_id = m.id
 ORDER BY c.name, p.project_name;
     `;
     
-    const result = await query(sql);
+    const result = (await query(sql)) as any;
     return NextResponse.json(result.rows || []); 
   } catch (error: any) {
     console.error("Fetch Projects Error:", error.message);
@@ -60,7 +60,7 @@ export async function POST(request: NextRequest) {
 
     const values = [
       body.title,
-      body.categoryId || 1, // References project_categories [cite: 112]
+      body.categoryId || 1, // References project_categories
       body.description || '',
       body.dataTypes || 'Vector (SHP)',
       body.lguId || 1,      // References city_muni_master 
@@ -71,7 +71,7 @@ export async function POST(request: NextRequest) {
       body.longitude || 0
     ];
 
-    const result = await query(insertSql, values);
+    const result = (await query(insertSql, values)) as any;
     const newProject = result.rows[0];
 
     return NextResponse.json({
@@ -133,7 +133,7 @@ export async function PUT(request: NextRequest) {
       id
     ];
 
-    const result = await query(updateSql, values);
+    const result = (await query(updateSql, values)) as any;
 
     if (result.rowCount === 0) {
       return NextResponse.json({ error: 'Project not found' }, { status: 404 });

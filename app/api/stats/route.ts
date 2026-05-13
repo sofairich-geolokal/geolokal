@@ -6,8 +6,9 @@ export async function GET() {
     const now = new Date();
     const thirtyDaysAgo = new Date(now.getTime() - (30 * 24 * 60 * 60 * 1000));
 
-    // 1. Fetch Current Counts (Using your actual column 'is_active')
-    const [projectsResult, mapLayersResult, usersResult, logsResult] = await Promise.all([
+    // 1. Fetch Current Counts
+    // Cast the entire array as any[] to handle the results easily
+    const [projectsResult, mapLayersResult, usersResult, logsResult] = (await Promise.all([
       query('SELECT COUNT(*) as count FROM projects'),
       query(`
       SELECT COUNT(*) as count 
@@ -15,9 +16,8 @@ export async function GET() {
       WHERE ml.is_active = true
     `),
       query('SELECT COUNT(*) as count FROM users WHERE is_active = true'),
-      // Assuming 'action' or 'status' in audit_logs based on previous errors
       query("SELECT COUNT(*) as count FROM audit_logs") 
-    ]);
+    ])) as any[];
 
     const projectsCount = parseInt(projectsResult.rows[0]?.count || '0');
     const mapLayersCount = parseInt(mapLayersResult.rows[0]?.count || '0');
@@ -25,10 +25,10 @@ export async function GET() {
     const totalLogs = parseInt(logsResult.rows[0]?.count || '1'); // Avoid division by zero
 
     // 2. Fetch Historical Counts (for growth calculation)
-    const [oldProjectsResult, oldMapLayersResult] = await Promise.all([
+    const [oldProjectsResult, oldMapLayersResult] = (await Promise.all([
       query('SELECT COUNT(*) as count FROM projects WHERE created_at < $1', [thirtyDaysAgo]),
       query('SELECT COUNT(*) as count FROM map_layers WHERE created_at < $1', [thirtyDaysAgo])
-    ]);
+    ])) as any[];
 
     const oldProjectsCount = parseInt(oldProjectsResult.rows[0]?.count || '0');
     const oldMapLayersCount = parseInt(oldMapLayersResult.rows[0]?.count || '0');
@@ -79,11 +79,10 @@ export async function GET() {
 
     return NextResponse.json(dynamicData);
   }
-   catch (error: any) {
+  catch (error: any) {
     console.error("API Error in stats/sources:", error.message);
     
     // Return an empty array [] so the frontend doesn't show an error
     return NextResponse.json([]); 
   }
-  
 }

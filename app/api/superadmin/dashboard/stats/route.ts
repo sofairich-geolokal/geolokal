@@ -2,6 +2,9 @@ import { NextRequest, NextResponse } from 'next/server';
 import { query } from '@/lib/db';
 import { getAuthUser } from '@/lib/auth';
 
+// Ensures the route is not statically optimized during npm run build
+export const dynamic = 'force-dynamic';
+
 export async function GET(request: NextRequest) {
   try {
     console.log('Dashboard API: Starting request...');
@@ -15,8 +18,8 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    // Verify user is superadmin
-    const authResult = await query('SELECT role FROM users WHERE id = $1', [userId]);
+    // Verify user is superadmin - Added type assertion
+    const authResult = await query('SELECT role FROM users WHERE id = $1', [userId]) as any;
     const user = authResult.rows[0];
     
     if (!user || user.role.toLowerCase() !== 'superadmin') {
@@ -24,7 +27,6 @@ export async function GET(request: NextRequest) {
     }
 
     console.log('Superadmin Dashboard API: Fetching comprehensive stats...');
-    console.log('User ID:', userId);
     
     // Get user statistics
     const userStats = await query(`
@@ -35,7 +37,7 @@ export async function GET(request: NextRequest) {
         COUNT(CASE WHEN role ILIKE 'viewer' THEN 1 END) as viewer_count,
         COUNT(CASE WHEN created_at > CURRENT_DATE - INTERVAL '30 days' THEN 1 END) as new_users_30_days
       FROM users
-    `);
+    `) as any;
 
     // Get LGU statistics
     const lguStats = await query(`
@@ -44,7 +46,7 @@ export async function GET(request: NextRequest) {
         COUNT(DISTINCT CASE WHEN role ILIKE 'lgu' THEN lgu_id END) as active_lgus
       FROM users
       WHERE lgu_id IS NOT NULL
-    `);
+    `) as any;
 
     // Get project statistics
     const projectStats = await query(`
@@ -54,7 +56,7 @@ export async function GET(request: NextRequest) {
         COUNT(CASE WHEN status = 'completed' THEN 1 END) as completed_projects,
         COUNT(CASE WHEN created_at > CURRENT_DATE - INTERVAL '30 days' THEN 1 END) as new_projects_30_days
       FROM projects
-    `);
+    `) as any;
 
     // Get map statistics
     const mapStats = await query(`
@@ -63,7 +65,7 @@ export async function GET(request: NextRequest) {
         COUNT(CASE WHEN created_at > CURRENT_DATE - INTERVAL '30 days' THEN 1 END) as new_maps_30_days,
         COUNT(DISTINCT source) as unique_categories
       FROM map_layers
-    `);
+    `) as any;
 
     // Get audit log statistics
     const auditStats = await query(`
@@ -72,7 +74,7 @@ export async function GET(request: NextRequest) {
         COUNT(CASE WHEN timestamp > CURRENT_DATE - INTERVAL '7 days' THEN 1 END) as activities_7_days,
         COUNT(CASE WHEN timestamp > CURRENT_DATE - INTERVAL '1 day' THEN 1 END) as activities_today
       FROM audit_logs
-    `);
+    `) as any;
 
     // Get data export statistics
     const exportStats = await query(`
@@ -80,16 +82,16 @@ export async function GET(request: NextRequest) {
         COUNT(*) as total_exports,
         COUNT(CASE WHEN created_at > CURRENT_DATE - INTERVAL '30 days' THEN 1 END) as exports_30_days
       FROM download_requests
-    `);
+    `) as any;
 
-    // Get system storage statistics (if available)
+    // Get system storage statistics
     const storageStats = await query(`
       SELECT 
         COALESCE(SUM(pg_column_size(geom)), 0) as total_geometry_size,
         COALESCE(SUM(pg_column_size(metadata)), 0) as total_data_size
       FROM map_layers
       WHERE geom IS NOT NULL OR metadata IS NOT NULL
-    `);
+    `) as any;
 
     // Get recent activities for dashboard
     const recentActivities = await query(`
@@ -101,7 +103,7 @@ export async function GET(request: NextRequest) {
       FROM audit_logs
       ORDER BY timestamp DESC
       LIMIT 10
-    `);
+    `) as any;
 
     // Get user growth over last 6 months
     const userGrowth = await query(`
@@ -112,7 +114,7 @@ export async function GET(request: NextRequest) {
       WHERE created_at > CURRENT_DATE - INTERVAL '6 months'
       GROUP BY DATE_TRUNC('month', created_at)
       ORDER BY month
-    `);
+    `) as any;
 
     // Get source types for chart
     const sourceTypes = await query(`
@@ -129,7 +131,7 @@ export async function GET(request: NextRequest) {
       FROM map_layers
       WHERE layer_type IS NOT NULL
       GROUP BY layer_type
-    `);
+    `) as any;
 
     // Get project data for chart
     const projectData = await query(`
@@ -142,7 +144,7 @@ export async function GET(request: NextRequest) {
       WHERE created_at > CURRENT_DATE - INTERVAL '6 months'
       GROUP BY DATE_TRUNC('month', created_at)
       ORDER BY month
-    `);
+    `) as any;
 
     const userStatsResult = userStats.rows[0] || {};
     const lguResult = lguStats.rows[0] || {};
@@ -167,8 +169,6 @@ export async function GET(request: NextRequest) {
     };
     
     console.log('Dashboard API: Successfully fetched stats');
-    console.log('Response data keys:', Object.keys(responseData));
-    
     return NextResponse.json(responseData);
   } catch (error: unknown) {
     console.error('Superadmin Dashboard stats error:', error);
@@ -180,7 +180,6 @@ export async function GET(request: NextRequest) {
       code: (error as any)?.code || 'No code'
     };
     
-    console.error('Error details:', errorDetails);
     return NextResponse.json(
       { error: 'Failed to fetch superadmin dashboard statistics', details: errorDetails.message },
       { status: 500 }

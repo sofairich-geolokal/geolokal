@@ -13,7 +13,8 @@ export async function GET() {
       ORDER BY project_count DESC, pc.name
     `;
     
-    const result = await query(sql);
+    // Fix: Cast result to 'any' to access .rows
+    const result = await query(sql) as any;
     
     // Define colors for categories
     const categoryColors: { [key: string]: string } = {
@@ -29,7 +30,8 @@ export async function GET() {
     };
 
     // Map the DB results to frontend interface
-    const mappedData = result.rows.map((row) => ({
+    // result.rows is now accessible due to the cast above
+    const mappedData = result.rows.map((row: any) => ({
       category: row.category,
       count: Number(row.project_count) || 0,
       color: categoryColors[row.category] || "#3b82f6",

@@ -18,10 +18,11 @@ export async function GET(request: NextRequest) {
     // Get LGU user data to determine which LGU to fetch data for
     let lguId;
     if (lguUserId) {
-      const userResult = await query(
+      // Added "as any" to fix 'result' is of type 'unknown'
+      const userResult = (await query(
         'SELECT lgu_id FROM users WHERE id = $1 AND role = $2',
         [lguUserId, 'lgu']
-      );
+      )) as any;
       lguId = userResult.rows[0]?.lgu_id;
     }
 
@@ -42,7 +43,8 @@ export async function GET(request: NextRequest) {
     }
 
     // Fetch source data for the specific LGU
-    const result = await query(`
+    // Added "as any" to fix 'result' is of type 'unknown'
+    const result = (await query(`
       SELECT 
         source_type as label,
         COUNT(*) as value,
@@ -51,7 +53,7 @@ export async function GET(request: NextRequest) {
       WHERE lgu_id = $1 AND source_type IS NOT NULL
       GROUP BY source_type
       ORDER BY value DESC
-    `, [lguId]);
+    `, [lguId])) as any;
 
     const totalProjects = result.rows.reduce((sum: number, row: any) => sum + row.value, 0);
 

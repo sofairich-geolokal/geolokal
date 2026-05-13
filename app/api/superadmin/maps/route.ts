@@ -2,6 +2,9 @@ import { NextRequest, NextResponse } from 'next/server';
 import { query } from '@/lib/db';
 import { getAuthUser } from '@/lib/auth';
 
+// Force dynamic behavior to prevent build-time static generation errors
+export const dynamic = 'force-dynamic';
+
 export async function GET(request: NextRequest) {
   try {
     // Get logged-in user ID from auth token
@@ -11,7 +14,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Verify user is superadmin
-    const userResult = await query('SELECT role FROM users WHERE id = $1', [userId]);
+    const userResult = await query('SELECT role FROM users WHERE id = $1', [userId]) as any;
     const user = userResult.rows[0];
     
     if (!user || user.role.toLowerCase() !== 'superadmin') {
@@ -56,7 +59,7 @@ export async function GET(request: NextRequest) {
       FROM map_layers ml
       ${whereClause}
     `;
-    const countResult = await query(countQuery, params);
+    const countResult = await query(countQuery, params) as any;
     const totalCount = countResult.rows[0]?.total || 0;
 
     // Get maps with pagination and related data
@@ -93,9 +96,9 @@ export async function GET(request: NextRequest) {
       ORDER BY ml.created_at DESC
       LIMIT $${paramIndex} OFFSET $${paramIndex + 1}
     `;
-    params.push(limit, offset);
-
-    const mapsResult = await query(mapsQuery, params);
+    
+    const mapsParams = [...params, limit, offset];
+    const mapsResult = await query(mapsQuery, mapsParams) as any;
 
     // Get map statistics
     const statsQuery = `
@@ -109,7 +112,7 @@ export async function GET(request: NextRequest) {
         COALESCE(SUM(CASE WHEN geom IS NOT NULL THEN ST_Area(geom::geography) END), 0) as total_area_sqm
       FROM map_layers
     `;
-    const statsResult = await query(statsQuery);
+    const statsResult = await query(statsQuery) as any;
 
     // Get category statistics
     const categoryStatsQuery = `
@@ -124,7 +127,7 @@ export async function GET(request: NextRequest) {
       GROUP BY ml.category_id, c.name
       ORDER BY map_count DESC
     `;
-    const categoryStatsResult = await query(categoryStatsQuery);
+    const categoryStatsResult = await query(categoryStatsQuery) as any;
 
     // Get LGU statistics for maps
     const lguStatsQuery = `
@@ -140,7 +143,7 @@ export async function GET(request: NextRequest) {
       GROUP BY ml.lgu_id, cm.name
       ORDER BY map_count DESC
     `;
-    const lguStatsResult = await query(lguStatsQuery);
+    const lguStatsResult = await query(lguStatsQuery) as any;
 
     return NextResponse.json({
       maps: mapsResult.rows || [],
@@ -174,7 +177,7 @@ export async function DELETE(request: Request) {
     }
 
     // Verify user is superadmin
-    const userResult = await query('SELECT role, username FROM users WHERE id = $1', [userId]);
+    const userResult = await query('SELECT role, username FROM users WHERE id = $1', [userId]) as any;
     const user = userResult.rows[0];
     
     if (!user || user.role.toLowerCase() !== 'superadmin') {
@@ -191,18 +194,18 @@ export async function DELETE(request: Request) {
       FROM map_layers 
       WHERE id = ANY($1)
     `;
-    const mapDetailsResult = await query(mapDetailsQuery, [mapIds]);
+    const mapDetailsResult = await query(mapDetailsQuery, [mapIds]) as any;
 
     // Delete maps
     const placeholders = mapIds.map((_, index) => `$${index + 1}`).join(',');
     const deleteResult = await query(`
       DELETE FROM map_layers 
       WHERE id IN (${placeholders})
-    `, mapIds);
+    `, mapIds) as any;
     
     // Create Audit Log entries for each affected LGU
-    const affectedLguIds = [...new Set(mapDetailsResult.rows.map(row => row.lgu_id).filter(id => id != null))];
-    const mapNames = mapDetailsResult.rows.map(row => row.name).join(', ');
+    const affectedLguIds = [...new Set(mapDetailsResult.rows.map((row: any) => row.lgu_id).filter((id: any) => id != null))];
+    const mapNames = mapDetailsResult.rows.map((row: any) => row.name).join(', ');
     
     for (const lguId of affectedLguIds) {
       await query(

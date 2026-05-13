@@ -1,20 +1,25 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { query } from '@/lib/db';
 
+// Define a generic interface for your DB results
+interface QueryResult {
+  rows: any[];
+}
+
 export async function GET(request: NextRequest) {
   try {
     console.log('📊 Dashboard API: Fetching stats...');
     
     // Get population, households, land area data
-    const populationData = await query(`
+    const populationData = (await query(`
       SELECT 
         COUNT(*) as total_population,
         COUNT(DISTINCT household_id) as total_households
       FROM population_data
-    `);
+    `)) as QueryResult;
 
     // Get population by barangay
-    const populationByBarangay = await query(`
+    const populationByBarangay = (await query(`
       SELECT 
         barangay_name,
         COUNT(*) as population
@@ -23,30 +28,30 @@ export async function GET(request: NextRequest) {
       GROUP BY barangay_name
       ORDER BY barangay_name
       LIMIT 10
-    `);
+    `)) as QueryResult;
 
     console.log('📊 Dashboard API: Population data:', populationData);
 
     // Get land area data (from map layers with area info)
-    const landAreaData = await query(`
+    const landAreaData = (await query(`
       SELECT 
         SUM(ST_Area(geom::geography)) as total_area_sqm
       FROM map_layers 
       WHERE geom IS NOT NULL
-    `);
+    `)) as QueryResult;
 
     // Get building distribution data
-    const buildingData = await query(`
+    const buildingData = (await query(`
       SELECT 
         category_id,
         COUNT(*) as count
       FROM map_layers 
       WHERE category_id IS NOT NULL
       GROUP BY category_id
-    `);
+    `)) as QueryResult;
 
     // Get CBMS indicators
-    const cbmsData = await query(`
+    const cbmsData = (await query(`
       SELECT 
         indicator_code,
         AVG(indicator_value::numeric) as average_value
@@ -54,10 +59,10 @@ export async function GET(request: NextRequest) {
       WHERE indicator_value IS NOT NULL
       GROUP BY indicator_code
       ORDER BY indicator_code
-    `);
+    `)) as QueryResult;
 
     // Get road network data by road type
-    const roadData = await query(`
+    const roadData = (await query(`
       SELECT 
         source_type,
         COUNT(*) as total_roads,
@@ -65,7 +70,7 @@ export async function GET(request: NextRequest) {
       FROM map_layers 
       WHERE category_id = 1 AND source_type IS NOT NULL
       GROUP BY source_type
-    `);
+    `)) as QueryResult;
 
     const populationResult = populationData.rows || [];
     const landAreaResult = landAreaData.rows || [];
@@ -75,8 +80,8 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({
       population: populationResult[0] || { total_population: 0, total_households: 0 },
       landArea: landAreaResult[0] || { total_area_sqm: 0 },
-      buildingDistribution: buildingData,
-      cbmsIndicators: cbmsData,
+      buildingDistribution: buildingData.rows || [],
+      cbmsIndicators: cbmsData.rows || [],
       roadNetworks: roadResult,
       populationByBarangay: populationByBarangayResult
     });

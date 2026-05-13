@@ -1,9 +1,22 @@
 import { query } from '@/lib/db';
 import { NextResponse } from 'next/server';
 
+// Define the shape of your database row
+interface BoundaryRow {
+  id: string | number;
+  properties: any;
+  geometry: any;
+}
+
+// Define the shape of the query result
+interface QueryResult {
+  rows: BoundaryRow[];
+}
+
 export async function GET() {
   try {
-    const result = await query(`SELECT id, properties, geometry FROM admin_boundaries`);
+    // Cast the result to the QueryResult type
+    const result = await query(`SELECT id, properties, geometry FROM admin_boundaries`) as QueryResult;
     
     const geojson = {
       type: "FeatureCollection",

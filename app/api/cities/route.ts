@@ -1,11 +1,24 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { query } from '@/lib/db';
 
+// Define the interface for a city row
+interface CityRow {
+  id: number | string;
+  name: string;
+  province: string;
+}
+
+// Define the interface for the query result
+interface QueryResult {
+  rows: CityRow[];
+}
+
 export async function GET() {
   try {
-    const result = await query(
+    // Cast the result to QueryResult to resolve the 'unknown' type error
+    const result = (await query(
       'SELECT id, name, province FROM city_muni_master ORDER BY name ASC'
-    );
+    )) as QueryResult;
     
     return NextResponse.json({ 
       success: true, 

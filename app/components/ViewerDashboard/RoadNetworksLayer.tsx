@@ -242,8 +242,8 @@ const RoadNetworksLayer: React.FC<RoadNetworksLayerProps> = ({
     } catch (error) { return null; }
   };
 
-  // Road styling (same as superadmin)
-  const geoPortalRoadStyle = () => ({ color: '#06a506ee', weight: 3, opacity: 0.9 });
+  // Road styling updated with Gray Fill #7d8b8f
+  const geoPortalRoadStyle = () => ({ color: '#7d8b8f', weight: 3, opacity: 0.9 });
 
   // Handle road feature interactions (same as superadmin)
   const onEachRoadFeature = (feature: any, layer: any) => {
@@ -251,19 +251,45 @@ const RoadNetworksLayer: React.FC<RoadNetworksLayerProps> = ({
       mouseover: (e: any) => { 
         e.target.setStyle({ weight: 5, color: '#eab308' });
         
-        // Show hover label
+        // Show detailed hover information box
         const props = feature.properties || {};
-        const labelContent = `<div class="bg-white px-2 py-1 rounded shadow-lg border border-gray-200 text-xs font-medium" style="position: absolute; z-index: 1000; pointer-events: none;">
-          <div class="font-bold text-blue-700">${props.Name || 'Road Segment'}</div>
-          ${props.Type ? `<div class="text-gray-600">${props.Type}</div>` : ''}
+        const labelContent = `<div class="bg-white px-4 py-3 rounded-lg shadow-xl border border-gray-300 text-xs" style="position: absolute; z-index: 1000; pointer-events: none; min-width: 280px; max-width: 350px;">
+          <div class="border-b border-gray-200 pb-2 mb-2">
+            <div class="font-bold text-green-800 text-sm mb-1">${props.Name || 'Road Segment'}</div>
+            <div class="text-gray-500 text-xs">Road Network Information</div>
+          </div>
+          
+          <div class="space-y-1">
+            ${props.Name ? `<div class="flex justify-between"><span class="font-semibold text-gray-700">Road Name:</span><span class="text-gray-600">${props.Name}</span></div>` : ''}
+            ${props.Type ? `<div class="flex justify-between"><span class="font-semibold text-gray-700">Road Type:</span><span class="text-gray-600">${props.Type}</span></div>` : ''}
+            ${props.Class ? `<div class="flex justify-between"><span class="font-semibold text-gray-700">Class:</span><span class="text-gray-600">${props.Class}</span></div>` : ''}
+            ${props.Length ? `<div class="flex justify-between"><span class="font-semibold text-gray-700">Length:</span><span class="text-gray-600">${props.Length.toFixed(2)} km</span></div>` : ''}
+            ${props.Width ? `<div class="flex justify-between"><span class="font-semibold text-gray-700">Width:</span><span class="text-gray-600">${props.Width} m</span></div>` : ''}
+            ${props.Surface ? `<div class="flex justify-between"><span class="font-semibold text-gray-700">Surface:</span><span class="text-gray-600">${props.Surface}</span></div>` : ''}
+            ${props.Condition ? `<div class="flex justify-between"><span class="font-semibold text-gray-700">Condition:</span><span class="text-gray-600">${props.Condition}</span></div>` : ''}
+          </div>
+          
+          <div class="border-t border-gray-200 pt-2 mt-2">
+            <div class="text-gray-500 text-xs space-y-1">
+              <div class="flex justify-between"><span class="font-semibold">Feature ID:</span><span>${feature.id}</span></div>
+              <div class="flex justify-between"><span class="font-semibold">Geometry:</span><span>${feature.geometry?.type || 'LineString'}</span></div>
+              ${props.highway ? `<div class="flex justify-between"><span class="font-semibold">Highway:</span><span>${props.highway}</span></div>` : ''}
+              ${props.ref ? `<div class="flex justify-between"><span class="font-semibold">Reference:</span><span>${props.ref}</span></div>` : ''}
+            </div>
+          </div>
+          
+          <div class="bg-green-50 px-2 py-1 rounded mt-2 text-xs text-green-700">
+            <div class="font-semibold">🛣️ Road Network</div>
+            <div class="text-xs">Ibaan, Batangas • Transportation Infrastructure</div>
+          </div>
         </div>`;
         
         // Create and show hover label
         const hoverLabel = L.divIcon({
           html: labelContent,
           className: 'road-hover-label',
-          iconSize: [200, 40],
-          iconAnchor: [100, -10]
+          iconSize: [350, 200],
+          iconAnchor: [175, -20]
         });
         
         const hoverMarker = L.marker(e.latlng, { icon: hoverLabel, zIndexOffset: 1000 });

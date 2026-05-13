@@ -54,15 +54,8 @@ export default function Topbar() {
       {/* User Info on Right Side */}
       <div className="text-right">
         <div style={{ display: 'inline-block' }}>
-          <p className="text-sm text-white" 
-          style={{ display: 'inline', marginRight: '8px' }}>
+          <p className="text-sm text-white">
             <b>Username: </b>{data.username}
-          </p>
-          <p 
-            className="text-sm text-white"
-            style={{ display: 'inline' }}
-          >
-            <b>Location: </b>{data.lgu || 'System Administration'}
           </p>
         </div>
       </div>

@@ -9,19 +9,42 @@ if (!process.env.DATABASE_URL) {
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
   ssl: { rejectUnauthorized: false },
+  // Optimized connection pooling for faster login
+  max: 10, // Reduced for faster connection
+  min: 1, // Keep 1 connection ready
+  idleTimeoutMillis: 5000, // Close idle connections faster
+  connectionTimeoutMillis: 3000, // Faster timeout for quick response
+  maxUses: 500, // Reuse connections more frequently
 });
 
 export async function query(text: string, params?: any[]) {
   const start = Date.now();
-  try {
-    const res = await pool.query(text, params);
-    const duration = Date.now() - start;
-    console.log('Executed query', { text, duration, rows: res.rowCount });
-    return res;
-  } catch (error) {
-    console.error('Database query error:', error);
-    throw error;
+  const maxRetries = 3;
+  let lastError: any;
+  
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      const res = await pool.query(text, params);
+      const duration = Date.now() - start;
+      console.log('Executed query', { text, duration, rows: res.rowCount });
+      return res;
+    } catch (error: any) {
+      lastError = error;
+      console.error(`Database query attempt ${attempt} failed:`, error.message);
+      
+      // Don't retry on authentication errors
+      if (error.message.includes('password') || error.message.includes('username')) {
+        throw error;
+      }
+      
+      // Wait before retry (exponential backoff)
+      if (attempt < maxRetries) {
+        await new Promise(resolve => setTimeout(resolve, 1000 * attempt));
+      }
+    }
   }
+  
+  throw lastError;
 }
 
 export async function getMapLayers(bounds?: string, category?: string) {

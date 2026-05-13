@@ -13,7 +13,7 @@ interface StatData {
   icon: React.ReactNode;
 }
 
-// Fixed types for the animated counter
+// Fixed types for animated counter
 function Counter({ value }: { value: string | number }) {
   const numericValue = typeof value === 'number' ? value : parseInt(value.replace(/,/g, ''), 10);
   
@@ -35,36 +35,36 @@ function Counter({ value }: { value: string | number }) {
 export default function SuperadminCards() {
   const [stats, setStats] = useState<StatData[]>([
     {
-      title: 'Total Users',
-      value: 0,
-      growth: 0,
-      positive: true,
-      bgColor: 'bg-blue-50',
-      icon: <Users className="h-6 w-6 text-blue-600" />
-    },
-    {
-      title: 'Active LGUs',
-      value: 0,
-      growth: 0,
-      positive: true,
-      bgColor: 'bg-green-50',
-      icon: <MapPin className="h-6 w-6 text-green-600" />
-    },
-    {
       title: 'Total Projects',
       value: 0,
       growth: 0,
       positive: true,
-      bgColor: 'bg-purple-50',
+      bgColor: 'bg-gray-50',
       icon: <FolderOpen className="h-6 w-6 text-purple-600" />
     },
     {
-      title: 'System Activities',
+      title: 'Map Layers',
+      value: 0,
+      growth: 0,
+      positive: true,
+      bgColor: 'bg-blue-50',
+      icon: <Database className="h-6 w-6 text-blue-600" />
+    },
+    {
+      title: 'Audits',
+      value: 0,
+      growth: 0,
+      positive: true,
+      bgColor: 'bg-green-50',
+      icon: <Activity className="h-6 w-6 text-green-600" />
+    },
+    {
+      title: 'Active Users',
       value: 0,
       growth: 0,
       positive: true,
       bgColor: 'bg-orange-50',
-      icon: <Activity className="h-6 w-6 text-orange-600" />
+      icon: <Users className="h-6 w-6 text-orange-600" />
     }
   ]);
   const [loading, setLoading] = useState(true);
@@ -80,36 +80,36 @@ export default function SuperadminCards() {
         if (data) {
           setStats([
             {
-              title: 'Total Users',
-              value: data.users?.total_users || 0,
-              growth: data.users?.new_users_30_days || 0,
-              positive: true,
-              bgColor: 'bg-blue-50',
-              icon: <Users className="h-6 w-6 text-blue-600" />
-            },
-            {
-              title: 'Active LGUs',
-              value: data.lgus?.active_lgus || 0,
-              growth: 0,
-              positive: true,
-              bgColor: 'bg-green-50',
-              icon: <MapPin className="h-6 w-6 text-green-600" />
-            },
-            {
               title: 'Total Projects',
               value: data.projects?.total_projects || 0,
               growth: data.projects?.new_projects_30_days || 0,
               positive: true,
-              bgColor: 'bg-purple-50',
+              bgColor: 'bg-gray-50',
               icon: <FolderOpen className="h-6 w-6 text-purple-600" />
             },
             {
-              title: 'System Activities',
+              title: 'Map Layers',
+              value: data.maps?.total_maps || 0,
+              growth: data.maps?.new_maps_30_days || 0,
+              positive: true,
+              bgColor: 'bg-blue-50',
+              icon: <Database className="h-6 w-6 text-blue-600" />
+            },
+            {
+              title: 'Audits',
               value: data.activities?.total_activities || 0,
               growth: data.activities?.activities_7_days || 0,
               positive: true,
+              bgColor: 'bg-green-50',
+              icon: <Activity className="h-6 w-6 text-green-600" />
+            },
+            {
+              title: 'Active Users',
+              value: data.users?.total_users || 0,
+              growth: data.users?.new_users_30_days || 0,
+              positive: true,
               bgColor: 'bg-orange-50',
-              icon: <Activity className="h-6 w-6 text-orange-600" />
+              icon: <Users className="h-6 w-6 text-orange-600" />
             }
           ]);
         }
@@ -125,8 +125,8 @@ export default function SuperadminCards() {
 
   if (loading) {
     return (
-      <div className="p-0 sm:p-2 bg-white h-full">
-        <div className="grid grid-cols-4 gap-2">
+      <div className="p-0 sm:p-6 bg-white h-full">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 max-w-7xl mx-auto">
           {[...Array(4)].map((_, index) => (
             <div key={index} className="p-6 rounded-3xl shadow-sm border border-gray-100 animate-pulse">
               <div className="h-4 bg-gray-200 rounded mb-2"></div>
@@ -140,14 +140,14 @@ export default function SuperadminCards() {
 
   return (
     <div className="p-0 sm:p-6 bg-white h-full">
-      <div className="grid grid-cols-4 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 max-w-7xl mx-auto">
         {stats.map((stat, index) => (
           <motion.div 
             key={index}
             initial={{ opacity: 0, y: 15 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: index * 0.1 }}
-            className={`${stat.bgColor} p-4 rounded-3xl shadow-sm border border-gray-100 hover:shadow-md transition-all duration-300`}
+            className={`${stat.bgColor} p-6 rounded-3xl shadow-sm border border-gray-100 hover:shadow-md transition-all duration-300`}
           >
             <div className="flex items-center justify-between mb-4">
               <p className="text-gray-700 text-md font-medium">{stat.title}</p>

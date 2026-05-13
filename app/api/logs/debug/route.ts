@@ -18,8 +18,8 @@ export async function GET() {
       }, { status: 401 });
     }
 
-    // Test 2: Get user info
-    const userResult = await query('SELECT lgu_id, username FROM users WHERE id = $1', [userId]);
+    // Test 2: Get user info - Added 'as any'
+    const userResult = await (query('SELECT lgu_id, username FROM users WHERE id = $1', [userId])) as any;
     console.log("Debug: User query result:", userResult.rows);
     
     if (!userResult.rows[0]) {
@@ -33,14 +33,14 @@ export async function GET() {
 
     const loggedInUser = userResult.rows[0];
 
-    // Test 3: Check audit_logs table exists
-    const tableCheck = await query(`
+    // Test 3: Check audit_logs table exists - Added 'as any'
+    const tableCheck = await (query(`
       SELECT EXISTS (
         SELECT FROM information_schema.tables 
         WHERE table_schema = 'public' 
         AND table_name = 'audit_logs'
       );
-    `);
+    `)) as any;
     console.log("Debug: audit_logs table exists:", tableCheck.rows[0].exists);
 
     if (!tableCheck.rows[0].exists) {
@@ -51,8 +51,8 @@ export async function GET() {
       }, { status: 500 });
     }
 
-    // Test 4: Count logs for this LGU
-    const countResult = await query('SELECT COUNT(*) as count FROM audit_logs WHERE lgu_id = $1', [loggedInUser.lgu_id]);
+    // Test 4: Count logs for this LGU - Added 'as any'
+    const countResult = await (query('SELECT COUNT(*) as count FROM audit_logs WHERE lgu_id = $1', [loggedInUser.lgu_id])) as any;
     console.log("Debug: Log count for LGU:", countResult.rows[0].count);
 
     // Test 5: Try to fetch actual logs
@@ -69,7 +69,8 @@ export async function GET() {
       WHERE lgu_id = $1
       LIMIT 5`;
       
-    const auditResult = await query(auditSql, [loggedInUser.lgu_id]);
+    // Added 'as any'
+    const auditResult = await (query(auditSql, [loggedInUser.lgu_id])) as any;
     console.log("Debug: Sample logs:", auditResult.rows);
 
     return NextResponse.json({

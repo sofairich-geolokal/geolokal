@@ -2,7 +2,6 @@
 
 import React, { useState, useEffect } from 'react';
 import Sidebar from '@/app/components/lguDashboard/Sidebar';
-import { getUserData, getAuthUser } from '@/lib/auth';
 import TitleSetter from '@/app/components/TitleSetter';
 
 export default function DashboardLayout({
@@ -39,20 +38,41 @@ export default function DashboardLayout({
             });
           }
         } else {
-          // For normal routes, use mock data for now to avoid auth issues
-          setUserData({
-            username: 'LGU User',
-            location: 'Ibaan',
-            role: 'lgu'
-          });
+          // For normal LGU users, check authentication via API call
+          try {
+            const response = await fetch('/api/auth/me', {
+              credentials: 'include'
+            });
+            
+            if (response.ok) {
+              const user = await response.json();
+              setUserData({
+                username: user.username,
+                location: user.location,
+                role: user.role
+              });
+            } else {
+              // No authentication found, redirect to login
+              window.location.href = '/lgu-login';
+              return;
+            }
+          } catch (error) {
+            console.error('Auth check failed:', error);
+            // Fallback if auth check fails
+            setUserData({
+              username: 'LGU User',
+              location: 'Ibaan',
+              role: 'lgu'
+            });
+          }
         }
       } catch (error) {
         console.error('Access check failed:', error);
         // Fallback to mock data
         setUserData({
-          username: 'Superadmin',
+          username: 'LGU User',
           location: 'Ibaan',
-          role: 'superadmin'
+          role: 'lgu'
         });
       } finally {
         setLoading(false);

@@ -17,7 +17,8 @@ export async function POST(request: NextRequest) {
     }
 
     // Get LGU user data
-    const result = await query(
+    // Cast to 'any' to resolve the 'unknown' type error for the build
+    const result = (await query(
       `SELECT u.id, u.username, u.email, u.role, u.lgu_id, c.name as lgu_name, c.province,
        COALESCE(c.province, 'Batangas') as province_display,
        COALESCE(c.name, 'Ibaan') as city_display
@@ -25,7 +26,7 @@ export async function POST(request: NextRequest) {
        LEFT JOIN city_muni_master c ON u.lgu_id = c.id 
        WHERE u.id = $1 AND u.role = 'lgu'`,
       [lguUserId]
-    );
+    )) as any;
 
     const lguUser = result.rows[0];
     if (!lguUser) {

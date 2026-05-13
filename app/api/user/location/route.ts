@@ -2,6 +2,17 @@ import { query } from '@/lib/db';
 import { NextResponse } from 'next/server';
 import { getAuthUser } from '@/lib/auth';
 
+// Define a type for the expected user record to satisfy TypeScript
+interface UserRow {
+  username: string;
+  location?: string;
+  last_login: Date | string;
+}
+
+interface QueryResult {
+  rows: UserRow[];
+}
+
 export async function GET() {
   try {
     // Get logged-in user ID from auth token
@@ -10,34 +21,37 @@ export async function GET() {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    // Fetch user location from database - handle missing location column gracefully
-    let result;
+    // Initialize result to avoid "used before assignment" errors
+    let result: QueryResult;
+
     try {
       result = await query(
         'SELECT username, location, last_login FROM users WHERE id = $1',
         [userId]
-      );
+      ) as QueryResult;
     } catch (dbError: any) {
       // If location column doesn't exist, fetch without it
       if (dbError.message.includes('column') && dbError.message.includes('location')) {
-        result = await query(
+        const fallbackResult = await query(
           'SELECT username, last_login FROM users WHERE id = $1',
           [userId]
-        );
+        ) as QueryResult;
+
         // Return default location for users without location column
-        if (result.rows.length > 0) {
+        if (fallbackResult.rows.length > 0) {
           return NextResponse.json({ 
-            username: result.rows[0].username,
+            username: fallbackResult.rows[0].username,
             location: 'Ibaan, Batangas', // Default fallback
-            lastLogin: result.rows[0].last_login
+            lastLogin: fallbackResult.rows[0].last_login
           });
         }
+        return NextResponse.json({ error: 'User not found' }, { status: 404 });
       } else {
         throw dbError;
       }
     }
     
-    if (result.rows.length === 0) {
+    if (!result || result.rows.length === 0) {
       return NextResponse.json({ error: 'User not found' }, { status: 404 });
     }
 
@@ -67,8 +81,9 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    // Update user location and last login timestamp - handle missing location column
-    let result: any = null;
+    // Update user location and last login timestamp
+    let result: QueryResult | null = null;
+    
     try {
       result = await query(
         `UPDATE users 
@@ -76,7 +91,7 @@ export async function POST(request: Request) {
          WHERE id = $2 
          RETURNING username, location, last_login`,
         [location, userId]
-      );
+      ) as QueryResult;
     } catch (dbError: any) {
       // If location column doesn't exist, update only last_login
       if (dbError.message.includes('column') && dbError.message.includes('location')) {
@@ -84,11 +99,13 @@ export async function POST(request: Request) {
           'UPDATE users SET last_login = CURRENT_TIMESTAMP WHERE id = $1',
           [userId]
         );
+        
         // Get user info without location
         const userResult = await query(
           'SELECT username, last_login FROM users WHERE id = $1',
           [userId]
-        );
+        ) as QueryResult;
+
         if (userResult.rows.length > 0) {
           return NextResponse.json({ 
             message: 'Location saved to localStorage (database column missing)',
@@ -97,6 +114,7 @@ export async function POST(request: Request) {
             lastLogin: userResult.rows[0].last_login
           });
         }
+        return NextResponse.json({ error: 'User not found' }, { status: 404 });
       } else {
         throw dbError;
       }

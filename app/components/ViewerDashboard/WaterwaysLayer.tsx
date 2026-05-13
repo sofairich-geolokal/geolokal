@@ -269,33 +269,73 @@ const WaterwaysLayer: React.FC<WaterwaysLayerProps> = ({
     return [[minLat - buffer, minLng - buffer], [maxLat + buffer, maxLng + buffer]];
   };
 
-  // Waterway styling (same as superadmin)
+  // Waterway styling - Updated with specified blue colors
   const geoPortalWaterwayStyle = (feature: any) => {
     if (feature.geometry?.type?.includes('Polygon')) {
-      return { color: '#7dd3fc', weight: 2, fillColor: '#38bdf8', fillOpacity: 0.35 };
+      return { 
+        color: '#2591d9', // Blue Outline
+        weight: 2, 
+        fillColor: '#1f79b6', // Blue Fill
+        fillOpacity: 0.45 
+      };
     }
-    return { color: '#2563eb', weight: 3, opacity: 0.9 };
+    return { 
+      color: '#2591d9', // Blue Outline for lines
+      weight: 3, 
+      opacity: 0.9 
+    };
   };
 
   // Handle waterway feature interactions (same as superadmin)
   const onEachWaterwayFeature = (feature: any, layer: any) => {
     layer.on({
       mouseover: (e: any) => { 
-        e.target.setStyle({ weight: 5, color: '#f97316', fillOpacity: 0.7 });
+        e.target.setStyle({ 
+            weight: 5, 
+            color: '#f97316', // Highlight color remains orange for contrast
+            fillOpacity: 0.7 
+        });
         
-        // Show hover label
+        // Show detailed hover information box
         const props = feature.properties || {};
-        const labelContent = `<div class="bg-white px-2 py-1 rounded shadow-lg border border-gray-200 text-xs font-medium" style="position: absolute; z-index: 1000; pointer-events: none;">
-          <div class="font-bold text-blue-700">${props.Name || 'Waterway'}</div>
-          ${props.Type ? `<div class="text-gray-600">${props.Type}</div>` : ''}
+        const labelContent = `<div class="bg-white px-4 py-3 rounded-lg shadow-xl border border-gray-300 text-xs" style="position: absolute; z-index: 1000; pointer-events: none; min-width: 280px; max-width: 350px;">
+          <div class="border-b border-gray-200 pb-2 mb-2">
+            <div class="font-bold text-blue-800 text-sm mb-1">${props.Name || 'Waterway'}</div>
+            <div class="text-gray-500 text-xs">Waterway Information</div>
+          </div>
+          
+          <div class="space-y-1">
+            ${props.Name ? `<div class="flex justify-between"><span class="font-semibold text-gray-700">Waterway Name:</span><span class="text-gray-600">${props.Name}</span></div>` : ''}
+            ${props.Type ? `<div class="flex justify-between"><span class="font-semibold text-gray-700">Type:</span><span class="text-gray-600">${props.Type}</span></div>` : ''}
+            ${props.Class ? `<div class="flex justify-between"><span class="font-semibold text-gray-700">Class:</span><span class="text-gray-600">${props.Class}</span></div>` : ''}
+            ${props.Length ? `<div class="flex justify-between"><span class="font-semibold text-gray-700">Length:</span><span class="text-gray-600">${props.Length.toFixed(2)} km</span></div>` : ''}
+            ${props.Width ? `<div class="flex justify-between"><span class="font-semibold text-gray-700">Width:</span><span class="text-gray-600">${props.Width} m</span></div>` : ''}
+            ${props.Depth ? `<div class="flex justify-between"><span class="font-semibold text-gray-700">Depth:</span><span class="text-gray-600">${props.Depth} m</span></div>` : ''}
+            ${props.Flow_Rate ? `<div class="flex justify-between"><span class="font-semibold text-gray-700">Flow Rate:</span><span class="text-gray-600">${props.Flow_Rate} m³/s</span></div>` : ''}
+            ${props.Water_Quality ? `<div class="flex justify-between"><span class="font-semibold text-gray-700">Water Quality:</span><span class="text-gray-600">${props.Water_Quality}</span></div>` : ''}
+          </div>
+          
+          <div class="border-t border-gray-200 pt-2 mt-2">
+            <div class="text-gray-500 text-xs space-y-1">
+              <div class="flex justify-between"><span class="font-semibold">Feature ID:</span><span>${feature.id}</span></div>
+              <div class="flex justify-between"><span class="font-semibold">Geometry:</span><span>${feature.geometry?.type || 'LineString'}</span></div>
+              ${props.waterway ? `<div class="flex justify-between"><span class="font-semibold">Waterway:</span><span>${props.waterway}</span></div>` : ''}
+              ${props.ref ? `<div class="flex justify-between"><span class="font-semibold">Reference:</span><span>${props.ref}</span></div>` : ''}
+            </div>
+          </div>
+          
+          <div class="bg-blue-50 px-2 py-1 rounded mt-2 text-xs text-blue-700">
+            <div class="font-semibold">💧 Waterway</div>
+            <div class="text-xs">Ibaan, Batangas • Natural Water Resources</div>
+          </div>
         </div>`;
         
         // Create and show hover label
         const hoverLabel = L.divIcon({
           html: labelContent,
           className: 'waterway-hover-label',
-          iconSize: [180, 40],
-          iconAnchor: [90, -10]
+          iconSize: [350, 200],
+          iconAnchor: [175, -20]
         });
         
         const hoverMarker = L.marker(e.latlng, { icon: hoverLabel, zIndexOffset: 1000 });
@@ -303,6 +343,7 @@ const WaterwaysLayer: React.FC<WaterwaysLayerProps> = ({
         e.target._hoverMarker = hoverMarker;
       },
       mouseout: (e: any) => { 
+        // Revert back to the updated blue styles
         e.target.setStyle(geoPortalWaterwayStyle(feature));
         
         // Remove hover label
@@ -333,7 +374,7 @@ const WaterwaysLayer: React.FC<WaterwaysLayerProps> = ({
 
   return (
     <>
-      {/* Waterways GeoJSON layer (same as superadmin) */}
+      {/* Waterways GeoJSON layer */}
       <GeoJSON 
         key={`river-${waterwaysData.features.length}`}
         data={transformCoordinates(waterwaysData)}

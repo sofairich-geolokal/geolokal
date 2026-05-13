@@ -22,6 +22,13 @@ interface LGU {
   province: string;
 }
 
+interface LGUStats {
+  totalLGUAdmins: number;
+  activeLGUAdmins: number;
+  loggedInLGUAdmins: number;
+  removedLGUAdmins: number;
+}
+
 const UserManagement = () => {
   const [users, setUsers] = useState<User[]>([]);
   const [filteredUsers, setFilteredUsers] = useState<User[]>([]);
@@ -37,15 +44,104 @@ const UserManagement = () => {
     username: '',
     email: '',
     password: '',
-    role: 'viewer',
-    location: ''
+    role: 'lgu',
+    location: '',
+    lgu_id: ''
   });
+  const [lgus, setLgus] = useState<LGU[]>([]);
   const [visiblePasswords, setVisiblePasswords] = useState<Set<string>>(new Set());
   const [copiedPassword, setCopiedPassword] = useState<string | null>(null);
+  const [lguStats, setLguStats] = useState<LGUStats>({
+    totalLGUAdmins: 0,
+    activeLGUAdmins: 0,
+    loggedInLGUAdmins: 0,
+    removedLGUAdmins: 0,
+  });
+  const [lastStatsUpdate, setLastStatsUpdate] = useState<number>(0);
 
   // Pagination State
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 5;
+
+  // Fetch LGU stats
+  const fetchLGUStats = async () => {
+    try {
+      console.log("Fetching LGU stats...");
+      
+      // Implement simple caching - only fetch stats if data changed or 30 seconds passed
+      const now = Date.now();
+      const timeSinceLastUpdate = now - lastStatsUpdate;
+      const thirtySeconds = 30 * 1000;
+      
+      if (users.length > 0 && timeSinceLastUpdate < thirtySeconds) {
+        console.log('Using cached LGU stats data');
+        return; // Use existing stats
+      }
+      
+      const response = await fetch('/api/superadmin/lgus/stats', {
+        credentials: 'include'
+      });
+      console.log("LGU Stats response status:", response.status);
+      
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error("LGU Stats API error response:", errorText);
+        throw new Error("LGU Stats Server Error");
+      }
+      
+      const data = await response.json();
+      console.log("LGU Stats data received:", data);
+      setLguStats({
+        totalLGUAdmins: data.totalLGUAdmins || 0,
+        activeLGUAdmins: data.activeLGUAdmins || 0,
+        loggedInLGUAdmins: data.loggedinLGUAdmins || 0,
+        removedLGUAdmins: data.removedLGUAdmins || 0,
+      });
+      
+      // Update last stats update time
+      setLastStatsUpdate(Date.now());
+    } catch (err: unknown) {
+      console.error("LGU Stats fetch error:", err);
+      // Keep default values on error and implement fallback
+      const errorMessage = err instanceof Error ? err.message : 'Unknown error';
+      
+      // If connection timeout, try to calculate stats from local data
+      if (errorMessage.includes('connection timeout') || errorMessage.includes('connection slots')) {
+        console.warn('LGU Stats API failed, using fallback calculation from local data');
+        // Calculate stats from current users array
+        const totalLGUAdmins = users.filter(user => user.role.toLowerCase() === 'lgu').length;
+        const activeLGUAdmins = totalLGUAdmins;
+        
+        setLguStats({
+          totalLGUAdmins,
+          activeLGUAdmins,
+          loggedInLGUAdmins: activeLGUAdmins,
+          removedLGUAdmins: 0
+        });
+        return;
+      }
+      
+      // Keep default values on other errors
+    }
+  };
+
+  // Fetch LGUs for dropdown
+  const fetchLGUs = async () => {
+    try {
+      const response = await fetch('/api/superadmin/lgus', {
+        credentials: 'include'
+      });
+      
+      if (!response.ok) {
+        throw new Error('Failed to fetch LGUs');
+      }
+      
+      const data = await response.json();
+      setLgus(Array.isArray(data) ? data : []);
+    } catch (err: any) {
+      console.error("Fetch LGUs error:", err);
+    }
+  };
 
   // Fetch users from superadmin API
   const fetchUsers = async () => {
@@ -57,9 +153,26 @@ const UserManagement = () => {
       console.log("Response status:", response.status);
       
       if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        console.error("API Error:", errorData);
-        throw new Error(errorData.error || `HTTP ${response.status}: Failed to fetch users`);
+        const errorText = await response.text().catch(() => 'No error text available');
+        console.error("=== API ERROR DEBUG ===");
+        console.error("API Response Status:", response.status);
+        console.error("API Response Status Text:", response.statusText);
+        console.error("API Response Headers:", Object.fromEntries(response.headers.entries()));
+        console.error("API Response Text:", errorText);
+        console.error("API Response URL:", response.url);
+        
+        let errorData: { error?: string } = {};
+        try {
+          errorData = await response.json();
+        } catch (e) {
+          console.error("Failed to parse error response as JSON:", e);
+        }
+        
+        console.error("API Error Data:", errorData);
+        console.error("=== END DEBUG ===");
+        
+        const errorMessage = errorData.error || `HTTP ${response.status}: ${errorText || 'Failed to fetch users'}`;
+        throw new Error(errorMessage);
       }
       const data = await response.json();
       console.log("Users data received:", data);
@@ -73,8 +186,36 @@ const UserManagement = () => {
     }
   };
 
+  // Fetch LGU users
+  const fetchLGUUsers = async () => {
+    try {
+      console.log("Fetching LGU users from /api/lgu/users");
+      const response = await fetch('/api/lgu/users', {
+        credentials: 'include'
+      });
+      console.log("Response status:", response.status);
+      
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        console.error("API Error:", errorData);
+        throw new Error(errorData.error || `HTTP ${response.status}: Failed to fetch LGU users`);
+      }
+      const data = await response.json();
+      console.log("LGU Users data received:", data);
+      setUsers(Array.isArray(data) ? data : []);
+    } catch (err: any) {
+      console.error("Fetch LGU users error:", err);
+      setError(err.message || 'Failed to load LGU users');
+      setUsers([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   useEffect(() => {
     fetchUsers();
+    fetchLGUs();
+    fetchLGUStats();
   }, []);
 
   useEffect(() => {
@@ -134,12 +275,23 @@ const UserManagement = () => {
       });
 
       if (!response.ok) {
-        throw new Error('Failed to delete users');
+        const errorText = await response.text().catch(() => 'Unknown error');
+        console.error("Delete users API error:", response.status, errorText);
+        
+        let errorData: { error?: string } = {};
+        try {
+          errorData = await response.json();
+        } catch (e) {
+          console.error("Failed to parse delete error response as JSON");
+        }
+        
+        throw new Error(errorData.error || `HTTP ${response.status}: ${errorText || 'Failed to delete users'}`);
       }
 
       await fetchUsers();
       setSelectedUsers([]);
     } catch (error: any) {
+      console.error("Delete users error:", error);
       setError(error.message || 'Failed to delete users');
     }
   };
@@ -152,7 +304,8 @@ const UserManagement = () => {
       email: user.email,
       password: '',
       role: user.role,
-      location: user.location || ''
+      location: user.location || '',
+      lgu_id: user.lgu_id || ''
     });
     setShowEditModal(true);
   };
@@ -170,11 +323,18 @@ const UserManagement = () => {
     e.preventDefault();
     
     try {
+      // Auto-generate password since field is removed
+      const autoPassword = generateStrongPassword();
+      const submitData = {
+        ...formData,
+        password: autoPassword
+      };
+
       const response = await fetch('/api/superadmin/users', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
-        body: JSON.stringify(formData)
+        body: JSON.stringify(submitData)
       });
 
       if (!response.ok) {
@@ -184,20 +344,24 @@ const UserManagement = () => {
       }
 
       // Show success message
-      setSuccess(`User "${formData.username}" created successfully!`);
+      setSuccess(`LGU Admin "${formData.username}" created successfully!`);
       setError(null); // Clear any existing error
       
       // Refresh users list
       await fetchUsers();
       
-      // Close modal and reset form
-      setShowCreateModal(false);
+      // Refresh stats after creating user and invalidate cache
+      setLastStatsUpdate(0);
+      fetchLGUStats();
+      
+      // Reset form (excluding password and location)
       setFormData({
         username: '',
         email: '',
         password: '',
-        role: 'viewer',
-        location: ''
+        role: 'lgu',
+        location: '',
+        lgu_id: ''
       });
       
       // Clear success message after 3 seconds
@@ -206,7 +370,7 @@ const UserManagement = () => {
       }, 3000);
       
     } catch (error: any) {
-      setError(error.message || 'Failed to create user');
+      setError(error.message || 'Failed to create LGU Admin');
       setSuccess(null); // Clear success message on error
     }
   };
@@ -253,8 +417,9 @@ const UserManagement = () => {
         username: '',
         email: '',
         password: '',
-        role: 'viewer',
-        location: ''
+        role: 'lgu',
+        location: '',
+        lgu_id: ''
       });
       
       // Clear success message after 3 seconds
@@ -312,6 +477,13 @@ const UserManagement = () => {
   const currentUsers = filteredUsers.slice(indexOfFirstItem, indexOfLastItem);
   const totalPages = Math.ceil(filteredUsers.length / itemsPerPage);
 
+  const lguStatsCards = [
+    { label: "Total LGUs", value: lguStats.totalLGUAdmins.toString(), color: "bg-[#f3a61f]" },
+    { label: "Active LGUs", value: lguStats.activeLGUAdmins.toString(), color: "bg-[#5ebf8c]" },
+    { label: "Loggedin LGUs", value: lguStats.loggedInLGUAdmins.toString(), color: "bg-[#555b5e]" },
+    { label: "Removed LGUs", value: lguStats.removedLGUAdmins.toString(), color: "bg-[#e84b4b]" },
+  ];
+
   // Toggle user selection
   const toggleUserSelection = (userId: string) => {
     setSelectedUsers(prev => 
@@ -349,30 +521,55 @@ const UserManagement = () => {
     }
   };
 
-  if (loading) return <div className="flex items-center justify-center h-64">
-    <div className="text-center">
-      <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
-      <p className="mt-4 text-gray-600">Loading users...</p>
-    </div>
-  </div>;
-
+  
   return (
-    <div className="bg-white rounded-xl p-6">
-      <div className="flex justify-between items-center mb-6">
-        <h1 className="text-2xl font-bold text-gray-900">LGU Admin Management</h1>
+    <div className="p-2 md:p-4 bg-white font-sans flex flex-col">
+      
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-6">
+        <div className="lg:col-span-1 bg-[#f8f9fc] p-4 rounded-2xl border 
+        border-gray-100 shadow-sm h-fit">
+          <form onSubmit={handleCreateUser} className="space-y-4">
+            <div>
+              <label className="block text-sm font-semibold text-gray-600 mb-2">Username</label>
+              <input 
+                type="text" 
+                name="username" 
+                value={formData.username} 
+                onChange={(e) => setFormData({...formData, username: e.target.value})}
+                placeholder="LGU.Admin1" 
+                className="w-full p-3 border-2 border-gray-300 rounded-lg focus:border-blue-400 outline-none" 
+                required
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-semibold text-gray-600 mb-2">Email</label>
+              <input 
+                type="email" 
+                name="email" 
+                value={formData.email} 
+                onChange={(e) => setFormData({...formData, email: e.target.value})}
+                placeholder="admin@lgu.gov.ph" 
+                className="w-full p-3 border-2 border-gray-300 rounded-lg focus:border-blue-400 outline-none" 
+                required
+              />
+            </div>
+            <button type="submit" className="w-full bg-green-600 text-white py-3 rounded-lg font-bold hover:bg-green-700 transition-all">Create LGU Admin</button>
+          </form>
+        </div>
+
+        <div className="col-span-1 grid grid-cols-2 lg:grid-cols-2 gap-4 w-full">
+          {lguStatsCards.map((stat: { label: string; value: string; color: string }) => (
+            <div 
+              key={stat.label} 
+              className={`${stat.color} p-4 rounded-3xl text-white flex flex-col justify-center items-center shadow-md cursor-pointer hover:opacity-90 transition-opacity`}
+            >
+              <span className="text-lg font-small mb-1">{stat.label}</span>
+              <span className="text-4xl font-bold">{stat.value}</span>
+            </div>
+          ))}
+        </div>
       </div>
-
-      {error && (
-        <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg mb-4">
-          {error}
-        </div>
-      )}
-
-      {success && (
-        <div className="bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded-lg mb-4">
-          {success}
-        </div>
-      )}
 
       {/* Filters */}
       <div className="flex flex-col md:flex-row gap-4 mb-6">
@@ -386,6 +583,8 @@ const UserManagement = () => {
             className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
           />
         </div>
+
+        <button onClick={exportToCSV} className="bg-[#cc7a00] hover:bg-[#b36b00] text-white px-6 py-2.5 rounded-lg font-bold transition-all">Export LGU Admins</button>
 
         {selectedUsers.length > 0 && (
           <button
@@ -403,7 +602,7 @@ const UserManagement = () => {
         <table className="w-full border-collapse">
           <thead>
             <tr className="border-b border-gray-200">
-              <th className="text-left p-3">
+              <th className="text-left p-2">
                 <input
                   type="checkbox"
                   checked={selectedUsers.length === currentUsers.length}
@@ -417,17 +616,17 @@ const UserManagement = () => {
                   className="rounded border-gray-300"
                 />
               </th>
-              <th className="text-left p-3 font-semibold text-gray-900">User</th>
-              <th className="text-left p-3 font-semibold text-gray-900">Email</th>
-              <th className="text-left p-3 font-semibold text-gray-900">Password</th>
-              <th className="text-left p-3 font-semibold text-gray-900">LGU Name</th>
-              <th className="text-left p-3 font-semibold text-gray-900">Actions</th>
+              <th className="text-left p-2 font-semibold text-gray-900">User</th>
+              <th className="text-left p-2 font-semibold text-gray-900">Email</th>
+              <th className="text-left p-2 font-semibold text-gray-900">Password</th>
+              <th className="text-left p-2 font-semibold text-gray-900">LGU Name</th>
+              <th className="text-left p-2 font-semibold text-gray-900">Actions</th>
             </tr>
           </thead>
           <tbody>
             {currentUsers.map((user) => (
               <tr key={user.id} className="border-b border-gray-100 hover:bg-gray-50">
-                <td className="p-3">
+                <td className="p-2">
                   <input
                     type="checkbox"
                     checked={selectedUsers.includes(user.id)}
@@ -435,17 +634,17 @@ const UserManagement = () => {
                     className="rounded border-gray-300"
                   />
                 </td>
-                <td className="p-3">
+                <td className="p-2">
                   <div>
                     <div className="font-medium text-gray-900">{user.username}</div>
                   </div>
                 </td>
-                <td className="p-3">
+                <td className="p-2">
                   <div>
                     <div className="text-sm text-gray-900">{user.email}</div>
                   </div>
                 </td>
-                <td className="p-3">
+                <td className="p-2">
                   <div className="flex items-center gap-2">
                     <div className={`text-sm flex-1 ${visiblePasswords.has(user.id) ? 'bg-red-100 text-red-700 px-2 py-1 rounded font-mono' : 'text-gray-600'}`}>
                       {visiblePasswords.has(user.id) ? user.password_hash : '********'}
@@ -471,7 +670,7 @@ const UserManagement = () => {
                     <div className="text-xs text-green-600 mt-1">Copied!</div>
                   )}
                 </td>
-                <td className="p-3">
+                <td className="p-2">
                   <div className="flex items-center gap-2">
                     <Users className="h-4 w-4 text-blue-600" />
                     <span className="px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
@@ -479,10 +678,10 @@ const UserManagement = () => {
                     </span>
                   </div>
                 </td>
-                <td className="p-3">
+                <td className="p-2">
                   <div className="text-sm text-gray-900">{user.lgu_name || 'No LGU assigned'}</div>
                 </td>
-                <td className="p-3">
+                <td className="p-2">
                   <div className="flex gap-2">
                     <button 
                       onClick={() => handleViewDashboard(user)}
@@ -574,15 +773,15 @@ const UserManagement = () => {
 
       {/* Create User Modal */}
       {showCreateModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+        <div className="fixed inset-0 bg-black bg-opacity-20 flex items-center justify-center z-50">
           <div className="bg-white rounded-xl p-6 w-full max-w-md">
-            <h2 className="text-xl font-bold text-gray-900 mb-4">Create New User</h2>
+            <h2 className="text-xl font-bold text-gray-900 mb-4">Add New LGU Admin</h2>
             <form onSubmit={handleCreateUser} className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Username</label>
                 <input
                   type="text"
-
+                  required
                   value={formData.username}
                   onChange={(e) => setFormData({...formData, username: e.target.value})}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
@@ -593,7 +792,7 @@ const UserManagement = () => {
                 <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
                 <input
                   type="email"
-
+                  required
                   value={formData.email}
                   onChange={(e) => setFormData({...formData, email: e.target.value})}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
@@ -605,6 +804,7 @@ const UserManagement = () => {
                 <div className="flex gap-2">
                   <input
                     type="text"
+                    required
   
                     value={formData.password}
                     onChange={(e) => setFormData({...formData, password: e.target.value})}
@@ -620,19 +820,7 @@ const UserManagement = () => {
                 </div>
               </div>
               
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Role</label>
-                <select
-                  value={formData.role}
-                  onChange={(e) => setFormData({...formData, role: e.target.value})}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                >
-                  <option value="viewer">Viewer</option>
-                  <option value="lgu">LGU User</option>
-                  <option value="superadmin">Superadmin</option>
-                </select>
-              </div>
-              
+                            
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Location</label>
                 <select
@@ -660,7 +848,7 @@ const UserManagement = () => {
                   type="submit"
                   className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
                 >
-                  Create User
+                  Create LGU Admin
                 </button>
               </div>
             </form>
@@ -745,8 +933,9 @@ const UserManagement = () => {
                       username: '',
                       email: '',
                       password: '',
-                      role: 'viewer',
-                      location: ''
+                      role: 'lgu',
+                      location: '',
+                      lgu_id: ''
                     });
                   }}
                   className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50"
@@ -762,6 +951,18 @@ const UserManagement = () => {
               </div>
             </form>
           </div>
+        </div>
+      )}
+      
+      {error && (
+        <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg mt-4">
+          {error}
+        </div>
+      )}
+
+      {success && (
+        <div className="bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded-lg mt-4">
+          {success}
         </div>
       )}
     </div>

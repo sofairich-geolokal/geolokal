@@ -18,7 +18,8 @@ export async function GET() {
     ORDER BY p.created_at DESC;
     `;
     
-    const result = await query(sql);
+    // Cast to any to fix 'result' is of type 'unknown'
+    const result = (await query(sql)) as any;
     return NextResponse.json(result.rows || []); 
   } catch (error: any) {
     console.error("Fetch Projects Stats Error:", error.message);

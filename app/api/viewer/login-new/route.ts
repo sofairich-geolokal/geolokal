@@ -2,6 +2,19 @@ import { NextResponse } from 'next/server';
 import { query } from '@/lib/db';
 import { cookies } from 'next/headers';
 
+// Define the shape of the user from the DB
+interface UserRow {
+  id: string | number;
+  username: string;
+  lgu_id: string | number | null;
+  password_hash: string;
+  role: string;
+}
+
+interface QueryResult<T> {
+  rows: T[];
+}
+
 export async function POST(request: Request) {
   try {
     const { username, password, selectedCityId }: { username: string; password: string; selectedCityId?: string } = await request.json();
@@ -16,13 +29,11 @@ export async function POST(request: Request) {
       );
     }
 
-    // Direct database query
-    const result = await query(
+    // Direct database query with explicit typing
+    const result = (await query(
       'SELECT id, username, lgu_id, password_hash, role FROM users WHERE username = $1',
       [username]
-    );
-    
-    console.log('NEW LOGIN API: Query result:', result.rows);
+    )) as QueryResult<UserRow>;
     
     const user = result.rows[0];
     
@@ -34,7 +45,7 @@ export async function POST(request: Request) {
       );
     }
 
-    // Password comparison
+    // Password comparison (Note: In production, use bcrypt.compare)
     if (user.password_hash !== password) {
       console.log('NEW LOGIN API: Password mismatch');
       return NextResponse.json(
@@ -44,8 +55,9 @@ export async function POST(request: Request) {
     }
 
     // Role validation
-    if (user.role.toLowerCase() !== 'viewer') {
-      console.log('NEW LOGIN API: Role validation failed:', user.role);
+    const userRole = user.role || 'viewer';
+    if (userRole.toLowerCase() !== 'viewer') {
+      console.log('NEW LOGIN API: Role validation failed:', userRole);
       return NextResponse.json(
         { success: false, error: 'Access denied. Viewer role required.' },
         { status: 403 }
@@ -54,16 +66,16 @@ export async function POST(request: Request) {
 
     // Update location for viewer
     let finalLguId = user.lgu_id;
-    let finalLocation = null;
+    let finalLocation: string | null = null;
     
-    if (user.role.toLowerCase() === 'viewer' && selectedCityId) {
-      const locationMap: { [key: string]: string } = {
+    if (userRole.toLowerCase() === 'viewer' && selectedCityId) {
+      const locationMap: Record<string, string> = {
         '1': 'Ibaan, Batangas',
         '2': 'Teresa, Rizal', 
         '3': 'Binangonan, Rizal'
       };
       
-      const locationName = locationMap[selectedCityId as string] || 'Ibaan, Batangas';
+      const locationName = locationMap[selectedCityId] || 'Ibaan, Batangas';
       
       await query(
         'UPDATE users SET lgu_id = $1, location = $2 WHERE id = $3',
@@ -75,6 +87,8 @@ export async function POST(request: Request) {
     
     // Set auth token
     const authToken = `token_${user.id}_${Date.now()}`;
+    
+    // Correctly await cookies() for Next.js build compliance
     const cookieStore = await cookies();
     
     cookieStore.set('auth_token', authToken, {
@@ -94,7 +108,7 @@ export async function POST(request: Request) {
         username: user.username,
         lgu_id: String(finalLguId || ''),
         location: finalLocation,
-        role: user.role || 'viewer'
+        role: userRole
       }
     });
 

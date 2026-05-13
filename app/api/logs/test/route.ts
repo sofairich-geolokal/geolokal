@@ -6,17 +6,19 @@ export async function GET() {
     console.log("Test: Starting simple logs test endpoint");
     
     // Test 1: Check if we can connect to database
-    const testQuery = await query('SELECT 1 as test');
+    // Added 'as any' to fix the 'unknown' type error
+    const testQuery = await query('SELECT 1 as test') as any;
     console.log("Test: Database connection OK:", testQuery.rows[0].test);
 
     // Test 2: Check if audit_logs table exists
+    // Added 'as any'
     const tableCheck = await query(`
       SELECT EXISTS (
         SELECT FROM information_schema.tables 
         WHERE table_schema = 'public' 
         AND table_name = 'audit_logs'
       );
-    `);
+    `) as any;
     console.log("Test: audit_logs table exists:", tableCheck.rows[0].exists);
 
     if (!tableCheck.rows[0].exists) {
@@ -27,7 +29,7 @@ export async function GET() {
     }
 
     // Test 3: Get all audit logs (no auth required)
-    const allLogs: any = await query(`
+    const allLogs = await query(`
       SELECT 
         to_char(timestamp, 'Mon DD, YYYY HH:MI AM') as timestamp,
         actor, 
@@ -37,18 +39,18 @@ export async function GET() {
         id
       FROM audit_logs 
       ORDER BY timestamp DESC
-      LIMIT 10`);
+      LIMIT 10`) as any;
       
     console.log("Test: Found logs:", allLogs.rows.length);
 
     // Test 4: Check viewer_activity table
-    const viewerTableCheck: any = await query(`
+    const viewerTableCheck = await query(`
       SELECT EXISTS (
         SELECT FROM information_schema.tables 
         WHERE table_schema = 'public' 
         AND table_name = 'viewer_activity'
       );
-    `);
+    `) as any;
     console.log("Test: viewer_activity table exists:", viewerTableCheck.rows[0].exists);
 
     let viewerLogs: any = { rows: [] };
@@ -61,7 +63,7 @@ export async function GET() {
           id
         FROM viewer_activity 
         ORDER BY timestamp DESC
-        LIMIT 5`);
+        LIMIT 5`) as any;
       console.log("Test: Found viewer activities:", viewerLogs.rows.length);
     }
 

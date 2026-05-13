@@ -10,7 +10,8 @@ export async function GET() {
       WHERE ml.is_active = true
     `;
     
-    const countResult = await query(countSql);
+    // Cast to any to resolve the 'unknown' type error
+    const countResult = (await query(countSql)) as any;
     const totalTypes = countResult.rows[0]?.total_types || 0;
     
     // Get detailed breakdown of layer types
@@ -27,7 +28,8 @@ export async function GET() {
       ORDER BY count DESC, layer_type ASC
     `;
     
-    const detailResult = await query(detailSql);
+    // Cast to any to resolve the 'unknown' type error
+    const detailResult = (await query(detailSql)) as any;
     
     return NextResponse.json({
       total_types: totalTypes,

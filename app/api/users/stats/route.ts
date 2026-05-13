@@ -2,122 +2,118 @@ import { query } from '@/lib/db';
 import { NextResponse } from 'next/server';
 import { getAuthUser } from '@/lib/auth';
 
+// Define types to satisfy the TypeScript compiler
+interface UserInfo {
+  id: string | number;
+  lgu_id: string | number;
+}
+
+interface StatsRow {
+  totalviewers: string | number;
+  activeviewers: string | number;
+  removedviewers: string | number;
+}
+
+interface QueryResult<T> {
+  rows: T[];
+}
+
 export async function GET(request: Request) {
   try {
-    // Check for superadmin direct access header
     const headers = request.headers;
-    const superadminAccess = headers.get('x-superadmin-direct-access');
+    const superadminDirectAccess = headers.get('x-superadmin-direct-access');
+    const superadminViaLGU = headers.get('x-superadmin-access');
     const lguUserId = headers.get('x-lgu-user-id');
+    const isSuperadmin = superadminDirectAccess === 'true' || superadminViaLGU === 'true';
     
-    let loggedInUsername = 'Superadmin';
-    let lguId = null;
-    
-    if (superadminAccess !== 'true') {
+    let loggedInUserId: string | number | null = null;
+    // let lguId = null; // Declared but unused in original logic - keeping for structure
+
+    if (!isSuperadmin) {
       if (lguUserId) {
-        // LGU user access via superadmin
-        const userInfoResult = await query('SELECT username, lgu_id FROM users WHERE id = $1', [lguUserId]);
+        const userInfoResult = (await query('SELECT id, lgu_id FROM users WHERE id = $1', [lguUserId])) as QueryResult<UserInfo>;
         const creatorInfo = userInfoResult.rows[0];
         if (creatorInfo) {
-          loggedInUsername = creatorInfo.username;
-          lguId = creatorInfo.lgu_id;
+          loggedInUserId = creatorInfo.id;
+          // lguId = creatorInfo.lgu_id;
         }
       } else {
-        // Normal authentication flow
         const userId = await getAuthUser();
-        
         if (!userId) {
           return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
         }
 
-        // Get username and LGU ID of logged-in user
-        const userInfoResult = await query('SELECT username, lgu_id FROM users WHERE id = $1', [userId]);
+        const userInfoResult = (await query('SELECT id, lgu_id FROM users WHERE id = $1', [userId])) as QueryResult<UserInfo>;
         const creatorInfo = userInfoResult.rows[0];
 
         if (!creatorInfo) {
           return NextResponse.json({ error: 'User not found' }, { status: 404 });
         }
 
-        loggedInUsername = creatorInfo.username;
-        lguId = creatorInfo.lgu_id;
+        loggedInUserId = creatorInfo.id;
+        // lguId = creatorInfo.lgu_id;
       }
     }
 
-    // Debug: Get viewers to see what created_by values exist (filtered for LGU users)
-    // Only select columns that definitely exist to avoid errors
-    let allViewersDebug;
-    if (superadminAccess === 'true') {
-      allViewersDebug = await query(`
+    // Handle Debug queries with proper typing
+    let allViewersDebugResult: QueryResult<any>;
+    if (isSuperadmin) {
+      allViewersDebugResult = (await query(`
         SELECT id, username, created_by, role, created_at
         FROM users 
         WHERE role = 'Viewer'
         ORDER BY created_at DESC
         LIMIT 10
-      `);
+      `)) as QueryResult<any>;
     } else {
-      allViewersDebug = await query(`
+      allViewersDebugResult = (await query(`
         SELECT id, username, created_by, role, created_at
         FROM users 
         WHERE role = 'Viewer' AND created_by = $1
         ORDER BY created_at DESC
         LIMIT 10
-      `, [loggedInUsername]);
+      `, [loggedInUserId])) as QueryResult<any>;
     }
 
-    // Count viewers by status (filtered for LGU users)
-    let activeViewersResult, removedViewersResult, totalViewersResult;
+    let statsQuery: string;
+    let queryParams: any[];
     
-    if (superadminAccess === 'true') {
-      // Superadmin sees all viewer stats
-      activeViewersResult = await query(`
-        SELECT COUNT(*) as count
+    if (isSuperadmin) {
+      statsQuery = `
+        SELECT 
+          COUNT(*) FILTER (WHERE role = 'Viewer') as totalviewers,
+          COUNT(*) FILTER (WHERE role = 'Viewer' AND is_active = true) as activeviewers,
+          COUNT(*) FILTER (WHERE role = 'Viewer' AND is_active = false) as removedviewers
         FROM users 
-        WHERE role = 'Viewer' AND is_active = true
-      `);
-
-      removedViewersResult = await query(`
-        SELECT COUNT(*) as count
-        FROM users 
-        WHERE role = 'Viewer' AND is_active = false
-      `);
-
-      totalViewersResult = await query(`
-        SELECT COUNT(*) as count
-        FROM users 
-        WHERE role = 'Viewer'
-      `);
+      `;
+      queryParams = [];
     } else {
-      // LGU users only see stats for viewers they created
-      activeViewersResult = await query(`
-        SELECT COUNT(*) as count
+      statsQuery = `
+        SELECT 
+          COUNT(*) FILTER (WHERE role = 'Viewer' AND created_by = $1) as totalviewers,
+          COUNT(*) FILTER (WHERE role = 'Viewer' AND is_active = true AND created_by = $1) as activeviewers,
+          COUNT(*) FILTER (WHERE role = 'Viewer' AND is_active = false AND created_by = $1) as removedviewers
         FROM users 
-        WHERE role = 'Viewer' AND is_active = true AND created_by = $1
-      `, [loggedInUsername]);
-
-      removedViewersResult = await query(`
-        SELECT COUNT(*) as count
-        FROM users 
-        WHERE role = 'Viewer' AND is_active = false AND created_by = $1
-      `, [loggedInUsername]);
-
-      totalViewersResult = await query(`
-        SELECT COUNT(*) as count
-        FROM users 
-        WHERE role = 'Viewer' AND created_by = $1
-      `, [loggedInUsername]);
+      `;
+      queryParams = [loggedInUserId];
     }
 
-    const activeViewers = parseInt(activeViewersResult.rows[0]?.count) || 0;
-    const removedViewers = parseInt(removedViewersResult.rows[0]?.count) || 0;
-    const totalViewers = parseInt(totalViewersResult.rows[0]?.count) || 0;
+    const statsResult = (await query(statsQuery, queryParams)) as QueryResult<StatsRow>;
+    const statsData = statsResult.rows[0];
+
+    // parse strings to integers (Postgres COUNT returns strings)
+    const activeViewers = parseInt(String(statsData?.activeviewers || 0), 10);
+    const removedViewers = parseInt(String(statsData?.removedviewers || 0), 10);
+    const totalViewers = parseInt(String(statsData?.totalviewers || 0), 10);
 
     const stats = {
       totalViewers,
       activeViewers,
-      loggedInViewers: activeViewers, // Simplified: active viewers are considered logged in
+      loggedInViewers: activeViewers,
       removedViewers,
       debug: {
-        loggedInUsername,
-        allViewersDebug: allViewersDebug.rows,
+        loggedInUserId,
+        allViewersDebug: allViewersDebugResult.rows,
       }
     };
 

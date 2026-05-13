@@ -4,12 +4,12 @@ import { query } from '@/lib/db';
 // GET - Fetch all source types
 export async function GET() {
   try {
-    const result = await query(`
+    const result = (await query(`
       SELECT id, name, description, color, is_active, created_at
       FROM source_types 
       WHERE is_active = true
       ORDER BY name
-    `);
+    `)) as any;
     
     return NextResponse.json(result.rows || []);
   } catch (error: any) {
@@ -28,11 +28,11 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Name is required" }, { status: 400 });
     }
 
-    const result = await query(`
+    const result = (await query(`
       INSERT INTO source_types (name, description, color)
       VALUES ($1, $2, $3)
       RETURNING *
-    `, [name, description || null, color || '#3b82f6']);
+    `, [name, description || null, color || '#3b82f6'])) as any;
 
     return NextResponse.json(result.rows[0], { status: 201 });
   } catch (error: any) {

@@ -3,7 +3,8 @@ import { query } from '@/lib/db';
 
 export async function GET() {
   try {
-    const result = await query(`
+    // Cast the result to 'any' to resolve the 'unknown' type error for the build
+    const result = (await query(`
       SELECT 
         parcel_no,
         owner_name,
@@ -12,7 +13,7 @@ export async function GET() {
       FROM tax_parcels 
       ORDER BY created_at DESC
       LIMIT 20
-    `);
+    `)) as any;
     
     return NextResponse.json(result.rows);
   } catch (error: any) {

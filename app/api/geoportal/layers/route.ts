@@ -3,6 +3,11 @@ import { query } from '@/lib/db';
 import { GeoPortalService } from '@/lib/geoportal';
 import { prisma } from '@/lib/prisma';
 
+// Define a generic interface for your DB results
+interface QueryResult {
+    rows: any[];
+}
+
 // Types for API responses
 interface GeoportalLayerResponse {
     id: string;
@@ -155,8 +160,8 @@ export async function GET(request: Request) {
 
         queryParams.push(limit, offset);
 
-        // Execute main query
-        const layersResult = await query(queryText, queryParams);
+        // Execute main query with cast
+        const layersResult = (await query(queryText, queryParams)) as QueryResult;
 
         // Get total count for pagination
         const countQuery = `
@@ -165,18 +170,18 @@ export async function GET(request: Request) {
             ${whereClause}
         `;
         
-        const countResult = await query(countQuery, queryParams.slice(0, -2)); // Remove limit and offset params
+        const countResult = (await query(countQuery, queryParams.slice(0, -2))) as QueryResult; 
         const total = parseInt(countResult.rows[0]?.total || '0');
 
         // Get categories for each layer if needed
         const layersWithCategories = await Promise.all(
             layersResult.rows.map(async (layer) => {
-                const categoriesResult = await query(`
+                const categoriesResult = (await query(`
                     SELECT gc.name, gc.category_id
                     FROM layer_categories lc
                     JOIN geoportal_categories gc ON lc.category_id = gc.category_id
                     WHERE lc.layer_id = $1
-                `, [layer.layer_id]);
+                `, [layer.layer_id])) as QueryResult;
 
                 return {
                     ...layer,
@@ -187,9 +192,9 @@ export async function GET(request: Request) {
 
         // Get available filters
         const [agencies, dataTypes, categories] = await Promise.all([
-            query('SELECT DISTINCT agency, COUNT(*) as count FROM geoportal_layers WHERE is_active = true GROUP BY agency ORDER BY count DESC'),
-            query('SELECT DISTINCT data_type, COUNT(*) as count FROM geoportal_layers WHERE is_active = true GROUP BY data_type ORDER BY count DESC'),
-            query('SELECT DISTINCT gc.name, COUNT(*) as count FROM geoportal_categories gc JOIN layer_categories lc ON gc.category_id = lc.category_id JOIN geoportal_layers gl ON lc.layer_id = gl.layer_id WHERE gl.is_active = true GROUP BY gc.name ORDER BY count DESC')
+            query('SELECT DISTINCT agency, COUNT(*) as count FROM geoportal_layers WHERE is_active = true GROUP BY agency ORDER BY count DESC') as Promise<QueryResult>,
+            query('SELECT DISTINCT data_type, COUNT(*) as count FROM geoportal_layers WHERE is_active = true GROUP BY data_type ORDER BY count DESC') as Promise<QueryResult>,
+            query('SELECT DISTINCT gc.name, COUNT(*) as count FROM geoportal_categories gc JOIN layer_categories lc ON gc.category_id = lc.category_id JOIN geoportal_layers gl ON lc.layer_id = gl.layer_id WHERE gl.is_active = true GROUP BY gc.name ORDER BY count DESC') as Promise<QueryResult>
         ]);
 
         // Build response
@@ -239,11 +244,11 @@ export async function POST(request: Request) {
         }
 
         // Check if layer exists and has download URL
-        const layerResult = await query(`
+        const layerResult = (await query(`
             SELECT layer_id, title, download_url, agency 
             FROM geoportal_layers 
             WHERE layer_id = $1 AND is_active = true
-        `, [layerId]);
+        `, [layerId])) as QueryResult;
 
         if (layerResult.rows.length === 0) {
             return NextResponse.json({
@@ -262,25 +267,17 @@ export async function POST(request: Request) {
         }
 
         // Create download request record
-        const downloadRequest = await query(`
+        const downloadRequest = (await query(`
             INSERT INTO geoportal_download_requests (layer_id, request_data, status)
             VALUES ($1, $2, 'pending')
             RETURNING id, created_at
-        `, [layerId, JSON.stringify(requestData || {})]);
+        `, [layerId, JSON.stringify(requestData || {})])) as QueryResult;
 
-        // In a real implementation, you would:
-        // 1. Make a request to the geoportal download API
-        // 2. Handle authentication if required
-        // 3. Get the download URL
-        // 4. Update the request record with the download URL and expiry
-
-        // For now, we'll simulate a download request
-        const requestId = downloadRequest.rows[0].id;
-        
         // Simulate processing delay
+        const requestId = downloadRequest.rows[0].id;
         await new Promise(resolve => setTimeout(resolve, 1000));
 
-        // Update with mock download URL (in reality, this would come from geoportal)
+        // Update with mock download URL
         const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours from now
         const mockDownloadUrl = `https://geoportal.gov.ph/downloads/${layerId}_${requestId}.zip`;
 

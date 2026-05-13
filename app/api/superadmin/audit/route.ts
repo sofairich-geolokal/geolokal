@@ -2,6 +2,9 @@ import { NextRequest, NextResponse } from 'next/server';
 import { query } from '@/lib/db';
 import { getAuthUser } from '@/lib/auth';
 
+// Force dynamic to prevent build-time static generation errors
+export const dynamic = 'force-dynamic';
+
 export async function GET(request: NextRequest) {
   try {
     // Get logged-in user ID from auth token
@@ -11,7 +14,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Verify user is superadmin
-    const userResult = await query('SELECT role FROM users WHERE id = $1', [userId]);
+    const userResult = await query('SELECT role FROM users WHERE id = $1', [userId]) as any;
     const user = userResult.rows[0];
     
     if (!user || user.role.toLowerCase() !== 'superadmin') {
@@ -63,7 +66,7 @@ export async function GET(request: NextRequest) {
       FROM audit_logs 
       ${whereClause}
     `;
-    const countResult = await query(countQuery, params);
+    const countResult = await query(countQuery, params) as any;
     const totalCount = countResult.rows[0]?.total || 0;
 
     // Get audit logs with pagination
@@ -81,9 +84,9 @@ export async function GET(request: NextRequest) {
       ORDER BY created_at DESC
       LIMIT $${paramIndex} OFFSET $${paramIndex + 1}
     `;
-    params.push(limit, offset);
-
-    const logsResult = await query(logsQuery, params);
+    
+    const logsParams = [...params, limit, offset];
+    const logsResult = await query(logsQuery, logsParams) as any;
 
     // Get unique actions for filter dropdown
     const actionsQuery = `
@@ -92,7 +95,7 @@ export async function GET(request: NextRequest) {
       GROUP BY action
       ORDER BY count DESC
     `;
-    const actionsResult = await query(actionsQuery);
+    const actionsResult = await query(actionsQuery) as any;
 
     // Get unique actors for filter dropdown
     const actorsQuery = `
@@ -102,7 +105,7 @@ export async function GET(request: NextRequest) {
       ORDER BY count DESC
       LIMIT 50
     `;
-    const actorsResult = await query(actorsQuery);
+    const actorsResult = await query(actorsQuery) as any;
 
     return NextResponse.json({
       logs: logsResult.rows || [],
@@ -126,7 +129,7 @@ export async function GET(request: NextRequest) {
   }
 }
 
-export async function DELETE(request: Request) {
+export async function DELETE(request: NextRequest) {
   try {
     // Get logged-in user ID from auth token
     const userId = await getAuthUser();
@@ -135,7 +138,7 @@ export async function DELETE(request: Request) {
     }
 
     // Verify user is superadmin
-    const userResult = await query('SELECT role, username FROM users WHERE id = $1', [userId]);
+    const userResult = await query('SELECT role, username FROM users WHERE id = $1', [userId]) as any;
     const user = userResult.rows[0];
     
     if (!user || user.role.toLowerCase() !== 'superadmin') {
@@ -178,7 +181,7 @@ export async function DELETE(request: Request) {
       DELETE FROM audit_logs 
       ${whereClause}
     `;
-    const deleteResult = await query(deleteQuery, params);
+    const deleteResult = await query(deleteQuery, params) as any;
 
     // Create audit log entry for this deletion
     await query(

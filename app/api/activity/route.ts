@@ -4,6 +4,13 @@ import { query } from '@/lib/db';
 
 const prisma = new PrismaClient();
 
+// Define interface for the user query result
+interface UserQueryResult {
+  id: number;
+  username: string;
+  lgu_id: number | string | null;
+}
+
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
@@ -25,12 +32,17 @@ export async function POST(request: NextRequest) {
     const user_agent = request.headers.get('user-agent') || 'unknown';
 
     // Try to get user info from session or activity data
-    let userInfo = null;
+    let userInfo: UserQueryResult | null = null;
     let lgu_id = null;
     
     // Check if we can identify the user from activity_data or session
     if (activity_data && activity_data.username) {
-      const userResult = await query('SELECT id, username, lgu_id FROM users WHERE username = $1', [activity_data.username]);
+      // Cast the query result to fix the 'unknown' type error
+      const userResult = (await query(
+        'SELECT id, username, lgu_id FROM users WHERE username = $1', 
+        [activity_data.username]
+      )) as { rows: UserQueryResult[] };
+
       if (userResult.rows.length > 0) {
         userInfo = userResult.rows[0];
         lgu_id = userInfo.lgu_id;

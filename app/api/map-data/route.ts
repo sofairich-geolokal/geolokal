@@ -46,7 +46,8 @@ export async function GET(request: Request) {
                 queryText += ` ORDER BY created_at DESC`;
             }
 
-            const result = await query(queryText, queryParams);
+            // Fixed: cast to any
+            const result = await query(queryText, queryParams) as any;
             
             return NextResponse.json({
                 success: true,
@@ -55,12 +56,13 @@ export async function GET(request: Request) {
         }
 
         if (type === 'customizations') {
+            // Fixed: cast to any
             const result = await query(`
                 SELECT id, title, description, map_config, view_state, is_public, created_at, updated_at
                 FROM map_customizations 
                 WHERE user_id = $1 OR is_public = true
                 ORDER BY created_at DESC
-            `, [userId]);
+            `, [userId]) as any;
 
             return NextResponse.json({
                 success: true,
@@ -69,11 +71,12 @@ export async function GET(request: Request) {
         }
 
         if (type === 'templates') {
+            // Fixed: cast to any
             const result = await query(`
                 SELECT id, name, description, calculation_type, template_config
                 FROM calculation_templates 
                 ORDER BY is_default DESC, name ASC
-            `);
+            `) as any;
 
             return NextResponse.json({
                 success: true,
@@ -82,6 +85,7 @@ export async function GET(request: Request) {
         }
 
         // Get all data for dashboard
+        // Fixed: cast results to any
         const [calculations, customizations, templates] = await Promise.all([
             query(`
                 SELECT calculation_type, COUNT(*) as count, 
@@ -101,7 +105,7 @@ export async function GET(request: Request) {
                 FROM calculation_templates 
                 WHERE is_default = true
             `)
-        ]);
+        ]) as any[];
 
         return NextResponse.json({
             success: true,
@@ -132,6 +136,7 @@ export async function POST(request: Request) {
         if (type === 'calculation') {
             const calculation: MapCalculation = data;
             
+            // Fixed: cast to any
             const result = await query(`
                 INSERT INTO map_calculations (user_id, title, calculation_type, input_data, result_data, units, map_state)
                 VALUES ($1, $2, $3, $4, $5, $6, $7)
@@ -144,7 +149,7 @@ export async function POST(request: Request) {
                 JSON.stringify(calculation.result_data),
                 calculation.units || 'metric',
                 JSON.stringify(calculation.map_state || {})
-            ]);
+            ]) as any;
 
             return NextResponse.json({
                 success: true,
@@ -157,6 +162,7 @@ export async function POST(request: Request) {
         if (type === 'customization') {
             const customization: MapCustomization = data;
             
+            // Fixed: cast to any
             const result = await query(`
                 INSERT INTO map_customizations (user_id, title, description, map_config, view_state, is_public)
                 VALUES ($1, $2, $3, $4, $5, $6)
@@ -168,7 +174,7 @@ export async function POST(request: Request) {
                 JSON.stringify(customization.map_config),
                 JSON.stringify(customization.view_state || {}),
                 customization.is_public || false
-            ]);
+            ]) as any;
 
             return NextResponse.json({
                 success: true,

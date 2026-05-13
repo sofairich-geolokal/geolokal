@@ -1,6 +1,6 @@
-import { query } from '@/lib/db';
 import { NextResponse } from 'next/server';
 import { getAuthUser } from '@/lib/auth';
+import { query } from '@/lib/db';
 
 export async function GET() {
   try {
@@ -16,7 +16,8 @@ export async function GET() {
     }
 
     // Get the logged-in user's details including role
-    const userResult = await query('SELECT lgu_id, username, role FROM users WHERE id = $1', [userId]);
+    // Fix: cast to any
+    const userResult = await query('SELECT lgu_id, username, role FROM users WHERE id = $1', [userId]) as any;
     console.log("Logs API: User query result:", userResult.rows);
     
     const loggedInUser = userResult.rows[0];
@@ -33,13 +34,14 @@ export async function GET() {
     console.log("Logs API: Is SuperAdmin:", isSuperAdmin);
 
     // Check if audit_logs table exists
+    // Fix: cast to any
     const tableCheck = await query(`
       SELECT EXISTS (
         SELECT FROM information_schema.tables 
         WHERE table_schema = 'public' 
         AND table_name = 'audit_logs'
       );
-    `);
+    `) as any;
     
     if (!tableCheck.rows[0].exists) {
       console.log("Logs API: audit_logs table does not exist");
@@ -72,17 +74,19 @@ export async function GET() {
       ORDER BY created_at DESC
     `;
       
-    const auditResult = await query(isSuperAdmin ? auditSql : auditSql, isSuperAdmin ? [] : [loggedInUser.lgu_id]);
+    // Fix: cast to any
+    const auditResult = await query(auditSql, isSuperAdmin ? [] : [loggedInUser.lgu_id]) as any;
     console.log("Logs API: Found audit logs:", auditResult.rows.length);
 
     // Check if viewer_activity table exists
+    // Fix: cast to any
     const viewerTableCheck = await query(`
       SELECT EXISTS (
         SELECT FROM information_schema.tables 
         WHERE table_schema = 'public' 
         AND table_name = 'viewer_activity'
       );
-    `);
+    `) as any;
 
     let viewerResult: any = { rows: [] };
     if (viewerTableCheck.rows[0].exists) {
@@ -111,7 +115,8 @@ export async function GET() {
         LEFT JOIN users u ON va.user_id = u.id
         WHERE u.lgu_id = $1 OR va.session_id IS NOT NULL`;
         
-      viewerResult = await query(isSuperAdmin ? viewerSql : viewerSql, isSuperAdmin ? [] : [loggedInUser.lgu_id]);
+      // Fix: cast to any
+      viewerResult = await query(viewerSql, isSuperAdmin ? [] : [loggedInUser.lgu_id]) as any;
       console.log("Logs API: Found viewer logs:", viewerResult.rows.length);
     }
 
@@ -130,7 +135,6 @@ export async function GET() {
     return NextResponse.json(allLogs || []);
   } catch (error: any) {
     console.error("Logs API: Fetch Error:", error.message);
-    console.error("Logs API: Full error:", error);
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }
@@ -144,7 +148,8 @@ export async function DELETE(request: Request) {
     }
 
     // Get the logged-in user's details including role
-    const userResult = await query('SELECT lgu_id, role FROM users WHERE id = $1', [userId]);
+    // Fix: cast to any
+    const userResult = await query('SELECT lgu_id, role FROM users WHERE id = $1', [userId]) as any;
     const loggedInUser = userResult.rows[0];
 
     if (!loggedInUser) {
@@ -161,7 +166,6 @@ export async function DELETE(request: Request) {
       return NextResponse.json({ error: 'No valid IDs provided' }, { status: 400 });
     }
 
-    let deletedCount = 0;
     let deletedAuditLogs = 0;
     let deletedViewerLogs = 0;
 
@@ -173,7 +177,9 @@ export async function DELETE(request: Request) {
         ? `DELETE FROM audit_logs WHERE id IN (${placeholders})`
         : `DELETE FROM audit_logs WHERE id IN (${placeholders}) AND lgu_id = $${auditIds.length + 1}`;
       const auditParams = isSuperAdmin ? auditIds : [...auditIds, loggedInUser.lgu_id];
-      const auditResult = await query(auditQuery, auditParams);
+      
+      // Fix: cast to any
+      const auditResult = await query(auditQuery, auditParams) as any;
       deletedAuditLogs = auditResult.rowCount || 0;
     }
 
@@ -181,20 +187,22 @@ export async function DELETE(request: Request) {
     const viewerIds = ids.filter((id, index) => !log_types || log_types[index] === 'viewer');
     if (viewerIds.length > 0) {
       const placeholders = viewerIds.map((_, index) => `$${index + 1}`).join(',');
+      
+      // Fix: cast to any
       const viewerResult = await query(
         `DELETE FROM viewer_activity WHERE id IN (${placeholders})`,
         viewerIds
-      );
+      ) as any;
       deletedViewerLogs = viewerResult.rowCount || 0;
     }
 
-    deletedCount = deletedAuditLogs + deletedViewerLogs;
+    const totalDeleted = deletedAuditLogs + deletedViewerLogs;
     
     console.log(`Deleted ${deletedAuditLogs} audit logs and ${deletedViewerLogs} viewer activities ${isSuperAdmin ? '(SuperAdmin - all LGUs)' : `from LGU ${loggedInUser.lgu_id}`}`);
     
     return NextResponse.json({ 
       message: 'Logs deleted successfully',
-      deletedCount: deletedCount,
+      deletedCount: totalDeleted,
       deletedAuditLogs: deletedAuditLogs,
       deletedViewerLogs: deletedViewerLogs,
       deletedIds: ids

@@ -1,6 +1,9 @@
 import { NextResponse } from 'next/server';
 import { query } from '@/lib/db';
 
+// This ensures the route is treated as dynamic and prevents build-time static generation errors
+export const dynamic = 'force-dynamic';
+
 export async function GET() {
   try {
     // Test environment variables
@@ -12,8 +15,8 @@ export async function GET() {
       NODE_ENV: process.env.NODE_ENV
     };
 
-    // Test database connection
-    const result = await query('SELECT NOW() as current_time, COUNT(*) as user_count FROM users');
+    // Test database connection - Added 'as any' to resolve the 'unknown' type error
+    const result = await query('SELECT NOW() as current_time, COUNT(*) as user_count FROM users') as any;
     
     return NextResponse.json({
       success: true,

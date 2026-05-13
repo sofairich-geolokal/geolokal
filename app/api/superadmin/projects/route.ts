@@ -2,6 +2,9 @@ import { NextRequest, NextResponse } from 'next/server';
 import { query } from '@/lib/db';
 import { getAuthUser } from '@/lib/auth';
 
+// This ensures the route is treated as dynamic and avoids build-time errors
+export const dynamic = 'force-dynamic';
+
 export async function GET(request: NextRequest) {
   try {
     // Get logged-in user ID from auth token
@@ -11,7 +14,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Verify user is superadmin
-    const userResult = await query('SELECT role FROM users WHERE id = $1', [userId]);
+    const userResult = await query('SELECT role FROM users WHERE id = $1', [userId]) as any;
     const user = userResult.rows[0];
     
     if (!user || user.role.toLowerCase() !== 'superadmin') {
@@ -49,7 +52,7 @@ export async function GET(request: NextRequest) {
       FROM projects p
       ${whereClause}
     `;
-    const countResult = await query(countQuery, params);
+    const countResult = await query(countQuery, params) as any;
     const totalCount = countResult.rows[0]?.total || 0;
 
     // Get projects with pagination and related data
@@ -79,9 +82,9 @@ export async function GET(request: NextRequest) {
       ORDER BY p.created_at DESC
       LIMIT $${paramIndex} OFFSET $${paramIndex + 1}
     `;
-    params.push(limit, offset);
-
-    const projectsResult = await query(projectsQuery, params);
+    
+    const projectsParams = [...params, limit, offset];
+    const projectsResult = await query(projectsQuery, projectsParams) as any;
 
     // Get project statistics
     const statsQuery = `
@@ -93,7 +96,7 @@ export async function GET(request: NextRequest) {
         COUNT(CASE WHEN created_at > CURRENT_DATE - INTERVAL '30 days' THEN 1 END) as new_projects_30_days
       FROM projects
     `;
-    const statsResult = await query(statsQuery);
+    const statsResult = await query(statsQuery) as any;
 
     // Get LGU statistics for projects
     const lguStatsQuery = `
@@ -107,7 +110,7 @@ export async function GET(request: NextRequest) {
       GROUP BY p.lgu_id, c.name
       ORDER BY project_count DESC
     `;
-    const lguStatsResult = await query(lguStatsQuery);
+    const lguStatsResult = await query(lguStatsQuery) as any;
 
     return NextResponse.json({
       projects: projectsResult.rows || [],
@@ -140,7 +143,7 @@ export async function POST(request: Request) {
     }
 
     // Verify user is superadmin
-    const userResult = await query('SELECT role, username FROM users WHERE id = $1', [userId]);
+    const userResult = await query('SELECT role, username FROM users WHERE id = $1', [userId]) as any;
     const user = userResult.rows[0];
     
     if (!user || user.role.toLowerCase() !== 'superadmin') {
@@ -156,7 +159,7 @@ export async function POST(request: Request) {
                 to_char(updated_at, 'Mon DD, YYYY HH:MI AM') as updated
     `;
     
-    const projectResult = await query(projectQuery, [name, description, lgu_id, status || 'active', user.username]);
+    const projectResult = await query(projectQuery, [name, description, lgu_id, status || 'active', user.username]) as any;
     
     // Create Audit Log entry
     await query(
@@ -182,7 +185,7 @@ export async function PUT(request: Request) {
     }
 
     // Verify user is superadmin
-    const userResult = await query('SELECT role, username FROM users WHERE id = $1', [userId]);
+    const userResult = await query('SELECT role, username FROM users WHERE id = $1', [userId]) as any;
     const user = userResult.rows[0];
     
     if (!user || user.role.toLowerCase() !== 'superadmin') {
@@ -199,7 +202,7 @@ export async function PUT(request: Request) {
                 to_char(updated_at, 'Mon DD, YYYY HH:MI AM') as updated
     `;
     
-    const updateResult = await query(updateQuery, [name, description, lgu_id, status, id]);
+    const updateResult = await query(updateQuery, [name, description, lgu_id, status, id]) as any;
     
     if (updateResult.rowCount === 0) {
       return NextResponse.json({ error: 'Project not found' }, { status: 404 });
@@ -229,7 +232,7 @@ export async function DELETE(request: Request) {
     }
 
     // Verify user is superadmin
-    const userResult = await query('SELECT role, username FROM users WHERE id = $1', [userId]);
+    const userResult = await query('SELECT role, username FROM users WHERE id = $1', [userId]) as any;
     const user = userResult.rows[0];
     
     if (!user || user.role.toLowerCase() !== 'superadmin') {
@@ -245,14 +248,14 @@ export async function DELETE(request: Request) {
     const projectLguQuery = await query(
       `SELECT DISTINCT lgu_id FROM projects WHERE id IN (${placeholders})`,
       projectIds
-    );
+    ) as any;
     const projectLguIds = projectLguQuery.rows.map((row: any) => row.lgu_id).filter((id: any) => id != null);
 
     // Delete projects
     const deleteResult = await query(`
       DELETE FROM projects 
       WHERE id IN (${placeholders})
-    `, projectIds);
+    `, projectIds) as any;
     
     // Create Audit Log entry for each affected LGU
     for (const lguId of projectLguIds) {

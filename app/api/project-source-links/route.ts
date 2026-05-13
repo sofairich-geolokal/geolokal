@@ -11,6 +11,7 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: "Project ID is required" }, { status: 400 });
     }
 
+    // Fixed: Cast to any to access .rows
     const result = await query(`
       SELECT 
         st.id,
@@ -22,7 +23,7 @@ export async function GET(request: Request) {
       JOIN source_types st ON psl.source_type_id = st.id
       WHERE psl.project_id = $1 AND st.is_active = true
       ORDER BY st.name
-    `, [projectId]);
+    `, [projectId]) as any;
 
     return NextResponse.json(result.rows || []);
   } catch (error: any) {
@@ -41,12 +42,13 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Project ID and Source Type ID are required" }, { status: 400 });
     }
 
+    // Fixed: Cast to any to access .rows
     const result = await query(`
       INSERT INTO project_source_links (project_id, source_type_id)
       VALUES ($1, $2)
       ON CONFLICT (project_id, source_type_id) DO NOTHING
       RETURNING *
-    `, [projectId, sourceTypeId]);
+    `, [projectId, sourceTypeId]) as any;
 
     return NextResponse.json(result.rows[0] || { message: "Link already exists" }, { status: 201 });
   } catch (error: any) {
