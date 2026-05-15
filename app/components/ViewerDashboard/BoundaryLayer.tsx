@@ -3,6 +3,7 @@
 import React, { useEffect, useState } from 'react';
 import { GeoJSON, Popup } from 'react-leaflet';
 import L from 'leaflet';
+import proj4 from 'proj4';
 
 interface BoundaryLayerProps {
   isVisible: boolean;
@@ -10,17 +11,9 @@ interface BoundaryLayerProps {
   onBoundsReady?: (bounds: [[number, number], [number, number]]) => void;
 }
 
-// PRS92 Philippines Zone III coordinate system parameters
-const PRS92_ZONE_III = {
-  projection: "Transverse_Mercator",
-  falseEasting: 500000.0,
-  falseNorthing: 0.0,
-  centralMeridian: 121.0,
-  scaleFactor: 0.99995,
-  latitudeOfOrigin: 0.0,
-  datum: "Philippine_Reference_System_1992",
-  spheroid: "Clarke_1866"
-};
+// Correct PRS92 PTM Zone 3 Projection for Batangas (same as ParcelLots)
+const PRS92_PTM3 = "+proj=tmerc +lat_0=0 +lon_0=121 +k=0.99995 +x_0=500000 +y_0=0 +ellps=clrk66 +towgs84=-127.62,-67.24,-47.04,-3.068,4.903,1.578,-1.06 +units=m +no_defs";
+const WGS84 = "EPSG:4326";
 
 // More accurate Ibaan municipality boundary coordinates (approximate)
 // These coordinates represent the actual boundaries of Ibaan, Batangas
@@ -136,7 +129,7 @@ const BoundaryLayer: React.FC<BoundaryLayerProps> = ({
     }
   }, [isVisible]);
 
-  // Transform coordinates from PRS92 to WGS84 (same as superadmin)
+  // Transform coordinates from PRS92 to WGS84 using proj4 (same as ParcelLots)
   const transformCoordinates = (geoData: any) => {
     if (!geoData || !geoData.features) return geoData;
     return {
@@ -155,9 +148,15 @@ const BoundaryLayer: React.FC<BoundaryLayerProps> = ({
         .map((feature: any) => {
         if ((feature.geometry?.type === 'Polygon' || feature.geometry?.type === 'MultiPolygon') && feature.geometry?.coordinates) {
           const transformRing = (ring: any) => ring.map((coord: any) => {
-            const x = coord[0], y = coord[1];
-            if (x < 180 && x > -180) return [x, y];
-            return [(x - 500000) / 100000 + 121.0, (y - 1520000) / 100000 + 13.8];
+            const x = Number(coord[0]);
+            const y = Number(coord[1]);
+            // Data is already in WGS84 format (EPSG:4326), so no transformation needed
+            // Check if coordinates are in valid WGS84 range
+            if (x >= -180 && x <= 180 && y >= -90 && y <= 90) {
+              return [x, y];
+            }
+            // If coordinates are in PRS92 format, apply transformation using proj4
+            return proj4(PRS92_PTM3, WGS84, [x, y]);
           });
 
           let newCoords;
@@ -174,16 +173,16 @@ const BoundaryLayer: React.FC<BoundaryLayerProps> = ({
     };
   };
 
-  // Admin boundary styling (same as superadmin)
+  // Admin boundary styling - Blue border with transparent background
   const adminBoundaryStyle = (feature: any) => {
     const isSelected = feature.id === selectedBoundaryId;
     const hasCompleteData = feature.properties && feature.properties.brgy;
 
     return {
-      color: isSelected ? '#000080' : '#000080', // Always navy blue outline
+      color: isSelected ? '#0000FF' : '#0000FF', // Always blue outline
       weight: isSelected ? 4 : 2,
-      fillColor: '#000080', // Navy blue fill color
-      fillOpacity: 0, // No transparent background - set to 0
+      fillColor: 'transparent', // Transparent background
+      fillOpacity: 0, // No fill
       dashArray: isSelected ? '' : '5, 10', // Solid when selected, dotted when not
     };
   };
@@ -200,6 +199,7 @@ const BoundaryLayer: React.FC<BoundaryLayerProps> = ({
         const content = `<div class="p-3 min-w-[250px] text-xs">
           <h4 class="font-bold text-blue-700 mb-2">Administrative Boundary Details</h4>
           
+          ${props.fid ? `<div class="mb-2"><span class="font-semibold">FID:</span> ${props.fid}</div>` : ''}
           ${props.brgy ? `<div class="mb-2"><span class="font-semibold">Barangay:</span> ${props.brgy}</div>` : ''}
           ${props.lotno ? `<div><span class="font-semibold">Lot Number:</span> ${props.lotno}</div>` : ''}
           ${props.layer ? `<div><span class="font-semibold">Layer:</span> ${props.layer}</div>` : ''}
@@ -215,7 +215,7 @@ const BoundaryLayer: React.FC<BoundaryLayerProps> = ({
           
           <div class="mt-2 text-xs text-gray-500">
             <div>📍 Administrative Boundary of Ibaan, Batangas</div>
-            <div>📐 CRS: PRS92 Philippines Zone III</div>
+            <div>📐 CRS: EPSG:4326 (WGS84)</div>
           </div>
         </div>`;
         
@@ -225,7 +225,7 @@ const BoundaryLayer: React.FC<BoundaryLayerProps> = ({
         // Highlight on hover
         e.target.setStyle({ 
           weight: 4, 
-          color: '#000080', 
+          color: '#0000FF', 
           fillOpacity: 0,
           dashArray: ''
         });
@@ -239,6 +239,7 @@ const BoundaryLayer: React.FC<BoundaryLayerProps> = ({
           </div>
           
           <div class="space-y-1">
+            ${props.fid ? `<div class="flex justify-between"><span class="font-semibold text-gray-700">FID:</span><span class="text-gray-600">${props.fid}</span></div>` : ''}
             ${props.brgy ? `<div class="flex justify-between"><span class="font-semibold text-gray-700">Barangay:</span><span class="text-gray-600">${props.brgy}</span></div>` : ''}
             ${props.lotno ? `<div class="flex justify-between"><span class="font-semibold text-gray-700">Lot Number:</span><span class="text-gray-600">${props.lotno}</span></div>` : ''}
             ${props.layer ? `<div class="flex justify-between"><span class="font-semibold text-gray-700">Layer:</span><span class="text-gray-600">${props.layer}</span></div>` : ''}
@@ -257,7 +258,7 @@ const BoundaryLayer: React.FC<BoundaryLayerProps> = ({
           
           <div class="bg-blue-50 px-2 py-1 rounded mt-2 text-xs text-blue-700">
             <div class="font-semibold">📍 Administrative Boundary</div>
-            <div class="text-xs">Ibaan, Batangas • CRS: PRS92 Zone III</div>
+            <div class="text-xs">Ibaan, Batangas • CRS: EPSG:4326 (WGS84)</div>
           </div>
         </div>`;
         
@@ -304,6 +305,12 @@ const BoundaryLayer: React.FC<BoundaryLayerProps> = ({
       data={transformCoordinates(boundariesData)}
       style={adminBoundaryStyle}
       onEachFeature={onEachBoundaryFeature}
+      eventHandlers={{
+        add: (e) => {
+          const layer = e.target as L.GeoJSON;
+          console.log('BoundaryLayer: Layer added to map with', boundariesData.features.length, 'features');
+        }
+      }}
     />
   );
 };

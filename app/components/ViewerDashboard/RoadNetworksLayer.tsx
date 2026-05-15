@@ -3,6 +3,7 @@
 import React, { useEffect, useState } from 'react';
 import { GeoJSON, Popup } from 'react-leaflet';
 import L from 'leaflet';
+import proj4 from 'proj4';
 
 interface RoadNetworksLayerProps {
   isVisible: boolean;
@@ -10,17 +11,9 @@ interface RoadNetworksLayerProps {
   onBoundsReady?: (bounds: [[number, number], [number, number]]) => void;
 }
 
-// PRS92 Philippines Zone III coordinate system parameters
-const PRS92_ZONE_III = {
-  projection: "Transverse_Mercator",
-  falseEasting: 500000.0,
-  falseNorthing: 0.0,
-  centralMeridian: 121.0,
-  scaleFactor: 0.99995,
-  latitudeOfOrigin: 0.0,
-  datum: "Philippine_Reference_System_1992",
-  spheroid: "Clarke_1866"
-};
+// Correct PRS92 PTM Zone 3 Projection for Batangas (same as ParcelLots)
+const PRS92_PTM3 = "+proj=tmerc +lat_0=0 +lon_0=121 +k=0.99995 +x_0=500000 +y_0=0 +ellps=clrk66 +towgs84=-127.62,-67.24,-47.04,-3.068,4.903,1.578,-1.06 +units=m +no_defs";
+const WGS84 = "EPSG:4326";
 
 // Major roads in Ibaan, Batangas using PRS92 Zone III coordinates
 const ibaRoadNetworks: Array<{
@@ -186,6 +179,7 @@ const RoadNetworksLayer: React.FC<RoadNetworksLayerProps> = ({
         }
         
         setRoadsData(rData);
+        console.log('RoadNetworksLayer: Data loaded successfully, features:', rData?.features?.length);
         
         // Calculate and report bounds when data is loaded
         if (rData && onBoundsReady) {
@@ -207,7 +201,7 @@ const RoadNetworksLayer: React.FC<RoadNetworksLayerProps> = ({
     }
   }, [isVisible]);
 
-  // Transform road coordinates from PRS92 to WGS84 (same as superadmin)
+  // Transform road coordinates from PRS92 to WGS84 using proj4 (same as ParcelLots)
   const transformRoadCoordinates = (geoData: any) => {
     try {
       if (!geoData || !geoData.features || !Array.isArray(geoData.features)) return null;
@@ -216,9 +210,15 @@ const RoadNetworksLayer: React.FC<RoadNetworksLayerProps> = ({
         type: "FeatureCollection",
         features: geoData.features.filter((feature: any) => feature && feature.geometry && feature.geometry.coordinates).map((feature: any) => {
           const transformPt = (coord: any) => {
-            const x = coord[0], y = coord[1];
-            if (x < 180 && x > -180) return [x, y];
-            return [(x - 500000) / 100000 + 121.0, (y - 1520000) / 100000 + 13.8];
+            const x = Number(coord[0]);
+            const y = Number(coord[1]);
+            // Data is already in WGS84 format (EPSG:4326), so no transformation needed
+            // Check if coordinates are in valid WGS84 range
+            if (x >= -180 && x <= 180 && y >= -90 && y <= 90) {
+              return [x, y];
+            }
+            // If coordinates are in PRS92 format, apply transformation using proj4
+            return proj4(PRS92_PTM3, WGS84, [x, y]);
           };
 
           let newCoords = feature.geometry.coordinates;
@@ -239,17 +239,20 @@ const RoadNetworksLayer: React.FC<RoadNetworksLayerProps> = ({
         })
       };
       return transformedData;
-    } catch (error) { return null; }
+    } catch (error) { 
+      console.error('Error transforming road coordinates:', error);
+      return null; 
+    }
   };
 
-  // Road styling updated with Gray Fill #7d8b8f
-  const geoPortalRoadStyle = () => ({ color: '#7d8b8f', weight: 3, opacity: 0.9 });
+  // Road styling - Dark grey color with higher visibility
+  const geoPortalRoadStyle = (feature: any) => ({ color: '#333333', weight: 3, opacity: 1.0 });
 
   // Handle road feature interactions (same as superadmin)
   const onEachRoadFeature = (feature: any, layer: any) => {
     layer.on({
       mouseover: (e: any) => { 
-        e.target.setStyle({ weight: 5, color: '#eab308' });
+        e.target.setStyle({ weight: 8, color: '#eab308' });
         
         // Show detailed hover information box
         const props = feature.properties || {};
@@ -262,25 +265,21 @@ const RoadNetworksLayer: React.FC<RoadNetworksLayerProps> = ({
           <div class="space-y-1">
             ${props.Name ? `<div class="flex justify-between"><span class="font-semibold text-gray-700">Road Name:</span><span class="text-gray-600">${props.Name}</span></div>` : ''}
             ${props.Type ? `<div class="flex justify-between"><span class="font-semibold text-gray-700">Road Type:</span><span class="text-gray-600">${props.Type}</span></div>` : ''}
-            ${props.Class ? `<div class="flex justify-between"><span class="font-semibold text-gray-700">Class:</span><span class="text-gray-600">${props.Class}</span></div>` : ''}
-            ${props.Length ? `<div class="flex justify-between"><span class="font-semibold text-gray-700">Length:</span><span class="text-gray-600">${props.Length.toFixed(2)} km</span></div>` : ''}
-            ${props.Width ? `<div class="flex justify-between"><span class="font-semibold text-gray-700">Width:</span><span class="text-gray-600">${props.Width} m</span></div>` : ''}
-            ${props.Surface ? `<div class="flex justify-between"><span class="font-semibold text-gray-700">Surface:</span><span class="text-gray-600">${props.Surface}</span></div>` : ''}
-            ${props.Condition ? `<div class="flex justify-between"><span class="font-semibold text-gray-700">Condition:</span><span class="text-gray-600">${props.Condition}</span></div>` : ''}
+            ${props.Brgy ? `<div class="flex justify-between"><span class="font-semibold text-gray-700">Barangay:</span><span class="text-gray-600">${props.Brgy}</span></div>` : ''}
+            ${props.layer ? `<div class="flex justify-between"><span class="font-semibold text-gray-700">Layer:</span><span class="text-gray-600">${props.layer}</span></div>` : ''}
+            ${props.path ? `<div class="flex justify-between"><span class="font-semibold text-gray-700">Source:</span><span class="text-gray-600">${props.path.split('/').pop()}</span></div>` : ''}
           </div>
           
           <div class="border-t border-gray-200 pt-2 mt-2">
             <div class="text-gray-500 text-xs space-y-1">
               <div class="flex justify-between"><span class="font-semibold">Feature ID:</span><span>${feature.id}</span></div>
               <div class="flex justify-between"><span class="font-semibold">Geometry:</span><span>${feature.geometry?.type || 'LineString'}</span></div>
-              ${props.highway ? `<div class="flex justify-between"><span class="font-semibold">Highway:</span><span>${props.highway}</span></div>` : ''}
-              ${props.ref ? `<div class="flex justify-between"><span class="font-semibold">Reference:</span><span>${props.ref}</span></div>` : ''}
             </div>
           </div>
           
           <div class="bg-green-50 px-2 py-1 rounded mt-2 text-xs text-green-700">
             <div class="font-semibold">🛣️ Road Network</div>
-            <div class="text-xs">Ibaan, Batangas • Transportation Infrastructure</div>
+            <div class="text-xs">Ibaan, Batangas • CRS: EPSG:4326 (WGS84)</div>
           </div>
         </div>`;
         
@@ -297,7 +296,7 @@ const RoadNetworksLayer: React.FC<RoadNetworksLayerProps> = ({
         e.target._hoverMarker = hoverMarker;
       },
       mouseout: (e: any) => { 
-        e.target.setStyle(geoPortalRoadStyle());
+        e.target.setStyle(geoPortalRoadStyle(feature));
         
         // Remove hover label
         if (e.target._hoverMarker) {
@@ -309,8 +308,11 @@ const RoadNetworksLayer: React.FC<RoadNetworksLayerProps> = ({
         const props = feature.properties || {};
         const content = `<div class="p-3 min-w-[200px] text-xs">
           <h4 class="font-bold mb-2">Road Details</h4>
-          ${props.Name ? `<div><b>Name:</b> ${props.Name}</div>` : ''}
-          ${props.Type ? `<div><b>Type:</b> ${props.Type}</div>` : ''}
+          ${props.Name ? `<div><b>Road Name:</b> ${props.Name}</div>` : ''}
+          ${props.Type ? `<div><b>Road Type:</b> ${props.Type}</div>` : ''}
+          ${props.Brgy ? `<div><b>Barangay:</b> ${props.Brgy}</div>` : ''}
+          ${props.layer ? `<div><b>Layer:</b> ${props.layer}</div>` : ''}
+          ${props.path ? `<div><b>Source:</b> ${props.path.split('/').pop()}</div>` : ''}
           <div><b>Geometry:</b> ${feature.geometry.type}</div>
         </div>`;
         layer.bindPopup(content).openPopup();
@@ -319,20 +321,31 @@ const RoadNetworksLayer: React.FC<RoadNetworksLayerProps> = ({
   };
 
   if (!isVisible || loading || !roadsData) {
+    console.log('RoadNetworksLayer: Not rendering - isVisible:', isVisible, 'loading:', loading, 'roadsData:', !!roadsData);
     return null;
   }
 
   const transformedRoadsData = transformRoadCoordinates(roadsData);
   if (!transformedRoadsData) {
+    console.log('RoadNetworksLayer: Transformation failed');
     return null;
   }
 
+  console.log('RoadNetworksLayer: Rendering', transformedRoadsData.features.length, 'features');
+
   return (
     <GeoJSON 
-      key={`roads-${roadsData.features.length}`}
+      key={`roads-${roadsData.features.length}-${isVisible}`}
       data={transformedRoadsData}
       style={geoPortalRoadStyle}
       onEachFeature={onEachRoadFeature}
+      eventHandlers={{
+        add: (e) => {
+          const layer = e.target as L.GeoJSON;
+          layer.bringToFront();
+          console.log('RoadNetworksLayer: Layer added to map with', transformedRoadsData.features.length, 'features');
+        }
+      }}
     />
   );
 };

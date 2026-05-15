@@ -2,7 +2,7 @@
 
 import React, { useState, useRef } from 'react';
 import dynamic from 'next/dynamic';
-import { Layers, Globe, Ruler, CircleDot, ChevronRight, X } from 'lucide-react';
+import { Layers, Globe, Ruler, CircleDot, ChevronRight, X, Search } from 'lucide-react';
 
 const MapRenderer = dynamic(() => import('./MapRenderer').then(mod => ({ default: mod.default })), { 
   ssr: false, 
@@ -17,11 +17,9 @@ export default function GeoPortalMap() {
   // All layers set to false (unchecked) when page loads
   const [layers, setLayers] = useState({
     adminBoundary: false,
-    roadNetworks: false,
+    roadNetworks: true,
     rivers: false,
     parcelLots: false,
-    landCover: false, 
-    climateType: false,
   });
 
   const [mapView, setMapView] = useState<{ lat: number; lng: number; zoom: number } | null>(null);
@@ -33,6 +31,7 @@ export default function GeoPortalMap() {
 
   const [xyInput, setXyInput] = useState({ lat: '', lng: '' });
   const [bufferInput, setBufferInput] = useState({ type: 'Point', distance: '', unit: 'Kilometers' });
+  const [searchQuery, setSearchQuery] = useState('');
   const [measureInput, setMeasureInput] = useState<{ 
     startPoint: string; 
     endPoint: string; 
@@ -120,6 +119,28 @@ export default function GeoPortalMap() {
     setMeasureInput({ startPoint: '', endPoint: '', distance: '0.00 km', isMeasuring: false, clickMode: 'start', visualElements: { lines: [], markers: [] } });
   };
 
+  const handleSearch = async () => {
+    if (!searchQuery.trim()) return;
+    
+    try {
+      // Using Nominatim (OpenStreetMap) geocoding service
+      const response = await fetch(
+        `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(searchQuery)}&limit=1`
+      );
+      const data = await response.json();
+      
+      if (data && data.length > 0) {
+        const { lat, lon } = data[0];
+        setMapView({ lat: parseFloat(lat), lng: parseFloat(lon), zoom: 13 });
+      } else {
+        alert('Location not found. Please try a different search term.');
+      }
+    } catch (error) {
+      console.error('Search error:', error);
+      alert('Error searching for location. Please try again.');
+    }
+  };
+
   return (
     <div className="relative h-screen w-full bg-[#f8f9fa] overflow-hidden flex flex-col font-sans">
       <main className="flex-1 relative overflow-hidden">
@@ -166,8 +187,6 @@ export default function GeoPortalMap() {
             roadNetworkLayerVisible={layers.roadNetworks}
             waterwaysLayerVisible={layers.rivers}
             parcelLotsVisible={layers.parcelLots}
-            landCoverVisible={layers.landCover} 
-            climateTypeVisible={layers.climateType}
             onBoundaryBoundsReady={layers.adminBoundary ? handleBoundaryBounds : undefined}
             onParcelLotsBoundsReady={layers.parcelLots ? handleParcelLotsBounds : undefined}
             fitToBounds={fitToBounds}
@@ -189,12 +208,10 @@ export default function GeoPortalMap() {
             <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
               {Object.entries(layers).filter(([_, visible]) => visible).map(([key]) => (
                 <div key={key} className="flex items-center space-x-2 text-xs">
-                  {key === 'adminBoundary' && <div className="w-4 h-4 border-2 rounded-sm border-[#8f058a]"></div>}
+                  {key === 'adminBoundary' && <div className="w-4 h-4 border-2 rounded-sm border-[#0000FF]"></div>}
                   {key === 'roadNetworks' && <div className="w-4 h-1 bg-[#7d8b8f]"></div>}
                   {key === 'rivers' && <div className="w-4 h-4 border-2 rounded-sm border-[#2591d9] bg-[#1f79b6]"></div>}
                   {key === 'parcelLots' && <div className="w-4 h-4 border-2 rounded-sm border-[#ffffff] bg-[#eba878]"></div>}
-                  {key === 'landCover' && <div className="w-4 h-4 border-2 rounded-sm border-green-500 bg-green-500/20"></div>}
-                  {key === 'climateType' && <div className="w-4 h-4 border-2 rounded-sm border-blue-500 bg-blue-500/20"></div>}
                   <div className="flex-1">
                     <div className="font-medium text-gray-700 capitalize">{key.replace(/([A-Z])/g, ' $1').trim()}</div>
                   </div>
@@ -211,6 +228,7 @@ export default function GeoPortalMap() {
           <ToolIcon active={activeRightPanel === 'measure'} onClick={() => setActiveRightPanel('measure')} icon={<Ruler size={18} />} brandColor={brandColor} />
           <ToolIcon active={activeRightPanel === 'xy'} onClick={() => setActiveRightPanel('xy')} label="XY" brandColor={brandColor} />
           <ToolIcon active={activeRightPanel === 'buffer'} onClick={() => setActiveRightPanel('buffer')} icon={<CircleDot size={18} />} brandColor={brandColor} />
+          <ToolIcon active={activeRightPanel === 'search'} onClick={() => setActiveRightPanel('search')} icon={<Search size={18} />} brandColor={brandColor} />
         </div>
 
         {/* Right Panel Body */}
@@ -255,6 +273,19 @@ export default function GeoPortalMap() {
                    <div className="flex items-center justify-between"><label>End:</label><input type="text" value={measureInput.endPoint} readOnly className="w-24 text-white p-1 rounded bg-gray-700 text-xs" /></div>
                    <div className="flex items-center justify-between"><label>Dist:</label><input type="text" value={measureInput.distance} readOnly className="w-24 text-white p-1 rounded bg-gray-700 text-xs" /></div>
                    <button onClick={handleClearMeasurement} style={{ backgroundColor: brandColor }} className="w-full text-white font-bold py-2 rounded">Clear</button>
+                 </div>
+              )}
+              {activeRightPanel === 'search' && (
+                <div className="space-y-3">
+                   <input 
+                     type="text" 
+                     placeholder="Search location..." 
+                     value={searchQuery} 
+                     onChange={(e) => setSearchQuery(e.target.value)} 
+                     className="w-full text-white p-2 rounded bg-gray-700"
+                     onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
+                   />
+                   <button onClick={handleSearch} style={{ backgroundColor: brandColor }} className="w-full text-white font-bold py-2 rounded">Search</button>
                  </div>
               )}
             </div>

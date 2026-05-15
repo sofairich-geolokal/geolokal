@@ -314,7 +314,7 @@ const UserManagement = () => {
   const handleViewDashboard = (user: User) => {
     // Open the LGU admin dashboard in a new tab using superadmin bypass route
     const tempToken = `superadmin_lgu_access_${user.id}_${Date.now()}`;
-    const dashboardUrl = `/lgu-dashboard/superadmin-access?userId=${user.id}&token=${tempToken}`;
+    const dashboardUrl = `/lgu-dashboard/users?userId=${user.id}&token=${tempToken}`;
     window.open(dashboardUrl, '_blank');
   };
 

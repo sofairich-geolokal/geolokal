@@ -39,8 +39,8 @@ export default function ViewerMap() {
   const [roadNetworksVisible, setRoadNetworksVisible] = useState(true);
   const [riversVisible, setRiversVisible] = useState(true);
   const [parcelLotsVisible, setParcelLotsVisible] = useState(true); // Added Parcel Lots
-  const [landCoverVisible, setLandCoverVisible] = useState(true);
-  const [climateTypeVisible, setClimateTypeVisible] = useState(true);
+  const [landCoverVisible, setLandCoverVisible] = useState(false);
+  const [climateTypeVisible, setClimateTypeVisible] = useState(false);
 
   // Hover states
   const [boundaryHovered, setBoundaryHovered] = useState(false);
@@ -99,30 +99,32 @@ export default function ViewerMap() {
       category: 'Land Management',
       is_main_layer: true
     },
-    {
-      id: 10004,
-      title: 'Land Cover (NAMRIA 2020)',
-      agency: 'NAMRIA',
-      description: 'Land Cover map of the Philippines',
-      layer_type: 'landcover',
-      opacity: 0.7,
-      category: 'Environmental',
-      is_main_layer: true,
-      is_external: true,
-      external_url: 'https://services3.arcgis.com/pNwij5WvjK23c10k/ArcGIS/rest/services/Land_Cover__NAMRIA_2020_/FeatureServer/0'
-    },
-    {
-      id: 10005,
-      title: 'Climate Type (PAGASA)',
-      agency: 'PAGASA',
-      description: 'Philippine Climate Type Classification',
-      layer_type: 'climate',
-      opacity: 0.7,
-      category: 'Environmental',
-      is_main_layer: true,
-      is_external: true,
-      external_url: 'https://services.arcgis.com/P3ePLMYs2RVChkJx/ArcGIS/rest/services/Philippine_Climate_Type/FeatureServer/0'
-    }
+    // Temporarily hidden Land Cover (NAMRIA) layer
+    // {
+    //   id: 10004,
+    //   title: 'Land Cover (NAMRIA 2020)',
+    //   agency: 'NAMRIA',
+    //   description: 'Land Cover map of the Philippines',
+    //   layer_type: 'landcover',
+    //   opacity: 0.7,
+    //   category: 'Environmental',
+    //   is_main_layer: true,
+    //   is_external: true,
+    //   external_url: 'https://services3.arcgis.com/pNwij5WvjK23c10k/ArcGIS/rest/services/Land_Cover__NAMRIA_2020_/FeatureServer/0'
+    // },
+    // Temporarily hidden Climate Type (PAGASA) layer
+    // {
+    //   id: 10005,
+    //   title: 'Climate Type (PAGASA)',
+    //   agency: 'PAGASA',
+    //   description: 'Philippine Climate Type Classification',
+    //   layer_type: 'climate',
+    //   opacity: 0.7,
+    //   category: 'Environmental',
+    //   is_main_layer: true,
+    //   is_external: true,
+    //   external_url: 'https://services.arcgis.com/P3ePLMYs2RVChkJx/ArcGIS/rest/services/Philippine_Climate_Type/FeatureServer/0'
+    // }
   ];
 
   // Search functionality
@@ -314,7 +316,7 @@ export default function ViewerMap() {
     } else if (layerTitle.includes('Land Cover')) {
       return '#22c55e'; // Green from map.tsx
     } else if (layerTitle.includes('Climate')) {
-      return '#3b82f6'; // Blue from map.tsx
+      return '#3d3d3d'; // Grey from map.tsx
     } else {
       return '#6b7280'; 
     }
@@ -442,14 +444,16 @@ export default function ViewerMap() {
                   <input type="checkbox" className="w-4 h-4 rounded border-gray-300 text-orange-600" checked={parcelLotsVisible} onChange={(e) => setParcelLotsVisible(e.target.checked)} />
                   <span className="text-sm text-gray-700">Parcel Lots</span>
                 </label>
-                <label className="flex items-center gap-3 cursor-pointer">
+                {/* Temporarily hidden Land Cover (NAMRIA) layer */}
+                {/* <label className="flex items-center gap-3 cursor-pointer">
                   <input type="checkbox" className="w-4 h-4 rounded border-gray-300 text-orange-600" checked={landCoverVisible} onChange={(e) => setLandCoverVisible(e.target.checked)} />
                   <span className="text-sm text-gray-700">Land Cover (NAMRIA)</span>
-                </label>
-                <label className="flex items-center gap-3 cursor-pointer">
+                </label> */}
+                {/* Temporarily hidden Climate Type (PAGASA) layer */}
+                {/* <label className="flex items-center gap-3 cursor-pointer">
                   <input type="checkbox" className="w-4 h-4 rounded border-gray-300 text-orange-600" checked={climateTypeVisible} onChange={(e) => setClimateTypeVisible(e.target.checked)} />
                   <span className="text-sm text-gray-700">Climate Type (PAGASA)</span>
-                </label>
+                </label> */}
               </div>
             </div>
           </div>
@@ -489,15 +493,23 @@ export default function ViewerMap() {
             {legendsOpen && (
               <div className="space-y-2 max-h-48 overflow-y-auto">
                 {[
-                  { id: 1, title: 'Administrative Boundaries', layer_type: 'boundary', color: '#8f058a', shape: 'polygon' },
-                  { id: 2, title: 'Road Networks', layer_type: 'road', color: '#7d8b8f', shape: 'line' },
+                  { id: 1, title: 'Administrative Boundaries', layer_type: 'boundary', color: '#0000FF', shape: 'polygon' },
+                  { id: 2, title: 'Road Networks', layer_type: 'road', color: '#696969', shape: 'line' },
                   { id: 3, title: 'Waterways', layer_type: 'waterway', color: '#2591d9', shape: 'water' },
-                  { id: 4, title: 'Parcel Lots', layer_type: 'parcel', color: '#eba878', shape: 'polygon' },
-                  { id: 5, title: 'Land Cover', layer_type: 'landcover', color: '#22c55e', shape: 'polygon' },
-                  { id: 6, title: 'Climate Type', layer_type: 'climate', color: '#3b82f6', shape: 'polygon' }
+                  { id: 4, title: 'Parcel Lots', layer_type: 'parcel', color: '#FFFFFF', shape: 'polygon' }
+                  // Temporarily hidden Land Cover (NAMRIA) layer
+                  // { id: 5, title: 'Land Cover', layer_type: 'landcover', color: '#22c55e', shape: 'polygon' },
+                  // Temporarily hidden Climate Type (PAGASA) layer
+                  // { id: 6, title: 'Climate Type', layer_type: 'climate', color: '#3b82f6', shape: 'polygon' }
                 ].map((layer) => (
                   <div key={layer.id} className="flex items-center space-x-2 text-xs">
-                    {layer.shape === 'polygon' && <div className="w-4 h-4 border-2" style={{ borderColor: layer.color, backgroundColor: `${layer.color}1a` }}></div>}
+                    {layer.shape === 'polygon' && (
+                      layer.title === 'Parcel Lots' 
+                        ? <div className="w-4 h-4 border-2 border-white bg-orange-500/40"></div>
+                        : layer.title === 'Administrative Boundaries'
+                          ? <div className="w-4 h-4 border-2" style={{ borderColor: layer.color, backgroundColor: 'transparent' }}></div>
+                          : <div className="w-4 h-4 border-2" style={{ borderColor: layer.color, backgroundColor: `${layer.color}1a` }}></div>
+                    )}
                     {layer.shape === 'line' && <div className="w-4 h-0.5" style={{ backgroundColor: layer.color, height: '3px' }}></div>}
                     {layer.shape === 'water' && (
                       <div className="w-4 h-4">

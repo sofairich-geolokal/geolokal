@@ -15,8 +15,8 @@ export default function GeoPortalMap() {
     roadNetworks: true,
     rivers: true,
     parcelLots: true,
-    landCover: true,
-    climateType: true,
+    landCover: false,
+    climateType: false,
   });
 
   return (
@@ -42,10 +42,10 @@ export default function GeoPortalMap() {
                 <div key={key} className="flex items-start space-x-3 text-[11px]">
                   {/* Visual Indicator/Icon */}
                   <div className="mt-1 flex-shrink-0">
-                    {key === 'adminBoundary' && <div className="w-4 h-4 border-2 rounded-sm border-blue-500 bg-blue-500/20"></div>}
-                    {key === 'roadNetworks' && <div className="w-4 h-1 bg-[#06a506] mt-1.5"></div>}
-                    {key === 'rivers' && <div className="w-4 h-1 bg-[#2563eb] mt-1.5"></div>}
-                    {key === 'parcelLots' && <div className="w-4 h-4 border-2 rounded-sm border-orange-500 bg-orange-500/20"></div>}
+                    {key === 'adminBoundary' && <div className="w-4 h-4 border-2 rounded-sm border-[#0000FF] bg-transparent"></div>}
+                    {key === 'roadNetworks' && <div className="w-4 h-1 bg-[#696969] mt-1.5"></div>}
+                    {key === 'rivers' && <div className="w-4 h-1 bg-[#2591d9] mt-1.5"></div>}
+                    {key === 'parcelLots' && <div className="w-4 h-4 border-2 rounded-sm border-white bg-orange-500/40"></div>}
                     
                     {/* Categorical dots for NAMRIA/PAGASA layers */}
                     {(key === 'landCover' || key === 'climateType') && (

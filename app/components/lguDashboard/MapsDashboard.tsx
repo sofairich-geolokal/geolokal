@@ -3,6 +3,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import dynamic from 'next/dynamic';
 import { Layers, Globe, Ruler, CircleDot, ChevronRight, X } from 'lucide-react';
+import { GeoPortalService } from '@/lib/geoportal';
 
 const MapRenderer = dynamic(() => import('@/app/components/ViewerDashboard/MapRenderer').then(mod => ({ default: mod.default })), { 
   ssr: false, 
@@ -25,6 +26,7 @@ export default function MapsDashboard() {
     adminBoundary: true,
     roadNetworks: true,
     rivers: true,
+    parcelLots: true,
     landCover: false,
     climateType: false,
   });
@@ -33,7 +35,76 @@ export default function MapsDashboard() {
   const [bufferData, setBufferData] = useState<any>(null);
   const [legendsOpen, setLegendsOpen] = useState(true);
   const [savedLayers, setSavedLayers] = useState<any[]>([]);
+  const [loadingLayers, setLoadingLayers] = useState(false);
   const mapContainerRef = useRef<HTMLDivElement>(null);
+
+  // Main layers setup - matching ViewerMap
+  const mainLayers = [
+    {
+      id: 10001,
+      title: 'Administrative Boundaries',
+      agency: 'NAMRIA',
+      description: 'City and barangay boundaries',
+      layer_type: 'boundary',
+      opacity: 0.8,
+      category: 'DRRM',
+      is_main_layer: true
+    },
+    {
+      id: 10002,
+      title: 'Road Networks',
+      agency: 'DPWH',
+      description: 'Road networks and transportation infrastructure',
+      layer_type: 'road',
+      opacity: 0.9,
+      category: 'Infrastructure',
+      is_main_layer: true
+    },
+    {
+      id: 10003,
+      title: 'Waterways',
+      agency: 'DENR',
+      description: 'Rivers, streams, and water bodies',
+      layer_type: 'waterway',
+      opacity: 0.7,
+      category: 'Environmental',
+      is_main_layer: true
+    },
+    {
+      id: 10006,
+      title: 'Parcel Lots',
+      agency: 'LGU',
+      description: 'Land parcel boundaries and cadastral data',
+      layer_type: 'parcel',
+      opacity: 0.7,
+      category: 'Land Management',
+      is_main_layer: true
+    },
+    {
+      id: 10004,
+      title: 'Land Cover (NAMRIA 2020)',
+      agency: 'NAMRIA',
+      description: 'Land Cover map of the Philippines',
+      layer_type: 'landcover',
+      opacity: 0.7,
+      category: 'Environmental',
+      is_main_layer: true,
+      is_external: true,
+      external_url: 'https://services3.arcgis.com/pNwij5WvjK23c10k/ArcGIS/rest/services/Land_Cover__NAMRIA_2020_/FeatureServer/0'
+    },
+    {
+      id: 10005,
+      title: 'Climate Type (PAGASA)',
+      agency: 'PAGASA',
+      description: 'Philippine Climate Type Classification',
+      layer_type: 'climate',
+      opacity: 0.7,
+      category: 'Environmental',
+      is_main_layer: true,
+      is_external: true,
+      external_url: 'https://services.arcgis.com/P3ePLMYs2RVChkJx/ArcGIS/rest/services/Philippine_Climate_Type/FeatureServer/0'
+    }
+  ];
 
   const [xyInput, setXyInput] = useState({ lat: '', lng: '' });
   const [bufferInput, setBufferInput] = useState({ type: 'Point', distance: '', unit: 'Kilometers' });
@@ -220,28 +291,64 @@ export default function MapsDashboard() {
 
   useEffect(() => {
     const fetchSavedLayers = async () => {
+      setLoadingLayers(true);
       try {
-        const response = await fetch('/api/layers');
-        if (response.ok) {
-          const result = await response.json();
-          const layers = result.data
-            .filter((layer: any) => layer.metadata?.geojson)
-            .map((layer: any) => ({
-              id: layer.id.toString(),
+        const dbResponse = await fetch('/api/layers');
+        let dbLayers = [];
+        
+        if (dbResponse.ok) {
+          const dbResult = await dbResponse.json();
+          if (dbResult.success && dbResult.data) {
+            dbLayers = dbResult.data.map((layer: any) => ({
+              id: layer.id,
               title: layer.layer_name,
-              name: layer.layer_name,
-              geometry: layer.metadata.geojson,
-              color: layer.metadata.color || layer.style_config?.color || '#333333',
-              visible: layer.is_visible !== false,
-              layer_type: layer.layer_type || 'vector',
-              agency: 'Uploaded Shapefile',
-              category: 'Custom Layer',
-              is_downloadable: layer.is_downloadable || false
+              agency: layer.city_muni_master?.name || 'Database',
+              description: layer.metadata?.description || `Dynamic layer: ${layer.layer_name}`,
+              geometry: layer.metadata?.geojson || null,
+              layer_type: layer.layer_type,
+              style_config: layer.style_config,
+              opacity: layer.opacity || 0.7,
+              is_downloadable: layer.is_downloadable,
+              category: layer.project_categories?.name || 'General',
+              metadata: layer.metadata
             }));
-          setSavedLayers(layers);
+          }
         }
-      } catch (err) {
-        console.error('Error fetching saved layers:', err);
+
+        try {
+          const geoPortalLayers = await GeoPortalService.fetchAllLayers();
+          const formattedGeoPortalLayers = geoPortalLayers.map((layer, index) => ({
+            id: 2000 + index, 
+            title: layer.title,
+            agency: layer.attribution,
+            description: layer.description,
+            geometry: layer.geometry || null,
+            layer_type: layer.service === 'ArcGIS REST' ? 'arcgis' : 'wms',
+            style_config: layer.style,
+            opacity: layer.style.opacity || 0.7,
+            category: layer.category,
+            metadata: {
+              ...layer.properties,
+              wmsUrl: layer.wmsUrl,
+              wmsLayer: layer.wmsLayer,
+              arcgisUrl: layer.arcgisUrl,
+              service: layer.service,
+              layer: layer.layer,
+              is_geoportal: true
+            }
+          }));
+          
+          const combinedLayers = [...mainLayers, ...dbLayers, ...formattedGeoPortalLayers];
+          setSavedLayers(combinedLayers);
+        } catch (fetchError) {
+          setSavedLayers([...mainLayers, ...dbLayers]);
+        }
+        
+      } catch (error) {
+        console.error('Error in fetchSavedLayers:', error);
+        setSavedLayers(mainLayers);
+      } finally {
+        setLoadingLayers(false);
       }
     };
 
@@ -270,14 +377,14 @@ export default function MapsDashboard() {
                   value={searchQuery}
                   onChange={(e) => handleSearchInputChange(e.target.value)}
                   onFocus={() => setShowSearchResults(true)}
-                  className="w-full px-3 py-2 pr-10 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#318855] focus:border-transparent"
+                  className="w-full pl-10 pr-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#318855] focus:border-transparent"
                 />
                 {isSearching ? (
-                  <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
+                  <div className="absolute left-3 top-1/2 transform -translate-y-1/2">
                     <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-[#318855]"></div>
                   </div>
                 ) : (
-                  <div className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400">
+                  <div className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400">
                     <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
                     </svg>
@@ -373,12 +480,23 @@ export default function MapsDashboard() {
                   <input 
                     type="checkbox" 
                     className="w-4 h-4 rounded border-gray-300 text-[#318855] focus:ring-[#318855]" 
+                    checked={layers.parcelLots}
+                    onChange={(e) => setLayers(prev => ({ ...prev, parcelLots: e.target.checked }))}
+                  />
+                  <span className="text-sm text-gray-700">Parcel Lots</span>
+                </label>
+                {/* Temporarily hidden Land Cover (NAMRIA) layer */}
+                {/* <label className="flex items-center gap-3 cursor-pointer">
+                  <input 
+                    type="checkbox" 
+                    className="w-4 h-4 rounded border-gray-300 text-[#318855] focus:ring-[#318855]" 
                     checked={layers.landCover}
                     onChange={(e) => setLayers(prev => ({ ...prev, landCover: e.target.checked }))}
                   />
                   <span className="text-sm text-gray-700">Land Cover (NAMRIA)</span>
-                </label>
-                <label className="flex items-center gap-3 cursor-pointer">
+                </label> */}
+                {/* Temporarily hidden Climate Type (PAGASA) layer */}
+                {/* <label className="flex items-center gap-3 cursor-pointer">
                   <input 
                     type="checkbox" 
                     className="w-4 h-4 rounded border-gray-300 text-[#318855] focus:ring-[#318855]" 
@@ -386,7 +504,7 @@ export default function MapsDashboard() {
                     onChange={(e) => setLayers(prev => ({ ...prev, climateType: e.target.checked }))}
                   />
                   <span className="text-sm text-gray-700">Climate Type (PAGASA)</span>
-                </label>
+                </label> */}
                               </div>
             </div>
           </div>
@@ -406,9 +524,10 @@ export default function MapsDashboard() {
             boundaryLayerVisible={layers.adminBoundary}
             boundaryLayerHighlighted={false}
             roadNetworkLayerVisible={layers.roadNetworks}
-            roadNetworkLayerHighlighted={false}
+            roadNetworkLayerHighlighted={true}
             waterwaysLayerVisible={layers.rivers}
             waterwaysLayerHighlighted={false}
+            parcelLotsVisible={layers.parcelLots}
             landCoverLayerVisible={layers.landCover}
             landCoverLayerHighlighted={false}
             climateTypeLayerVisible={layers.climateType}
@@ -416,6 +535,7 @@ export default function MapsDashboard() {
             onBoundaryBoundsReady={null}
             onRoadBoundsReady={null}
             onWaterwayBoundsReady={null}
+            onParcelLotsBoundsReady={null}
             onLandCoverBoundsReady={null}
             onClimateTypeBoundsReady={null}
             initialZoom={15}
@@ -442,9 +562,9 @@ export default function MapsDashboard() {
               {Object.entries(layers).map(([key, _]) => (
                 <div key={key} className="flex items-center space-x-2 text-xs">
                   {key === 'adminBoundary' && (
-                    <div className="w-4 h-4 border-2 rounded-sm" style={{ 
-                      borderColor: '#3b82f6', 
-                      backgroundColor: 'rgba(59, 130, 246, 0.2)' 
+                    <div className="w-4 h-4 border-2 border-dashed rounded-sm" style={{ 
+                      borderColor: '#0000FF', 
+                      backgroundColor: 'transparent' 
                     }}></div>
                   )}
                   {key === 'evacuationCenter' && (
@@ -473,28 +593,36 @@ export default function MapsDashboard() {
                       height: '3px'
                     }}></div>
                   )}
+                  {key === 'parcelLots' && (
+                    <div className="w-4 h-4 border-2 rounded-sm" style={{ 
+                      borderColor: '#e67e22', 
+                      backgroundColor: 'rgba(230, 126, 34, 0.2)' 
+                    }}></div>
+                  )}
                   {key === 'riverBoundary' && (
                     <div className="w-4 h-4 border-2 border-dashed rounded-sm" style={{ 
                       borderColor: '#87CEEB',
                       backgroundColor: 'rgba(135, 206, 235, 0.2)'
                     }}></div>
                   )}
-                  {key === 'landCover' && (
+                  {/* Temporarily hidden Land Cover (NAMRIA) legend */}
+                  {/* {key === 'landCover' && (
                     <div className="flex items-center space-x-1">
                       <div className="w-2 h-2 rounded-full" style={{ backgroundColor: '#228B22' }}></div>
                       <div className="w-2 h-2 rounded-full" style={{ backgroundColor: '#FFD700' }}></div>
                       <div className="w-2 h-2 rounded-full" style={{ backgroundColor: '#DC143C' }}></div>
                       <div className="w-2 h-2 rounded-full" style={{ backgroundColor: '#4169E1' }}></div>
                     </div>
-                  )}
-                  {key === 'climateType' && (
+                  )} */}
+                  {/* Temporarily hidden Climate Type (PAGASA) legend */}
+                  {/* {key === 'climateType' && (
                     <div className="flex items-center space-x-1">
                       <div className="w-2 h-2 rounded-full" style={{ backgroundColor: '#FF6B35' }}></div>
                       <div className="w-2 h-2 rounded-full" style={{ backgroundColor: '#4A90E2' }}></div>
                       <div className="w-2 h-2 rounded-full" style={{ backgroundColor: '#50C878' }}></div>
                       <div className="w-2 h-2 rounded-full" style={{ backgroundColor: '#9B59B6' }}></div>
                     </div>
-                  )}
+                  )} */}
                   <div className="flex-1">
                     <div className="font-medium text-gray-700 capitalize">{key.replace(/([A-Z])/g, ' $1').trim()}</div>
                   </div>

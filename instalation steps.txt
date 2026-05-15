@@ -12,3 +12,11 @@
 
 4- Install Database pkg                       npm install pg
    Check the connection                       node test-connection.js
+
+
+   _______________________________
+   To update the records of 4 main layers on database. 
+   One main cmd to run in terminal for updating the fresh data into database tables of ibaan_lots,  Ibaan_bounday, roadnetworks, Ibaan_waterways
+First updated geoJSON files into the root data folder
+
+node .\upload-geojson-layers.js

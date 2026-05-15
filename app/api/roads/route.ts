@@ -4,7 +4,7 @@ import { NextResponse } from 'next/server';
 export async function GET() {
   try {
     // Cast the result to 'any' to resolve the 'unknown' type error
-    const result = (await query(`SELECT properties, geometry FROM roadnetworks`)) as any;
+    const result = (await query(`SELECT * FROM roadnetworks`)) as any;
     
     const geojson = {
       type: "FeatureCollection",

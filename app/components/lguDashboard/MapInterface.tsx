@@ -144,7 +144,7 @@ const PreciseMapInterface = () => {
           <h3 className="text-sm font-bold text-gray-900 mb-4 tracking-tight">Color Indicators</h3>
           <div className="space-y-3">
             <div className="flex items-center gap-4">
-              <div className="w-4 h-4 rounded-full bg-black shadow-sm" />
+              <div className="w-4 h-4 rounded-full bg-blue-600 shadow-sm" />
               <span className="text-sm font-semibold text-gray-600">Admin boundary</span>
             </div>
             <div className="flex items-center gap-4">

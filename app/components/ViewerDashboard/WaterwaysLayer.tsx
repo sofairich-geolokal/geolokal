@@ -3,6 +3,7 @@
 import React, { useEffect, useState } from 'react';
 import { GeoJSON, Popup, Rectangle } from 'react-leaflet';
 import L from 'leaflet';
+import proj4 from 'proj4';
 
 interface WaterwaysLayerProps {
   isVisible: boolean;
@@ -10,17 +11,9 @@ interface WaterwaysLayerProps {
   onBoundsReady?: (bounds: [[number, number], [number, number]]) => void;
 }
 
-// PRS92 Philippines Zone III coordinate system parameters
-const PRS92_ZONE_III = {
-  projection: "Transverse_Mercator",
-  falseEasting: 500000.0,
-  falseNorthing: 0.0,
-  centralMeridian: 121.0,
-  scaleFactor: 0.99995,
-  latitudeOfOrigin: 0.0,
-  datum: "Philippine_Reference_System_1992",
-  spheroid: "Clarke_1866"
-};
+// Correct PRS92 PTM Zone 3 Projection for Batangas (same as ParcelLots)
+const PRS92_PTM3 = "+proj=tmerc +lat_0=0 +lon_0=121 +k=0.99995 +x_0=500000 +y_0=0 +ellps=clrk66 +towgs84=-127.62,-67.24,-47.04,-3.068,4.903,1.578,-1.06 +units=m +no_defs";
+const WGS84 = "EPSG:4326";
 
 // Major waterways in Ibaan, Batangas using PRS92 Zone III coordinates
 const ibaWaterways: Array<{
@@ -220,30 +213,47 @@ const WaterwaysLayer: React.FC<WaterwaysLayerProps> = ({
     }
   }, [isVisible]);
 
-  // Transform coordinates from PRS92 to WGS84 (same as superadmin)
+  // Transform coordinates from PRS92 to WGS84 using proj4 (same as ParcelLots)
   const transformCoordinates = (geoData: any) => {
     if (!geoData || !geoData.features) return geoData;
     return {
       ...geoData,
       features: geoData.features.map((feature: any) => {
-        if ((feature.geometry?.type === 'Polygon' || feature.geometry?.type === 'MultiPolygon') && feature.geometry?.coordinates) {
-          const transformRing = (ring: any) => ring.map((coord: any) => {
-            const x = coord[0], y = coord[1];
-            if (x < 180 && x > -180) return [x, y];
-            return [(x - 500000) / 100000 + 121.0, (y - 1520000) / 100000 + 13.8];
-          });
+        if (!feature.geometry || !feature.geometry.coordinates) return feature;
 
-          let newCoords;
-          if (feature.geometry.type === 'Polygon') {
-            newCoords = feature.geometry.coordinates.map(transformRing);
-          } else {
-            newCoords = feature.geometry.coordinates.map((poly: any) => poly.map(transformRing));
+        const transformCoord = (coord: any) => {
+          const x = Number(coord[0]);
+          const y = Number(coord[1]);
+          // Data is already in WGS84 format (EPSG:4326), so no transformation needed
+          // Check if coordinates are in valid WGS84 range
+          if (x >= -180 && x <= 180 && y >= -90 && y <= 90) {
+            return [x, y];
           }
+          // If coordinates are in PRS92 format, apply transformation using proj4
+          return proj4(PRS92_PTM3, WGS84, [x, y]);
+        };
 
-          return { ...feature, geometry: { ...feature.geometry, coordinates: newCoords }};
+        let newCoords;
+        const geomType = feature.geometry.type;
+
+        if (geomType === 'Polygon') {
+          newCoords = feature.geometry.coordinates.map((ring: any) => ring.map(transformCoord));
+        } else if (geomType === 'MultiPolygon') {
+          newCoords = feature.geometry.coordinates.map((poly: any) => poly.map((ring: any) => ring.map(transformCoord)));
+        } else if (geomType === 'LineString') {
+          newCoords = feature.geometry.coordinates.map(transformCoord);
+        } else if (geomType === 'MultiLineString') {
+          newCoords = feature.geometry.coordinates.map((line: any) => line.map(transformCoord));
+        } else if (geomType === 'Point') {
+          newCoords = transformCoord(feature.geometry.coordinates);
+        } else if (geomType === 'MultiPoint') {
+          newCoords = feature.geometry.coordinates.map(transformCoord);
+        } else {
+          return feature;
         }
-        return feature;
-      })
+
+        return { ...feature, geometry: { ...feature.geometry, coordinates: newCoords }};
+      }),
     };
   };
 
@@ -269,20 +279,24 @@ const WaterwaysLayer: React.FC<WaterwaysLayerProps> = ({
     return [[minLat - buffer, minLng - buffer], [maxLat + buffer, maxLng + buffer]];
   };
 
-  // Waterway styling - Updated with specified blue colors
+  // Waterway styling - Blue color with higher visibility
   const geoPortalWaterwayStyle = (feature: any) => {
-    if (feature.geometry?.type?.includes('Polygon')) {
+    const geomType = feature.geometry?.type;
+    
+    if (geomType === 'Polygon' || geomType === 'MultiPolygon') {
       return { 
         color: '#2591d9', // Blue Outline
         weight: 2, 
         fillColor: '#1f79b6', // Blue Fill
-        fillOpacity: 0.45 
+        fillOpacity: 0.3,
+        opacity: 1.0
       };
     }
+    // LineString, MultiLineString, and other types
     return { 
       color: '#2591d9', // Blue Outline for lines
       weight: 3, 
-      opacity: 0.9 
+      opacity: 1.0
     };
   };
 
@@ -291,7 +305,7 @@ const WaterwaysLayer: React.FC<WaterwaysLayerProps> = ({
     layer.on({
       mouseover: (e: any) => { 
         e.target.setStyle({ 
-            weight: 5, 
+            weight: 6, 
             color: '#f97316', // Highlight color remains orange for contrast
             fillOpacity: 0.7 
         });
@@ -307,26 +321,19 @@ const WaterwaysLayer: React.FC<WaterwaysLayerProps> = ({
           <div class="space-y-1">
             ${props.Name ? `<div class="flex justify-between"><span class="font-semibold text-gray-700">Waterway Name:</span><span class="text-gray-600">${props.Name}</span></div>` : ''}
             ${props.Type ? `<div class="flex justify-between"><span class="font-semibold text-gray-700">Type:</span><span class="text-gray-600">${props.Type}</span></div>` : ''}
-            ${props.Class ? `<div class="flex justify-between"><span class="font-semibold text-gray-700">Class:</span><span class="text-gray-600">${props.Class}</span></div>` : ''}
-            ${props.Length ? `<div class="flex justify-between"><span class="font-semibold text-gray-700">Length:</span><span class="text-gray-600">${props.Length.toFixed(2)} km</span></div>` : ''}
-            ${props.Width ? `<div class="flex justify-between"><span class="font-semibold text-gray-700">Width:</span><span class="text-gray-600">${props.Width} m</span></div>` : ''}
-            ${props.Depth ? `<div class="flex justify-between"><span class="font-semibold text-gray-700">Depth:</span><span class="text-gray-600">${props.Depth} m</span></div>` : ''}
-            ${props.Flow_Rate ? `<div class="flex justify-between"><span class="font-semibold text-gray-700">Flow Rate:</span><span class="text-gray-600">${props.Flow_Rate} m³/s</span></div>` : ''}
-            ${props.Water_Quality ? `<div class="flex justify-between"><span class="font-semibold text-gray-700">Water Quality:</span><span class="text-gray-600">${props.Water_Quality}</span></div>` : ''}
+            ${props.viz !== undefined ? `<div class="flex justify-between"><span class="font-semibold text-gray-700">Visibility:</span><span class="text-gray-600">${props.viz}</span></div>` : ''}
           </div>
           
           <div class="border-t border-gray-200 pt-2 mt-2">
             <div class="text-gray-500 text-xs space-y-1">
               <div class="flex justify-between"><span class="font-semibold">Feature ID:</span><span>${feature.id}</span></div>
               <div class="flex justify-between"><span class="font-semibold">Geometry:</span><span>${feature.geometry?.type || 'LineString'}</span></div>
-              ${props.waterway ? `<div class="flex justify-between"><span class="font-semibold">Waterway:</span><span>${props.waterway}</span></div>` : ''}
-              ${props.ref ? `<div class="flex justify-between"><span class="font-semibold">Reference:</span><span>${props.ref}</span></div>` : ''}
             </div>
           </div>
           
           <div class="bg-blue-50 px-2 py-1 rounded mt-2 text-xs text-blue-700">
             <div class="font-semibold">💧 Waterway</div>
-            <div class="text-xs">Ibaan, Batangas • Natural Water Resources</div>
+            <div class="text-xs">Ibaan, Batangas • CRS: EPSG:4326 (WGS84)</div>
           </div>
         </div>`;
         
@@ -356,8 +363,9 @@ const WaterwaysLayer: React.FC<WaterwaysLayerProps> = ({
         const props = feature.properties || {};
         const content = `<div class="p-3 min-w-[200px] text-xs">
           <h4 class="font-bold mb-2">Waterway Details</h4>
-          ${props.Name ? `<div><b>Name:</b> ${props.Name}</div>` : ''}
+          ${props.Name ? `<div><b>Waterway Name:</b> ${props.Name}</div>` : ''}
           ${props.Type ? `<div><b>Type:</b> ${props.Type}</div>` : ''}
+          ${props.viz !== undefined ? `<div><b>Visibility:</b> ${props.viz}</div>` : ''}
           <div><b>Geometry:</b> ${feature.geometry.type}</div>
         </div>`;
         layer.bindPopup(content).openPopup();
@@ -376,10 +384,17 @@ const WaterwaysLayer: React.FC<WaterwaysLayerProps> = ({
     <>
       {/* Waterways GeoJSON layer */}
       <GeoJSON 
-        key={`river-${waterwaysData.features.length}`}
+        key={`river-${waterwaysData.features.length}-${isVisible}`}
         data={transformCoordinates(waterwaysData)}
         style={geoPortalWaterwayStyle}
         onEachFeature={onEachWaterwayFeature}
+        eventHandlers={{
+          add: (e) => {
+            const layer = e.target as L.GeoJSON;
+            layer.bringToFront();
+            console.log('WaterwaysLayer: Layer added to map with', waterwaysData.features.length, 'features');
+          }
+        }}
       />
     </>
   );

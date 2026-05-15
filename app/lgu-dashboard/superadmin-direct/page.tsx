@@ -23,28 +23,31 @@ export default function SuperadminAccessPage() {
           return;
         }
 
-        // Store the LGU user context immediately without API call for faster access
+        // Mock LGU user context to satisfy UserManagement's state logic
         const mockLGUUser = {
           id: userId,
-          username: 'LGU User',
+          username: 'LGU Administrator',
           location: 'Ibaan',
           role: 'lgu'
         };
         
+        // Match the exact keys checked in UserManagement component
         localStorage.setItem('tempLGUUser', JSON.stringify(mockLGUUser));
         localStorage.setItem('superadminAccess', 'true');
+        localStorage.setItem('superadminDirectAccess', 'false'); // Explicitly false for LGU-mode
+        
         setLguUserId(userId);
         
-        // Update UI elements immediately
+        // Update shell UI elements if present
         const usernameElements = document.querySelectorAll('#superadmin-username, #superadmin-username-display');
         const locationElement = document.querySelector('#superadmin-location-display');
         
         usernameElements.forEach(el => {
-          if (el) el.textContent = mockLGUUser.username || 'Unknown User';
+          if (el) el.textContent = mockLGUUser.username;
         });
         
         if (locationElement) {
-          locationElement.textContent = mockLGUUser.location || 'Not Assigned';
+          locationElement.textContent = mockLGUUser.location;
         }
         
         setLoading(false);
@@ -57,24 +60,28 @@ export default function SuperadminAccessPage() {
     accessLGUDashboard();
   }, [searchParams]);
 
-  // Add fetch interceptor for API calls
+  // Enhanced Fetch Interceptor
   useEffect(() => {
     if (!lguUserId) return;
 
     const originalFetch = window.fetch;
-    window.fetch = function(input: RequestInfo | URL, init?: RequestInit) {
-      if (typeof input === 'string' && input.includes('/api/')) {
-        // Add LGU user context to API calls
-        const headers = new Headers(init?.headers);
-        headers.set('x-lgu-user-id', lguUserId);
+    window.fetch = async function(input: RequestInfo | URL, init?: RequestInit) {
+      const urlStr = typeof input === 'string' ? input : input instanceof URL ? input.toString() : (input as Request).url;
+
+      if (urlStr.includes('/api/')) {
+        const headers = new Headers(init?.headers || {});
         
-        // Redirect to superadmin-specific endpoints if they exist
-        let url = input;
-        if (input.includes('/api/stats/sources')) {
-          url = '/api/stats/sources-superadmin';
+        // Inject the required x-lgu-user-id for the data tier
+        headers.set('x-lgu-user-id', lguUserId);
+        headers.set('Content-Type', 'application/json');
+
+        // Route redirection for stats or specific superadmin-only logging
+        let finalUrl = urlStr;
+        if (urlStr.includes('/api/stats/sources')) {
+          finalUrl = '/api/stats/sources-superadmin';
         }
         
-        return originalFetch(url, {
+        return originalFetch(finalUrl, {
           ...init,
           headers: headers
         });
@@ -83,49 +90,19 @@ export default function SuperadminAccessPage() {
     };
 
     return () => {
-      // Restore original fetch
       window.fetch = originalFetch;
     };
   }, [lguUserId]);
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center h-screen">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
-          <p className="mt-4 text-gray-600">Accessing LGU Dashboard...</p>
-        </div>
-      </div>
-    );
-  }
+  if (loading) return <div className="p-10 text-center font-bold">Initializing GeoLokal Data Tier...</div>;
 
   if (error) {
     return (
-      <div className="flex items-center justify-center h-screen">
-        <div className="text-center">
-          <div className="bg-red-50 border border-red-200 text-red-700 px-6 py-4 rounded-lg">
-            <p className="font-medium">Error</p>
-            <p className="text-sm mt-1">{error}</p>
-            <button 
-              onClick={() => router.back()}
-              className="mt-4 bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700"
-            >
-              Go Back
-            </button>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  if (!lguUserId) {
-    return (
-      <div className="flex items-center justify-center h-screen">
-        <div className="text-center">
-          <div className="bg-yellow-50 border border-yellow-200 text-yellow-700 px-6 py-4 rounded-lg">
-            <p className="font-medium">No User Context</p>
-            <p className="text-sm mt-1">Unable to determine LGU user context</p>
-          </div>
+      <div className="flex flex-col items-center justify-center h-screen bg-gray-50 p-4">
+        <div className="bg-white border-2 border-red-100 p-8 rounded-2xl shadow-sm text-center max-w-sm">
+          <p className="text-red-600 font-bold text-xl mb-2">Access Denied</p>
+          <p className="text-gray-500 text-sm mb-6">{error}</p>
+          <button onClick={() => router.back()} className="w-full bg-black text-white py-3 rounded-xl font-bold">Return</button>
         </div>
       </div>
     );

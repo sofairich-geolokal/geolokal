@@ -72,24 +72,33 @@ const Datatables = () => {
         lgu_id: 1,
         metadata: { source: 'hydrology', year: 2023 }
       },
-      {
+       {
         id: 4,
-        layer_name: 'Buildings',
-        layer_type: 'building',
+        layer_name: 'Lots',
+        layer_type: 'lots',
         is_visible: true,
         category_id: 4,
         lgu_id: 1,
-        metadata: { source: 'satellite', year: 2023 }
+        metadata: { source: 'hydrology', year: 2023 }
       },
-      {
-        id: 5,
-        layer_name: 'Land Use',
-        layer_type: 'landuse',
-        is_visible: true,
-        category_id: 5,
-        lgu_id: 1,
-        metadata: { source: 'planning', year: 2023 }
-      }
+      // {
+      //   id: 4,
+      //   layer_name: 'Buildings',
+      //   layer_type: 'building',
+      //   is_visible: true,
+      //   category_id: 4,
+      //   lgu_id: 1,
+      //   metadata: { source: 'satellite', year: 2023 }
+      // },
+      // {
+      //   id: 5,
+      //   layer_name: 'Land Use',
+      //   layer_type: 'landuse',
+      //   is_visible: true,
+      //   category_id: 5,
+      //   lgu_id: 1,
+      //   metadata: { source: 'planning', year: 2023 }
+      // }
     ];
     setLayers(mockLayers);
     setLoadingLayers(false);
