@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { writeFile, mkdir } from 'fs/promises';
+import { join } from 'path';
+import { existsSync } from 'fs';
 
 // Use dynamic import for simplify-geojson to avoid TypeScript issues
 const simplifyGeoJSON = (geojson: any, options?: {
@@ -139,7 +142,8 @@ export async function POST(request: NextRequest) {
         cleanMetadata = {};
       }
 
-      // Simplify geometry if it's too large
+      // Save GeoJSON to data folder if present
+      let geojsonFilePath = null;
       if (cleanMetadata.geojson) {
         try {
           const originalSize = JSON.stringify(cleanMetadata.geojson).length;
@@ -198,6 +202,26 @@ export async function POST(request: NextRequest) {
               { status: 400 }
             );
           }
+
+          // Save GeoJSON to public/data folder for web accessibility
+          const dataFolderPath = join(process.cwd(), 'public', 'data');
+          if (!existsSync(dataFolderPath)) {
+            await mkdir(dataFolderPath, { recursive: true });
+          }
+
+          // Generate filename from layer name
+          const sanitizedFileName = data.layer_name.trim()
+            .replace(/[^a-zA-Z0-9_-]/g, '_')
+            .toLowerCase();
+          geojsonFilePath = join(dataFolderPath, `${sanitizedFileName}.json`);
+
+          // Write GeoJSON file
+          await writeFile(geojsonFilePath, JSON.stringify(simplifiedGeoJSON, null, 2), 'utf-8');
+          console.log('GeoJSON saved to:', geojsonFilePath);
+
+          // Update metadata to include file path instead of full geojson
+          cleanMetadata.geojson_file = sanitizedFileName + '.json';
+          delete cleanMetadata.geojson; // Remove full geojson from metadata to save space
           
         } catch (simplifyError) {
           console.error('Geometry simplification failed:', simplifyError);
@@ -220,12 +244,26 @@ export async function POST(request: NextRequest) {
         data: {
           layer_name: data.layer_name.trim().substring(0, 100), // Limit to 100 chars
           metadata: cleanMetadata,
+          style_config: data.style_config,
+          layer_type: data.layer_type,
+          projection: data.projection,
+          min_zoom: data.min_zoom,
+          max_zoom: data.max_zoom,
+          opacity: data.opacity,
+          z_index: data.z_index,
+          is_visible: data.is_visible,
+          is_downloadable: data.is_downloadable,
+          bbox: data.bbox,
+          attribution: data.attribution,
+          lgu_id: data.lgu_id,
+          category_id: data.category_id,
         } as any,
       });
       console.log('Layer created successfully:', layer.id);
       return NextResponse.json({
         success: true,
         data: layer,
+        geojson_file: geojsonFilePath,
       });
     } catch (createError) {
       console.error('Error creating layer with minimal data:', createError);

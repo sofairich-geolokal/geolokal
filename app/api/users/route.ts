@@ -20,35 +20,53 @@ interface QueryResult<T> {
   rowCount: number | null;
 }
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
-    const userId = await getAuthUser();
+    // Check for LGU user ID header (for superadmin access mode)
+    const lguUserId = request.headers.get('x-lgu-user-id');
+    const userId = lguUserId || await getAuthUser();
+    
     if (!userId) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    // Fetch active users created by the logged-in LGU user
+    // First, get the username of the user to filter by created_by
+    const userResult = (await query(
+      'SELECT username FROM users WHERE id = $1',
+      [userId]
+    )) as QueryResult<{ username: string }>;
+
+    if (!userResult.rows || userResult.rows.length === 0) {
+      console.error("User not found with ID:", userId);
+      return NextResponse.json({ error: 'User not found' }, { status: 404 });
+    }
+
+    const createdByUsername = userResult.rows[0].username;
+
+    // Fetch active viewers created by the logged-in LGU user
     const result = (await query(`
       SELECT u.username, u.email, u.password_hash, u.role, 
              to_char(u.created_at, 'Mon DD, YYYY HH:MI AM') as created,
              u.created_by
       FROM users u
-      WHERE u.created_by = (
-        SELECT username FROM users WHERE id = $1
-      ) AND u.is_active = true
+      WHERE u.created_by = $1 AND u.is_active = true AND u.role = 'Viewer'
       ORDER BY u.created_at DESC
-    `, [userId])) as QueryResult<UserRow>;
+    `, [createdByUsername])) as QueryResult<UserRow>;
     
     return NextResponse.json(result.rows || []); 
   } catch (error: any) {
     console.error("Fetch Error:", error.message);
-    return NextResponse.json([], { status: 500 });
+    console.error("Error details:", error);
+    return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }
 
 export async function DELETE(request: Request) {
   try {
-    const userId = await getAuthUser();
+    // Check for LGU user ID header (for superadmin access mode)
+    const lguUserId = request.headers.get('x-lgu-user-id');
+    const userId = lguUserId || await getAuthUser();
+    
     if (!userId) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
@@ -116,7 +134,10 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Password is required' }, { status: 400 });
     }
     
-    const userId = await getAuthUser();
+    // Check for LGU user ID header (for superadmin access mode)
+    const lguUserId = request.headers.get('x-lgu-user-id');
+    const userId = lguUserId || await getAuthUser();
+    
     if (!userId) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }

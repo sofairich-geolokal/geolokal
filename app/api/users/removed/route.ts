@@ -21,28 +21,39 @@ export async function GET(request: Request) {
     const headers = request.headers;
     const superadminDirectAccess = headers.get('x-superadmin-direct-access');
     const superadminViaLGU = headers.get('x-superadmin-access');
-    // const lguUserId = headers.get('x-lgu-user-id'); // Declared but unused in original logic
+    const lguUserId = headers.get('x-lgu-user-id');
     const isSuperadmin = superadminDirectAccess === 'true' || superadminViaLGU === 'true';
     
     let loggedInUser = 'Superadmin';
     
     if (!isSuperadmin) {
-      // Normal authentication flow
-      const userId = await getAuthUser();
-      
-      if (!userId) {
-        return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-      }
+      // Check for LGU user ID header first (for superadmin access mode)
+      if (lguUserId) {
+        const creatorResult = (await query('SELECT username FROM users WHERE id = $1', [lguUserId])) as QueryResult<{ username: string }>;
+        
+        if (!creatorResult.rows || creatorResult.rows.length === 0) {
+          return NextResponse.json({ error: 'User not found' }, { status: 404 });
+        }
+        
+        loggedInUser = creatorResult.rows[0].username;
+      } else {
+        // Normal authentication flow
+        const userId = await getAuthUser();
+        
+        if (!userId) {
+          return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+        }
 
-      // Get username of logged-in user
-      const creatorResult = (await query('SELECT username FROM users WHERE id = $1', [userId])) as QueryResult<{ username: string }>;
-      
-      // Use optional chaining and check existence
-      if (!creatorResult.rows || creatorResult.rows.length === 0) {
-        return NextResponse.json({ error: 'User not found' }, { status: 404 });
+        // Get username of logged-in user
+        const creatorResult = (await query('SELECT username FROM users WHERE id = $1', [userId])) as QueryResult<{ username: string }>;
+        
+        // Use optional chaining and check existence
+        if (!creatorResult.rows || creatorResult.rows.length === 0) {
+          return NextResponse.json({ error: 'User not found' }, { status: 404 });
+        }
+        
+        loggedInUser = creatorResult.rows[0].username;
       }
-      
-      loggedInUser = creatorResult.rows[0].username;
     }
 
     // Fetch removed (inactive) viewers

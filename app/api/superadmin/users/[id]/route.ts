@@ -23,6 +23,11 @@ export async function PUT(
     
     const currentUser = currentUserResult.rows[0];
     
+    // Prevent superadmin from updating LGU admin or admin records
+    if (currentUser.role.toLowerCase() === 'lgu' || currentUser.role.toLowerCase() === 'admin') {
+      return NextResponse.json({ error: 'Access denied. Cannot update LGU admin or admin records.' }, { status: 403 });
+    }
+    
     // Use provided values or fall back to current values
     const updateUsername = username || currentUser.username;
     const updateEmail = email || currentUser.email;

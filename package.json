@@ -11,7 +11,9 @@
     "build:skip-prisma": "next build",
     "start": "next start",
     "lint": "eslint",
-    "db:deploy": "node scripts/deploy-db.js"
+    "db:deploy": "node scripts/deploy-db.js",
+    "auto-load:shapefiles": "node scripts/auto-load-shapefiles.js",
+    "test:shapefile": "node scripts/test-shapefile-upload.js"
   },
   "dependencies": {
     "@netlify/blobs": "^10.7.2",

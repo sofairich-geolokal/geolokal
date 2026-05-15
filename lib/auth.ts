@@ -42,21 +42,22 @@ export async function getAuthUser() {
  */
 export async function getUserData(userId: string): Promise<UserData | null> {
   try {
-    // Fixed the 'unknown' error by asserting the return type
+    // Optimized query - fetch essential fields without JOIN for faster performance
     const result = (await query(
-      `SELECT u.id, u.username, u.email, u.role, u.lgu_id, c.name as lgu_name, c.province, 
-        COALESCE(c.province, 'Batangas') as province_display,
-        COALESCE(c.name, 'Ibaan') as city_display
+      `SELECT u.id, u.username, u.email, u.role, u.lgu_id
         FROM users u 
-        LEFT JOIN city_muni_master c ON u.lgu_id = c.id 
         WHERE u.id = $1`,
       [userId]
     )) as { rows: UserData[] };
     
     const user = result.rows[0] || null;
     
-    // Format location string as "Province, City"
     if (user) {
+      // Set default values for location fields
+      user.lgu_name = null;
+      user.province = null;
+      user.province_display = 'Batangas';
+      user.city_display = 'Ibaan';
       user.location = `${user.province_display}, ${user.city_display}`;
     }
     
@@ -81,7 +82,8 @@ export async function requireAuth() {
 }
 
 /**
- * Ensures user has LGU access and is not a 'viewer' or 'superadmin'
+ * Ensures user has LGU access and is not a 'viewer'
+ * Superadmin is also allowed to access LGU dashboard
  */
 export async function requireLguRole() {
   const userId = await getAuthUser();
@@ -96,11 +98,7 @@ export async function requireLguRole() {
     redirect('/');
   }
   
-  // If superadmin, redirect to direct access page
-  if (user.role.toLowerCase() === 'superadmin') {
-    redirect('/lgu-dashboard/superadmin-direct');
-  }
-  
+  // Allow both LGU users and superadmin to access LGU dashboard
   return user;
 }
 

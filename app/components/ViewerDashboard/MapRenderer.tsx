@@ -185,7 +185,7 @@ const MapRenderer = ({
           {layers?.filter((l: any) => l.visible).map((layer: any) => {
             const style = layer.style_config ? {
               color: layer.style_config.color || '#0ea5e9',
-              fillColor: layer.style_config.fillColor || '#dbeafe',
+              fillColor: layer.style_config.fillColor || layer.style_config.color || '#dbeafe',
               fillOpacity: layer.style_config.fillOpacity || 0.15,
               weight: layer.style_config.weight || 3,
               opacity: layer.style_config.opacity || 1,
@@ -201,8 +201,7 @@ const MapRenderer = ({
               const labelContent = `<div class="bg-white px-3 py-2 rounded-lg shadow-xl border border-gray-300 text-sm font-semibold" style="position: absolute; z-index: 1000; pointer-events: none; min-width: 180px;">
                 <div class="flex items-center gap-2 mb-1">
                   <div class="w-3 h-3 rounded-full" style="background-color: ${
-                    feature.layer_type === 'boundary' ? '#3b82f6' : 
-                    feature.layer_type === 'road' ? '#16a34a' : '#0ea5e9'
+                    style.color
                   }"></div>
                   <div class="font-bold text-blue-700">${feature.title || layer.title}</div>
                 </div>

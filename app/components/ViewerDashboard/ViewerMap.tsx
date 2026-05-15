@@ -41,6 +41,9 @@ export default function ViewerMap() {
   const [parcelLotsVisible, setParcelLotsVisible] = useState(true); // Added Parcel Lots
   const [landCoverVisible, setLandCoverVisible] = useState(false);
   const [climateTypeVisible, setClimateTypeVisible] = useState(false);
+  
+  // State for dynamic layer visibility (from database)
+  const [dynamicLayerVisibility, setDynamicLayerVisibility] = useState<Record<number, boolean>>({});
 
   // Hover states
   const [boundaryHovered, setBoundaryHovered] = useState(false);
@@ -207,18 +210,40 @@ export default function ViewerMap() {
         if (dbResponse.ok) {
           const dbResult = await dbResponse.json();
           if (dbResult.success && dbResult.data) {
-            dbLayers = dbResult.data.map((layer: any) => ({
-              id: layer.id,
-              title: layer.layer_name,
-              agency: layer.city_muni_master?.name || 'Database',
-              description: layer.metadata?.description || `Dynamic layer: ${layer.layer_name}`,
-              geometry: layer.metadata?.geojson || null,
-              layer_type: layer.layer_type,
-              style_config: layer.style_config,
-              opacity: layer.opacity || 0.7,
-              is_downloadable: layer.is_downloadable,
-              category: layer.project_categories?.name || 'General',
-              metadata: layer.metadata
+            dbLayers = await Promise.all(dbResult.data.map(async (layer: any) => {
+              let geometry = layer.metadata?.geojson || null;
+              
+              // Load GeoJSON from file if geojson_file is present
+              if (layer.metadata?.geojson_file && !geometry) {
+                try {
+                  const geojsonResponse = await fetch(`/data/${layer.metadata.geojson_file}`);
+                  if (geojsonResponse.ok) {
+                    geometry = await geojsonResponse.json();
+                  }
+                } catch (fileError) {
+                  console.error('Error loading GeoJSON file:', layer.metadata.geojson_file, fileError);
+                }
+              }
+              
+              // Set visibility for new layers (default to visible if not in state)
+              const isVisible = dynamicLayerVisibility[layer.id] !== undefined 
+                ? dynamicLayerVisibility[layer.id] 
+                : (layer.is_visible !== false);
+              
+              return {
+                id: layer.id,
+                title: layer.layer_name,
+                agency: layer.city_muni_master?.name || 'Database',
+                description: layer.metadata?.description || `Dynamic layer: ${layer.layer_name}`,
+                geometry: geometry,
+                layer_type: layer.layer_type,
+                style_config: layer.style_config,
+                opacity: layer.opacity || 0.7,
+                is_downloadable: layer.is_downloadable,
+                category: layer.project_categories?.name || 'General',
+                metadata: layer.metadata,
+                visible: isVisible
+              };
             }));
           }
         }
@@ -243,7 +268,8 @@ export default function ViewerMap() {
               service: layer.service,
               layer: layer.layer,
               is_geoportal: true
-            }
+            },
+            visible: false
           }));
           
           const combinedLayers = [...mainLayers, ...dbLayers, ...formattedGeoPortalLayers];
@@ -262,6 +288,18 @@ export default function ViewerMap() {
 
   useEffect(() => {
     fetchGeoPortalLayers();
+
+    // Listen for layer updates from upload component
+    const handleLayersUpdated = () => {
+      console.log('Layers updated event received, refreshing layers...');
+      fetchGeoPortalLayers();
+    };
+
+    window.addEventListener('layersUpdated', handleLayersUpdated);
+
+    return () => {
+      window.removeEventListener('layersUpdated', handleLayersUpdated);
+    };
   }, []);
 
   const [loadedLayers, setLoadedLayers] = useState<any[]>([]);
@@ -289,12 +327,33 @@ export default function ViewerMap() {
   });
 
   const toggleLayerVisibility = (id: number) => {
-    setLoadedLayers(loadedLayers.map(layer => 
-      layer.id === id ? { ...layer, visible: !layer.visible } : layer
-    ));
+    // Check if it's a dynamic layer (from database)
+    const isDynamicLayer = availableLayers.find(l => l.id === id && !l.is_main_layer);
+    
+    if (isDynamicLayer) {
+      // Update dynamic layer visibility state
+      setDynamicLayerVisibility(prev => ({
+        ...prev,
+        [id]: !prev[id]
+      }));
+      // Update availableLayers to reflect the change
+      setAvailableLayers(prev => prev.map(layer => 
+        layer.id === id ? { ...layer, visible: !layer.visible } : layer
+      ));
+    } else {
+      // Update loaded layers for main layers
+      setLoadedLayers(loadedLayers.map(layer => 
+        layer.id === id ? { ...layer, visible: !layer.visible } : layer
+      ));
+    }
   };
 
   const isLayerLoaded = (layerId: number) => {
+    // Check if it's a dynamic layer (from database)
+    const dynamicLayer = availableLayers.find(l => l.id === layerId && !l.is_main_layer);
+    if (dynamicLayer) {
+      return dynamicLayer.visible;
+    }
     return loadedLayers.some(l => l.id === layerId);
   };
 

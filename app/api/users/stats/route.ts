@@ -6,6 +6,7 @@ import { getAuthUser } from '@/lib/auth';
 interface UserInfo {
   id: string | number;
   lgu_id: string | number;
+  username: string;
 }
 
 interface StatsRow {
@@ -25,75 +26,65 @@ export async function GET(request: Request) {
     const superadminViaLGU = headers.get('x-superadmin-access');
     const lguUserId = headers.get('x-lgu-user-id');
     const isSuperadmin = superadminDirectAccess === 'true' || superadminViaLGU === 'true';
+    const isSuperadminViaLGU = superadminViaLGU === 'true';
     
     let loggedInUserId: string | number | null = null;
-    // let lguId = null; // Declared but unused in original logic - keeping for structure
 
-    if (!isSuperadmin) {
-      if (lguUserId) {
-        const userInfoResult = (await query('SELECT id, lgu_id FROM users WHERE id = $1', [lguUserId])) as QueryResult<UserInfo>;
+    // If accessing via LGU user (even in superadmin mode), filter by that LGU user
+    if (lguUserId) {
+      try {
+        const userInfoResult = (await query('SELECT id, lgu_id, username FROM users WHERE id = $1', [lguUserId])) as QueryResult<UserInfo>;
         const creatorInfo = userInfoResult.rows[0];
         if (creatorInfo) {
-          loggedInUserId = creatorInfo.id;
-          // lguId = creatorInfo.lgu_id;
+          loggedInUserId = creatorInfo.username; // Use username for created_by filtering
         }
-      } else {
-        const userId = await getAuthUser();
-        if (!userId) {
-          return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-        }
+      } catch (err) {
+        console.error("Error fetching LGU user info:", err);
+        return NextResponse.json({ error: 'Failed to fetch LGU user info' }, { status: 500 });
+      }
+    } else if (!isSuperadmin) {
+      const userId = await getAuthUser();
+      if (!userId) {
+        return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+      }
 
-        const userInfoResult = (await query('SELECT id, lgu_id FROM users WHERE id = $1', [userId])) as QueryResult<UserInfo>;
+      try {
+        const userInfoResult = (await query('SELECT id, lgu_id, username FROM users WHERE id = $1', [userId])) as QueryResult<UserInfo>;
         const creatorInfo = userInfoResult.rows[0];
 
         if (!creatorInfo) {
           return NextResponse.json({ error: 'User not found' }, { status: 404 });
         }
 
-        loggedInUserId = creatorInfo.id;
-        // lguId = creatorInfo.lgu_id;
+        loggedInUserId = creatorInfo.username; // Use username for created_by filtering
+      } catch (err) {
+        console.error("Error fetching user info:", err);
+        return NextResponse.json({ error: 'Failed to fetch user info' }, { status: 500 });
       }
-    }
-
-    // Handle Debug queries with proper typing
-    let allViewersDebugResult: QueryResult<any>;
-    if (isSuperadmin) {
-      allViewersDebugResult = (await query(`
-        SELECT id, username, created_by, role, created_at
-        FROM users 
-        WHERE role = 'Viewer'
-        ORDER BY created_at DESC
-        LIMIT 10
-      `)) as QueryResult<any>;
-    } else {
-      allViewersDebugResult = (await query(`
-        SELECT id, username, created_by, role, created_at
-        FROM users 
-        WHERE role = 'Viewer' AND created_by = $1
-        ORDER BY created_at DESC
-        LIMIT 10
-      `, [loggedInUserId])) as QueryResult<any>;
     }
 
     let statsQuery: string;
     let queryParams: any[];
     
-    if (isSuperadmin) {
+    // Filter by LGU user if accessing via LGU (even in superadmin mode)
+    if (isSuperadmin && !isSuperadminViaLGU && !loggedInUserId) {
       statsQuery = `
         SELECT 
-          COUNT(*) FILTER (WHERE role = 'Viewer') as totalviewers,
-          COUNT(*) FILTER (WHERE role = 'Viewer' AND is_active = true) as activeviewers,
-          COUNT(*) FILTER (WHERE role = 'Viewer' AND is_active = false) as removedviewers
+          COUNT(*) as totalviewers,
+          COUNT(*) FILTER (WHERE is_active = true) as activeviewers,
+          COUNT(*) FILTER (WHERE is_active = false) as removedviewers
         FROM users 
+        WHERE role = 'Viewer'
       `;
       queryParams = [];
     } else {
       statsQuery = `
         SELECT 
-          COUNT(*) FILTER (WHERE role = 'Viewer' AND created_by = $1) as totalviewers,
-          COUNT(*) FILTER (WHERE role = 'Viewer' AND is_active = true AND created_by = $1) as activeviewers,
-          COUNT(*) FILTER (WHERE role = 'Viewer' AND is_active = false AND created_by = $1) as removedviewers
+          COUNT(*) as totalviewers,
+          COUNT(*) FILTER (WHERE is_active = true) as activeviewers,
+          COUNT(*) FILTER (WHERE is_active = false) as removedviewers
         FROM users 
+        WHERE role = 'Viewer' AND created_by = $1
       `;
       queryParams = [loggedInUserId];
     }
@@ -111,10 +102,6 @@ export async function GET(request: Request) {
       activeViewers,
       loggedInViewers: activeViewers,
       removedViewers,
-      debug: {
-        loggedInUserId,
-        allViewersDebug: allViewersDebugResult.rows,
-      }
     };
 
     return NextResponse.json(stats);
