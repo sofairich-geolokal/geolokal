@@ -16,22 +16,18 @@ export async function PUT(
     console.log('User update request:', { userId, username, email, role, location });
     
     // Get current user data to validate against - Added 'as any'
-    const currentUserResult = await query('SELECT username, email, role FROM users WHERE id = $1', [userId]) as any;
+    const currentUserResult = await query('SELECT username, email, role, location FROM users WHERE id = $1', [userId]) as any;
     if (currentUserResult.rows.length === 0) {
       return NextResponse.json({ error: 'User not found' }, { status: 404 });
     }
     
     const currentUser = currentUserResult.rows[0];
     
-    // Prevent superadmin from updating LGU admin or admin records
-    if (currentUser.role.toLowerCase() === 'lgu' || currentUser.role.toLowerCase() === 'admin') {
-      return NextResponse.json({ error: 'Access denied. Cannot update LGU admin or admin records.' }, { status: 403 });
-    }
-    
     // Use provided values or fall back to current values
     const updateUsername = username || currentUser.username;
     const updateEmail = email || currentUser.email;
     const updateRole = role || currentUser.role;
+    const updateLocation = location !== undefined ? location : currentUser.location;
     
     // Validate email format if provided
     if (email) {
@@ -100,10 +96,9 @@ export async function PUT(
       updateFields.push(`role = $${paramIndex++}`);
       updateParams.push(role);
     }
-    if (location !== undefined) {
-      updateFields.push(`location = $${paramIndex++}`);
-      updateParams.push(location);
-    }
+    // Always include location in update to ensure it's properly saved
+    updateFields.push(`location = $${paramIndex++}`);
+    updateParams.push(updateLocation);
 
     // Add user ID as last parameter
     updateParams.push(userId);
@@ -120,8 +115,8 @@ export async function PUT(
     
     // Create Audit Log entry
     await query(
-      'INSERT INTO audit_logs (actor, action, details, lgu_id) VALUES ($1, $2, $3, $4)',
-      [user.username, 'USER_UPDATE', `Updated user: ${updateUsername} (${updateRole})`, null]
+      'INSERT INTO audit_logs (actor, action, details, lgu_id, table_name) VALUES ($1, $2, $3, $4, $5)',
+      [user.username, 'USER_UPDATE', `Updated user: ${updateUsername} (${updateRole})`, null, 'users']
     );
 
     return NextResponse.json(updatedUserResult.rows[0]);

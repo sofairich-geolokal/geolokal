@@ -619,7 +619,7 @@ const UserManagement = () => {
               <th className="text-left p-2 font-semibold text-gray-900">User</th>
               <th className="text-left p-2 font-semibold text-gray-900">Email</th>
               <th className="text-left p-2 font-semibold text-gray-900">Password</th>
-              <th className="text-left p-2 font-semibold text-gray-900">LGU Name</th>
+              <th className="text-left p-2 font-semibold text-gray-900">User Role</th>
               <th className="text-left p-2 font-semibold text-gray-900">Location</th>
             </tr>
           </thead>
@@ -679,7 +679,7 @@ const UserManagement = () => {
                   </div>
                 </td>
                 <td className="p-2">
-                  <div className="text-sm text-gray-900">{user.lgu_name || 'No location assigned'}</div>
+                  <div className="text-sm text-gray-900">{user.location || 'No location assigned'}</div>
                 </td>
                 <td className="p-2">
                   <div className="flex gap-2">
