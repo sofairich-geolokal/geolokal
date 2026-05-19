@@ -89,7 +89,7 @@ const ParcelLotsLayer = ({ isVisible, onBoundsReady }: ParcelLotsLayerProps) => 
 
   // STYLING TO MATCH IMAGE_4A3A00.JPG
   const lotStyle = {
-    color: "#e67e22",      // Solid Orange Border
+    color: "#ffffff",      // White Border
     weight: 1.5,           // Thin, sharp lines
     fillColor: "#fd9644",  // Lighter orange fill
     fillOpacity: 0.4,      // Semi-transparent as seen in the screenshot
@@ -158,27 +158,8 @@ const ParcelLotsLayer = ({ isVisible, onBoundsReady }: ParcelLotsLayerProps) => 
           e.target._map.removeLayer(e.target._hoverMarker);
           e.target._hoverMarker = null;
         }
-      },
-      click: (e) => {
-        const props = feature.properties || {};
-        const content = `<div class="p-3 min-w-[200px] text-xs">
-          <h4 class="font-bold mb-2">Parcel Details</h4>
-          ${props.LotNumber ? `<div><b>Lot Number:</b> ${props.LotNumber}</div>` : ''}
-          ${props.BlockNumbe ? `<div><b>Block Number:</b> ${props.BlockNumbe}</div>` : ''}
-          ${props.Area ? `<div><b>Area:</b> ${props.Area} sqm</div>` : ''}
-          ${props.Claimant ? `<div><b>Claimant:</b> ${props.Claimant}</div>` : ''}
-          ${props.BarangayNa ? `<div><b>Barangay:</b> ${props.BarangayNa}</div>` : ''}
-          <div><b>Geometry:</b> ${feature.geometry.type}</div>
-        </div>`;
-        layer.bindPopup(content).openPopup();
       }
     });
-    
-    // Default popup for when not clicked
-    layer.bindPopup(`<h4 class="font-bold">${feature.properties?.LotNumber || 'Parcel Lot'}</h4>
-      <div class="text-xs text-gray-600">
-        ${feature.properties?.BarangayNa ? `Barangay: ${feature.properties.BarangayNa}` : 'Parcel Area'}
-      </div>`);
   };
 
   return (

@@ -566,7 +566,7 @@ export default function ViewerMap() {
                       layer.title === 'Parcel Lots' 
                         ? <div className="w-4 h-4 border-2 border-white bg-orange-500/40"></div>
                         : layer.title === 'Administrative Boundaries'
-                          ? <div className="w-4 h-4 border-2" style={{ borderColor: layer.color, backgroundColor: 'transparent' }}></div>
+                          ? <div className="w-4 h-4 border-2 border-dashed" style={{ borderColor: layer.color, backgroundColor: 'transparent' }}></div>
                           : <div className="w-4 h-4 border-2" style={{ borderColor: layer.color, backgroundColor: `${layer.color}1a` }}></div>
                     )}
                     {layer.shape === 'line' && <div className="w-4 h-0.5" style={{ backgroundColor: layer.color, height: '3px' }}></div>}

@@ -285,16 +285,16 @@ const WaterwaysLayer: React.FC<WaterwaysLayerProps> = ({
     
     if (geomType === 'Polygon' || geomType === 'MultiPolygon') {
       return { 
-        color: '#2591d9', // Blue Outline
+        color: '#1a6db4', // Dark Blue Outline
         weight: 2, 
-        fillColor: '#1f79b6', // Blue Fill
+        fillColor: '#2591d9', // Light Blue Fill
         fillOpacity: 0.3,
         opacity: 1.0
       };
     }
     // LineString, MultiLineString, and other types
     return { 
-      color: '#2591d9', // Blue Outline for lines
+      color: '#1a6db4', // Dark Blue Outline for lines
       weight: 3, 
       opacity: 1.0
     };
@@ -358,22 +358,8 @@ const WaterwaysLayer: React.FC<WaterwaysLayerProps> = ({
           e.target._map.removeLayer(e.target._hoverMarker);
           e.target._hoverMarker = null;
         }
-      },
-      click: (e: any) => {
-        const props = feature.properties || {};
-        const content = `<div class="p-3 min-w-[200px] text-xs">
-          <h4 class="font-bold mb-2">Waterway Details</h4>
-          ${props.Name ? `<div><b>Waterway Name:</b> ${props.Name}</div>` : ''}
-          ${props.Type ? `<div><b>Type:</b> ${props.Type}</div>` : ''}
-          ${props.viz !== undefined ? `<div><b>Visibility:</b> ${props.viz}</div>` : ''}
-          <div><b>Geometry:</b> ${feature.geometry.type}</div>
-        </div>`;
-        layer.bindPopup(content).openPopup();
       }
     });
-    
-    // Default popup for when not clicked
-    layer.bindPopup(`<h4 class="font-bold">${feature.properties?.Name || 'Waterway'}</h4>`);
   };
 
   if (!isVisible || loading || !waterwaysData) {

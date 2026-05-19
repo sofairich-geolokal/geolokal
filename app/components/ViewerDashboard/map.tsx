@@ -30,39 +30,87 @@ export default function GeoPortalMap() {
   const mapContainerRef = useRef<HTMLDivElement>(null);
 
   const [xyInput, setXyInput] = useState({ lat: '', lng: '' });
-  const [bufferInput, setBufferInput] = useState({ type: 'Point', distance: '', unit: 'Kilometers' });
+  const [bufferInput, setBufferInput] = useState({ type: 'Point', distance: '', unit: 'Kilometers', centerPoint: null as { lat: number; lng: number } | null });
   const [searchQuery, setSearchQuery] = useState('');
   const [measureInput, setMeasureInput] = useState<{ 
     startPoint: string; 
     endPoint: string; 
     distance: string;
+    area: string;
     isMeasuring: boolean;
+    measureType: 'distance' | 'area';
     clickMode: string;
     visualElements: {
-      lines: never[];
-      markers: never[]
+      lines: [number, number][];
+      markers: { lat: number; lng: number }[];
+      polygon: [number, number][]
     }
   }>({ 
     startPoint: '', 
     endPoint: '', 
     distance: '0.00 km',
+    area: '0.00 sq km',
     isMeasuring: false,
+    measureType: 'distance',
     clickMode: 'start',
     visualElements: {
       lines: [],
-      markers: []
+      markers: [],
+      polygon: []
     }
   });
 
   const handleMapClick = (lat: number, lng: number) => {
+    // Handle buffer center point selection
+    if (activeRightPanel === 'buffer') {
+      setBufferInput(prev => ({ ...prev, centerPoint: { lat, lng } }));
+      setMapView({ lat, lng, zoom: 15 });
+      return;
+    }
+
+    // Handle measurement point selection
     if (activeRightPanel !== 'measure' || !measureInput.isMeasuring) return;
+    
     const coordString = `${lat.toFixed(6)}, ${lng.toFixed(6)}`;
-    if (measureInput.clickMode === 'start') {
-      handleMeasurePointChange('startPoint', coordString);
-      setMeasureInput(prev => ({ ...prev, clickMode: 'end' }));
+    
+    if (measureInput.measureType === 'distance') {
+      // Distance measurement (2 points)
+      if (measureInput.clickMode === 'start') {
+        handleMeasurePointChange('startPoint', coordString);
+        setMeasureInput(prev => ({ 
+          ...prev, 
+          clickMode: 'end',
+          visualElements: {
+            ...prev.visualElements,
+            markers: [{ lat, lng }]
+          }
+        }));
+      } else {
+        handleMeasurePointChange('endPoint', coordString);
+        setMeasureInput(prev => ({ 
+          ...prev, 
+          clickMode: 'start',
+          visualElements: {
+            ...prev.visualElements,
+            markers: [...prev.visualElements.markers, { lat, lng }],
+            lines: [[prev.visualElements.markers[0].lat, prev.visualElements.markers[0].lng], [lat, lng]]
+          }
+        }));
+      }
     } else {
-      handleMeasurePointChange('endPoint', coordString);
-      setMeasureInput(prev => ({ ...prev, clickMode: 'start' }));
+      // Area measurement (multiple points)
+      const newMarkers = [...measureInput.visualElements.markers, { lat, lng }];
+      const newPolygon = newMarkers.map(m => [m.lat, m.lng] as [number, number]);
+      
+      setMeasureInput(prev => ({ 
+        ...prev, 
+        visualElements: {
+          ...prev.visualElements,
+          markers: newMarkers,
+          polygon: newPolygon
+        },
+        area: calculateArea(newPolygon)
+      }));
     }
   };
 
@@ -74,6 +122,43 @@ export default function GeoPortalMap() {
     }));
   };
 
+  const setMeasureType = (type: 'distance' | 'area') => {
+    setMeasureInput(prev => ({
+      ...prev,
+      measureType: type,
+      visualElements: { lines: [], markers: [], polygon: [] },
+      startPoint: '',
+      endPoint: '',
+      distance: '0.00 km',
+      area: '0.00 sq km',
+      clickMode: 'start'
+    }));
+  };
+
+  const calculateArea = (coords: [number, number][]) => {
+    if (coords.length < 3) return '0.00 sq km';
+    try {
+      // Using Shoelace formula for area calculation
+      let area = 0;
+      const n = coords.length;
+      for (let i = 0; i < n; i++) {
+        const j = (i + 1) % n;
+        area += coords[i][0] * coords[j][1];
+        area -= coords[j][0] * coords[i][1];
+      }
+      area = Math.abs(area) / 2;
+      // Convert to approximate square kilometers (very rough approximation)
+      // For accurate results, should use proper geodetic calculation
+      const avgLat = coords.reduce((sum, c) => sum + c[0], 0) / n;
+      const latFactor = Math.cos(avgLat * Math.PI / 180) * 111.32; // km per degree longitude
+      const lngFactor = 110.57; // km per degree latitude
+      area = area * latFactor * lngFactor / 1000000; // Convert to sq km
+      return `${area.toFixed(4)} sq km`;
+    } catch (error) {
+      return '0.00 sq km';
+    }
+  };
+
   const handleGotoXY = () => {
     const lat = parseFloat(xyInput.lat);
     const lng = parseFloat(xyInput.lng);
@@ -83,6 +168,16 @@ export default function GeoPortalMap() {
   };
 
   const handleBoundaryBounds = (bounds: [[number, number], [number, number]]) => {
+    setLayerBounds(bounds);
+    setFitToBounds(bounds);
+  };
+
+  const handleRoadBounds = (bounds: [[number, number], [number, number]]) => {
+    setLayerBounds(bounds);
+    setFitToBounds(bounds);
+  };
+
+  const handleWaterwayBounds = (bounds: [[number, number], [number, number]]) => {
     setLayerBounds(bounds);
     setFitToBounds(bounds);
   };
@@ -116,7 +211,38 @@ export default function GeoPortalMap() {
   };
 
   const handleClearMeasurement = () => {
-    setMeasureInput({ startPoint: '', endPoint: '', distance: '0.00 km', isMeasuring: false, clickMode: 'start', visualElements: { lines: [], markers: [] } });
+    setMeasureInput({ 
+      startPoint: '', 
+      endPoint: '', 
+      distance: '0.00 km',
+      area: '0.00 sq km',
+      isMeasuring: false, 
+      measureType: 'distance',
+      clickMode: 'start', 
+      visualElements: { lines: [], markers: [], polygon: [] } 
+    });
+  };
+
+  const handleBufferApply = () => {
+    if (bufferInput.centerPoint && bufferInput.distance) {
+      setBufferData({
+        center: bufferInput.centerPoint,
+        distance: bufferInput.distance,
+        unit: bufferInput.unit
+      });
+    } else if (bufferInput.distance) {
+      // If no center point selected, use current map view center
+      setBufferData({
+        center: { lat: 13.86, lng: 121.15 },
+        distance: bufferInput.distance,
+        unit: bufferInput.unit
+      });
+    }
+  };
+
+  const handleClearBuffer = () => {
+    setBufferData(null);
+    setBufferInput({ type: 'Point', distance: '', unit: 'Kilometers', centerPoint: null });
   };
 
   const handleSearch = async () => {
@@ -188,8 +314,11 @@ export default function GeoPortalMap() {
             waterwaysLayerVisible={layers.rivers}
             parcelLotsVisible={layers.parcelLots}
             onBoundaryBoundsReady={layers.adminBoundary ? handleBoundaryBounds : undefined}
+            onRoadBoundsReady={layers.roadNetworks ? handleRoadBounds : undefined}
+            onWaterwayBoundsReady={layers.rivers ? handleWaterwayBounds : undefined}
             onParcelLotsBoundsReady={layers.parcelLots ? handleParcelLotsBounds : undefined}
             fitToBounds={fitToBounds}
+            activeRightPanel={activeRightPanel}
           />
         </div>
 
@@ -208,10 +337,16 @@ export default function GeoPortalMap() {
             <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
               {Object.entries(layers).filter(([_, visible]) => visible).map(([key]) => (
                 <div key={key} className="flex items-center space-x-2 text-xs">
-                  {key === 'adminBoundary' && <div className="w-4 h-4 border-2 rounded-sm border-[#0000FF]"></div>}
+                  {key === 'adminBoundary' && <div className="w-4 h-4 border-2 border-dashed" style={{ borderColor: '#0000FF', backgroundColor: 'transparent' }}></div>}
                   {key === 'roadNetworks' && <div className="w-4 h-1 bg-[#7d8b8f]"></div>}
-                  {key === 'rivers' && <div className="w-4 h-4 border-2 rounded-sm border-[#2591d9] bg-[#1f79b6]"></div>}
-                  {key === 'parcelLots' && <div className="w-4 h-4 border-2 rounded-sm border-[#ffffff] bg-[#eba878]"></div>}
+                  {key === 'rivers' && (
+                    <div className="w-4 h-4">
+                      <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                        <path d="M2 8 Q 8 2, 14 8 Q 8 14, 2 8" stroke="#1a6db4" strokeWidth="1.5" fill="none"/>
+                      </svg>
+                    </div>
+                  )}
+                  {key === 'parcelLots' && <div className="w-4 h-4 border-2 rounded-sm border-[#ffffff] bg-[#fd9644]"></div>}
                   <div className="flex-1">
                     <div className="font-medium text-gray-700 capitalize">{key.replace(/([A-Z])/g, ' $1').trim()}</div>
                   </div>
@@ -239,18 +374,6 @@ export default function GeoPortalMap() {
               <button onClick={() => setActiveRightPanel(null)}><X size={18} /></button>
             </div>
             <div className="p-4 space-y-4 text-xs">
-              {activeRightPanel === 'basemap' && (
-                <div className="space-y-2">
-                  <label className="flex items-center gap-2 cursor-pointer">
-                    <input type="radio" name="basemap" checked={mapType === 'osm'} onChange={() => setMapType('osm')} className="accent-white" />
-                    <span>Open Street Map</span>
-                  </label>
-                  <label className="flex items-center gap-2 cursor-pointer">
-                    <input type="radio" name="basemap" checked={mapType === 'satellite'} onChange={() => setMapType('satellite')} className="accent-white" />
-                    <span>Satellite (Esri)</span>
-                  </label>
-                </div>
-              )}
               {activeRightPanel === 'xy' && (
                 <div className="space-y-3">
                    <div className="flex items-center justify-between"><label>Latitude</label><input type="text" value={xyInput.lat} onChange={(e) => setXyInput({...xyInput, lat: e.target.value})} className="w-32 text-white p-1 rounded bg-gray-700" /></div>
@@ -260,32 +383,50 @@ export default function GeoPortalMap() {
               )}
               {activeRightPanel === 'buffer' && (
                 <div className="space-y-3">
-                   <input type="text" placeholder="Distance" value={bufferInput.distance} onChange={(e) => setBufferInput({...bufferInput, distance: e.target.value})} className="w-full text-white p-2 rounded bg-gray-700" />
-                   <button onClick={() => setBufferData(bufferInput)} style={{ backgroundColor: brandColor }} className="w-full text-white font-bold py-2 rounded">Go</button>
+                   <div className="text-gray-300 text-xs">Click on map to set center point</div>
+                   {bufferInput.centerPoint && (
+                     <div className="text-green-400 text-xs">Center: {bufferInput.centerPoint.lat.toFixed(4)}, {bufferInput.centerPoint.lng.toFixed(4)}</div>
+                   )}
+                   <input type="text" placeholder="Distance (km)" value={bufferInput.distance} onChange={(e) => setBufferInput({...bufferInput, distance: e.target.value})} className="w-full text-white p-2 rounded bg-gray-700" />
+                   <button onClick={handleBufferApply} style={{ backgroundColor: brandColor }} className="w-full text-white font-bold py-2 rounded">Apply Buffer</button>
+                   <button onClick={handleClearBuffer} className="w-full bg-gray-600 text-white font-bold py-2 rounded">Clear</button>
                 </div>
               )}
               {activeRightPanel === 'measure' && (
                 <div className="space-y-3">
+                   <div className="flex gap-2 mb-2">
+                     <button 
+                       onClick={() => setMeasureType('distance')} 
+                       style={{ backgroundColor: measureInput.measureType === 'distance' ? brandColor : '#666' }} 
+                       className="flex-1 text-white font-bold py-1.5 rounded text-xs"
+                     >
+                       Distance
+                     </button>
+                     <button 
+                       onClick={() => setMeasureType('area')} 
+                       style={{ backgroundColor: measureInput.measureType === 'area' ? brandColor : '#666' }} 
+                       className="flex-1 text-white font-bold py-1.5 rounded text-xs"
+                     >
+                       Area
+                     </button>
+                   </div>
                    <button onClick={toggleMeasurementMode} style={{ backgroundColor: measureInput.isMeasuring ? brandColor : '#666' }} className="w-full text-white font-bold py-2 rounded mb-3">
                      {measureInput.isMeasuring ? 'Stop Measurement' : 'Start Measurement'}
                    </button>
-                   <div className="flex items-center justify-between"><label>Start:</label><input type="text" value={measureInput.startPoint} readOnly className="w-24 text-white p-1 rounded bg-gray-700 text-xs" /></div>
-                   <div className="flex items-center justify-between"><label>End:</label><input type="text" value={measureInput.endPoint} readOnly className="w-24 text-white p-1 rounded bg-gray-700 text-xs" /></div>
-                   <div className="flex items-center justify-between"><label>Dist:</label><input type="text" value={measureInput.distance} readOnly className="w-24 text-white p-1 rounded bg-gray-700 text-xs" /></div>
+                   {measureInput.measureType === 'distance' ? (
+                     <>
+                       <div className="flex items-center justify-between"><label>Start:</label><input type="text" value={measureInput.startPoint} readOnly className="w-24 text-white p-1 rounded bg-gray-700 text-xs" /></div>
+                       <div className="flex items-center justify-between"><label>End:</label><input type="text" value={measureInput.endPoint} readOnly className="w-24 text-white p-1 rounded bg-gray-700 text-xs" /></div>
+                       <div className="flex items-center justify-between"><label>Dist:</label><input type="text" value={measureInput.distance} readOnly className="w-24 text-white p-1 rounded bg-gray-700 text-xs" /></div>
+                     </>
+                   ) : (
+                     <>
+                       <div className="text-gray-300 text-xs mb-2">Click on map to add points (min 3 for area)</div>
+                       <div className="flex items-center justify-between"><label>Points:</label><input type="text" value={measureInput.visualElements.markers.length} readOnly className="w-16 text-white p-1 rounded bg-gray-700 text-xs" /></div>
+                       <div className="flex items-center justify-between"><label>Area:</label><input type="text" value={measureInput.area} readOnly className="w-24 text-white p-1 rounded bg-gray-700 text-xs" /></div>
+                     </>
+                   )}
                    <button onClick={handleClearMeasurement} style={{ backgroundColor: brandColor }} className="w-full text-white font-bold py-2 rounded">Clear</button>
-                 </div>
-              )}
-              {activeRightPanel === 'search' && (
-                <div className="space-y-3">
-                   <input 
-                     type="text" 
-                     placeholder="Search location..." 
-                     value={searchQuery} 
-                     onChange={(e) => setSearchQuery(e.target.value)} 
-                     className="w-full text-white p-2 rounded bg-gray-700"
-                     onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
-                   />
-                   <button onClick={handleSearch} style={{ backgroundColor: brandColor }} className="w-full text-white font-bold py-2 rounded">Search</button>
                  </div>
               )}
             </div>

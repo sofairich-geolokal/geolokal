@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { GeoJSON, Popup } from 'react-leaflet';
 import L from 'leaflet';
 import proj4 from 'proj4';
@@ -147,6 +147,7 @@ const RoadNetworksLayer: React.FC<RoadNetworksLayerProps> = ({
 }) => {
   const [roadsData, setRoadsData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const dataFetchedRef = useRef(false);
 
   // Fetch roads data from database (same as superadmin)
   useEffect(() => {
@@ -155,31 +156,41 @@ const RoadNetworksLayer: React.FC<RoadNetworksLayerProps> = ({
         setLoading(true);
         let rData = null;
         
+        console.log('RoadNetworksLayer: Starting data fetch...');
+        
         // Try to fetch from database first
         try {
           const rRes = await fetch('/api/roads');
+          console.log('RoadNetworksLayer: API response status:', rRes.status);
           if (rRes.ok) {
             const result = await rRes.json();
+            console.log('RoadNetworksLayer: API response:', result);
             if (result.success && result.data && result.data.features) {
               rData = result.data;
+              console.log('RoadNetworksLayer: Data loaded from database');
             }
           }
         } catch (e) { 
-          console.log("Roads DB route not ready, trying local file..."); 
+          console.log("RoadNetworksLayer: DB route not ready, trying local file...", e); 
         }
 
         // Fallback to local file if database fails
         if (!rData) {
           try {
+            console.log('RoadNetworksLayer: Trying local file...');
             const lRes = await fetch('/data/Ibaan_roadnetworks.json');
-            rData = await lRes.json();
+            if (lRes.ok) {
+              rData = await lRes.json();
+              console.log('RoadNetworksLayer: Data loaded from local file, features:', rData?.features?.length);
+            }
           } catch (e) { 
-            console.log("No local road data found."); 
+            console.log("RoadNetworksLayer: No local road data found.", e); 
           }
         }
         
         setRoadsData(rData);
-        console.log('RoadNetworksLayer: Data loaded successfully, features:', rData?.features?.length);
+        dataFetchedRef.current = true;
+        console.log('RoadNetworksLayer: Final data state - has data:', !!rData, 'features:', rData?.features?.length);
         
         // Calculate and report bounds when data is loaded
         if (rData && onBoundsReady) {
@@ -190,18 +201,19 @@ const RoadNetworksLayer: React.FC<RoadNetworksLayerProps> = ({
           }
         }
       } catch (error) {
-        console.error('Error fetching roads data:', error);
+        console.error('RoadNetworksLayer: Error fetching roads data:', error);
       } finally {
         setLoading(false);
       }
     };
 
-    if (isVisible) {
+    // Only fetch data once, not on every visibility toggle
+    if (isVisible && !dataFetchedRef.current) {
       fetchRoadsData();
     }
-  }, [isVisible]);
+  }, []);
 
-  // Transform road coordinates from PRS92 to WGS84 using proj4 (same as ParcelLots)
+  // Transform road coordinates - data is already in WGS84 format
   const transformRoadCoordinates = (geoData: any) => {
     try {
       if (!geoData || !geoData.features || !Array.isArray(geoData.features)) return null;
@@ -209,33 +221,28 @@ const RoadNetworksLayer: React.FC<RoadNetworksLayerProps> = ({
         ...geoData,
         type: "FeatureCollection",
         features: geoData.features.filter((feature: any) => feature && feature.geometry && feature.geometry.coordinates).map((feature: any) => {
-          const transformPt = (coord: any) => {
-            const x = Number(coord[0]);
-            const y = Number(coord[1]);
-            // Data is already in WGS84 format (EPSG:4326), so no transformation needed
-            // Check if coordinates are in valid WGS84 range
-            if (x >= -180 && x <= 180 && y >= -90 && y <= 90) {
-              return [x, y];
-            }
-            // If coordinates are in PRS92 format, apply transformation using proj4
-            return proj4(PRS92_PTM3, WGS84, [x, y]);
-          };
-
-          let newCoords = feature.geometry.coordinates;
+          // Convert Polygon to LineString for roads
           if (feature.geometry.type === 'Polygon') {
-            newCoords = feature.geometry.coordinates[0].map(transformPt);
-            return { ...feature, geometry: { type: 'LineString', coordinates: newCoords }};
+            return { 
+              ...feature, 
+              geometry: { 
+                type: 'LineString', 
+                coordinates: feature.geometry.coordinates[0] 
+              } 
+            };
           }
+          // Convert MultiPolygon to MultiLineString for roads
           if (feature.geometry.type === 'MultiPolygon') {
-            newCoords = feature.geometry.coordinates.map((polygon: any) => polygon[0].map(transformPt));
-            return { ...feature, geometry: { type: 'MultiLineString', coordinates: newCoords }};
+            return { 
+              ...feature, 
+              geometry: { 
+                type: 'MultiLineString', 
+                coordinates: feature.geometry.coordinates.map((polygon: any) => polygon[0]) 
+              } 
+            };
           }
-          if (feature.geometry.type === 'LineString') {
-            newCoords = feature.geometry.coordinates.map(transformPt);
-          } else if (feature.geometry.type === 'MultiLineString') {
-            newCoords = feature.geometry.coordinates.map((ring: any) => ring.map(transformPt));
-          }
-          return { ...feature, geometry: { ...feature.geometry, coordinates: newCoords }};
+          // Return as-is for LineString and MultiLineString
+          return feature;
         })
       };
       return transformedData;
@@ -245,8 +252,8 @@ const RoadNetworksLayer: React.FC<RoadNetworksLayerProps> = ({
     }
   };
 
-  // Road styling - Dark grey color with higher visibility
-  const geoPortalRoadStyle = (feature: any) => ({ color: '#333333', weight: 3, opacity: 1.0 });
+  // Road styling - Grey color to match legend
+  const geoPortalRoadStyle = (feature: any) => ({ color: '#7d8b8f', weight: 2, opacity: 1.0 });
 
   // Handle road feature interactions (same as superadmin)
   const onEachRoadFeature = (feature: any, layer: any) => {
@@ -303,19 +310,6 @@ const RoadNetworksLayer: React.FC<RoadNetworksLayerProps> = ({
           e.target._map.removeLayer(e.target._hoverMarker);
           e.target._hoverMarker = null;
         }
-      },
-      click: (e: any) => {
-        const props = feature.properties || {};
-        const content = `<div class="p-3 min-w-[200px] text-xs">
-          <h4 class="font-bold mb-2">Road Details</h4>
-          ${props.Name ? `<div><b>Road Name:</b> ${props.Name}</div>` : ''}
-          ${props.Type ? `<div><b>Road Type:</b> ${props.Type}</div>` : ''}
-          ${props.Brgy ? `<div><b>Barangay:</b> ${props.Brgy}</div>` : ''}
-          ${props.layer ? `<div><b>Layer:</b> ${props.layer}</div>` : ''}
-          ${props.path ? `<div><b>Source:</b> ${props.path.split('/').pop()}</div>` : ''}
-          <div><b>Geometry:</b> ${feature.geometry.type}</div>
-        </div>`;
-        layer.bindPopup(content).openPopup();
       }
     });
   };

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from 'react';
-import { MapContainer, TileLayer, Circle, Marker, Popup, useMap, Polygon, GeoJSON } from 'react-leaflet';
+import { MapContainer, TileLayer, Circle, Marker, Popup, useMap, Polygon, GeoJSON, Polyline } from 'react-leaflet';
 import L from 'leaflet';
 import { area, polygon } from '@turf/turf';
 import 'leaflet/dist/leaflet.css';
@@ -25,6 +25,20 @@ L.Icon.Default.mergeOptions({
 const defaultIcon = L.icon({
   iconUrl: 'https://unpkg.com/leaflet@1.9.2/dist/images/marker-icon.png',
   iconAnchor: [12, 41]
+});
+
+// Custom pointed dot marker for measurement points
+const measurementPointIcon = L.divIcon({
+  className: 'custom-measurement-point',
+  html: `
+    <div style="position: relative; display: flex; justify-content: center; align-items: center;">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <circle cx="12" cy="12" r="8" fill="#318855" stroke="#ffffff" stroke-width="2"/>
+        <circle cx="12" cy="12" r="3" fill="#ffffff"/>
+      </svg>
+    </div>`,
+  iconSize: [24, 24],
+  iconAnchor: [12, 12]
 });
 
 // Demographic data interface matching the data table
@@ -61,7 +75,7 @@ const calculateArea = (latlngs: number[][]) => {
 /**
  * Handles map instance events and programmatic movement
  */
-const MapEvents = ({ mapView, onMapClick, isMeasuring, fitToBounds }: any) => {
+const MapEvents = ({ mapView, onMapClick, isMeasuring, fitToBounds, activeRightPanel }: any) => {
   const map = useMap();
 
   // Fly to specific coordinates (Goto XY tool)
@@ -83,14 +97,18 @@ const MapEvents = ({ mapView, onMapClick, isMeasuring, fitToBounds }: any) => {
   }, [fitToBounds, map]);
 
   useEffect(() => {
-    if (!map || !onMapClick || !isMeasuring) return;
+    if (!map || !onMapClick) return;
+    // Enable map clicks when measuring OR when buffer panel is active
+    const shouldHandleClicks = isMeasuring || activeRightPanel === 'buffer';
+    if (!shouldHandleClicks) return;
+
     const handleClick = (e: any) => {
       const { lat, lng } = e.latlng;
       onMapClick(lat, lng);
     };
     map.on('click', handleClick);
     return () => { map.off('click', handleClick); };
-  }, [map, onMapClick, isMeasuring]);
+  }, [map, onMapClick, isMeasuring, activeRightPanel]);
 
   return null;
 };
@@ -122,6 +140,7 @@ const MapRenderer = ({
   onClimateTypeBoundsReady,
   onParcelLotsBoundsReady,
   fitToBounds,
+  activeRightPanel,
   initialZoom = 18
 }: any) => {
   const mapRef = useRef<any>(null);
@@ -314,13 +333,39 @@ const MapRenderer = ({
             onMapClick={onMapClick} 
             isMeasuring={isMeasuring} 
             fitToBounds={fitToBounds} 
+            activeRightPanel={activeRightPanel}
           />
 
           {mapView && <Marker position={[mapView.lat, mapView.lng]} icon={defaultIcon} />}
 
-          {bufferData && mapView && (
+          {/* Measurement visual elements - markers and lines */}
+          {measureVisualElements?.markers && measureVisualElements.markers.map((marker: any, index: number) => (
             <Circle 
-              center={[mapView.lat, mapView.lng]}
+              key={`measure-marker-${index}`}
+              center={[marker.lat, marker.lng]}
+              radius={5}
+              pathOptions={{ color: '#318855', fillColor: '#318855', fillOpacity: 1, weight: 2 }}
+            />
+          ))}
+          
+          {measureVisualElements?.lines && measureVisualElements.lines.length === 2 && (
+            <Polyline 
+              positions={measureVisualElements.lines}
+              pathOptions={{ color: '#318855', weight: 3, opacity: 0.8 }}
+            />
+          )}
+
+          {/* Area measurement polygon */}
+          {measureVisualElements?.polygon && measureVisualElements.polygon.length >= 3 && (
+            <Polygon 
+              positions={measureVisualElements.polygon}
+              pathOptions={{ color: '#318855', fillColor: '#318855', fillOpacity: 0.2, weight: 2 }}
+            />
+          )}
+
+          {bufferData && bufferData.center && (
+            <Circle 
+              center={[bufferData.center.lat, bufferData.center.lng]}
               radius={parseFloat(bufferData.distance) * 1000} 
               pathOptions={{ color: '#facc15', fillColor: '#facc15', fillOpacity: 0.3, weight: 2 }}
             />

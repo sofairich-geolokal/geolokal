@@ -107,26 +107,36 @@ export default function MapsDashboard() {
   ];
 
   const [xyInput, setXyInput] = useState({ lat: '', lng: '' });
-  const [bufferInput, setBufferInput] = useState({ type: 'Point', distance: '', unit: 'Kilometers' });
+  const [bufferInput, setBufferInput] = useState({ 
+    bufferType: 'point' as 'point' | 'line' | 'circle' | 'polygon',
+    distance: '', 
+    unit: 'kilometers' as 'kilometers' | 'meters' | 'miles' | 'feet'
+  });
   const [measureInput, setMeasureInput] = useState<{ 
     startPoint: string; 
     endPoint: string; 
     distance: string;
+    area: string;
     isMeasuring: boolean;
+    measurementType: 'distance' | 'area';
     clickMode: string;
     visualElements: {
-      lines: never[];
-      markers: never[]
+      lines: number[][];
+      markers: { lat: number; lng: number }[]
+      polygon: number[][]
     }
   }>({ 
     startPoint: '', 
     endPoint: '', 
     distance: '0.00 km',
+    area: '0.00 km²',
     isMeasuring: false,
+    measurementType: 'distance',
     clickMode: 'start',
     visualElements: {
       lines: [],
-      markers: []
+      markers: [],
+      polygon: []
     }
   });
 
@@ -136,12 +146,44 @@ export default function MapsDashboard() {
     
     const coordString = `${lat.toFixed(6)}, ${lng.toFixed(6)}`;
     
-    if (measureInput.clickMode === 'start') {
-      handleMeasurePointChange('startPoint', coordString);
-      setMeasureInput(prev => ({ ...prev, clickMode: 'end' }));
-    } else {
-      handleMeasurePointChange('endPoint', coordString);
-      setMeasureInput(prev => ({ ...prev, clickMode: 'start' }));
+    if (measureInput.measurementType === 'distance') {
+      if (measureInput.clickMode === 'start') {
+        handleMeasurePointChange('startPoint', coordString);
+        setMeasureInput(prev => ({ 
+          ...prev, 
+          clickMode: 'end',
+          visualElements: {
+            markers: [{ lat, lng }],
+            lines: [],
+            polygon: []
+          }
+        }));
+      } else {
+        handleMeasurePointChange('endPoint', coordString);
+        const startCoords = measureInput.startPoint.split(',').map(c => parseFloat(c.trim()));
+        setMeasureInput(prev => ({ 
+          ...prev, 
+          clickMode: 'start',
+          visualElements: {
+            markers: [
+              { lat: startCoords[0], lng: startCoords[1] },
+              { lat, lng }
+            ],
+            lines: [[startCoords[0], startCoords[1]], [lat, lng]],
+            polygon: []
+          }
+        }));
+      }
+    } else if (measureInput.measurementType === 'area') {
+      // For area measurement, keep adding points to create polygon
+      setMeasureInput(prev => ({
+        ...prev,
+        visualElements: {
+          ...prev.visualElements,
+          markers: [...prev.visualElements.markers, { lat, lng }],
+          polygon: [...prev.visualElements.polygon, [lat, lng]]
+        }
+      }));
     }
   };
 
@@ -152,6 +194,60 @@ export default function MapsDashboard() {
       isMeasuring: !prev.isMeasuring,
       clickMode: 'start'
     }));
+  };
+
+  // Calculate area from polygon coordinates using Shoelace formula
+  const calculateArea = (polygon: number[][]) => {
+    if (polygon.length < 3) {
+      return {
+        km2: '0.00',
+        m2: '0.00',
+        mi2: '0.00',
+        ft2: '0.00',
+        ha: '0.00'
+      };
+    }
+    
+    try {
+      // Convert to radians for spherical calculation
+      const R = 6371; // Earth's radius in km
+      let area = 0;
+      
+      for (let i = 0; i < polygon.length; i++) {
+        const j = (i + 1) % polygon.length;
+        const lat1 = polygon[i][0] * Math.PI / 180;
+        const lng1 = polygon[i][1] * Math.PI / 180;
+        const lat2 = polygon[j][0] * Math.PI / 180;
+        const lng2 = polygon[j][1] * Math.PI / 180;
+        
+        area += (lng2 - lng1) * (2 + Math.sin(lat1) + Math.sin(lat2));
+      }
+      
+      area = Math.abs(area * R * R / 2);
+      
+      // Convert to different units
+      const areaKm2 = area;
+      const areaM2 = area * 1000000;
+      const areaMi2 = area * 0.386102;
+      const areaFt2 = area * 10763910;
+      const areaHa = area * 100;
+      
+      return {
+        km2: areaKm2.toFixed(2),
+        m2: areaM2.toFixed(2),
+        mi2: areaMi2.toFixed(2),
+        ft2: areaFt2.toFixed(2),
+        ha: areaHa.toFixed(2)
+      };
+    } catch (error) {
+      return {
+        km2: '0.00',
+        m2: '0.00',
+        mi2: '0.00',
+        ft2: '0.00',
+        ha: '0.00'
+      };
+    }
   };
 
   const handleGotoXY = () => {
@@ -206,11 +302,14 @@ export default function MapsDashboard() {
       startPoint: '',
       endPoint: '',
       distance: '0.00 km',
+      area: '0.00 km²',
       isMeasuring: false,
+      measurementType: 'distance',
       clickMode: 'start',
       visualElements: {
         lines: [],
-        markers: []
+        markers: [],
+        polygon: []
       }
     });
   };
@@ -583,7 +682,7 @@ export default function MapsDashboard() {
                   )}
                   {key === 'roadNetworks' && (
                     <div className="w-4 h-0.5" style={{ 
-                      backgroundColor: '#06a506',
+                      backgroundColor: '#7d8b8f',
                       height: '3px'
                     }}></div>
                   )}
@@ -659,16 +758,68 @@ export default function MapsDashboard() {
 
               {activeRightPanel === 'buffer' && (
                 <div className="space-y-3">
-                  <input type="text" placeholder="Distance" value={bufferInput.distance} onChange={(e) => setBufferInput({...bufferInput, distance: e.target.value})} className="w-full text-white p-2 rounded bg-gray-700" />
-                  <button onClick={() => setBufferData(bufferInput)} style={{ backgroundColor: brandColor }} className="w-full text-white font-bold py-2 rounded">Go</button>
+                  <div className="text-white text-sm font-bold mb-2">Buffer Type</div>
+                  <div className="flex flex-col space-y-2">
+                    {['Point', 'Line', 'Circle', 'Polygon'].map(type => (
+                      <label key={type} className="inline-flex items-center">
+                        <input
+                          type="radio"
+                          className="form-radio text-[#318855]"
+                          name="bufferType"
+                          value={type.toLowerCase()}
+                          checked={bufferInput.bufferType === type.toLowerCase()}
+                          onChange={(e) => setBufferInput({ ...bufferInput, bufferType: e.target.value as 'point' | 'line' | 'circle' | 'polygon' })}
+                        />
+                        <span className="ml-2 text-white">{type}</span>
+                      </label>
+                    ))}
+                  </div>
+
+                  <div className="text-white text-sm font-bold mt-4 mb-2">Parameters</div>
+                  <input 
+                    type="number" 
+                    placeholder="Distance" 
+                    value={bufferInput.distance}
+                    onChange={(e) => setBufferInput({...bufferInput, distance: e.target.value})}
+                    className="w-full text-white p-2 rounded bg-gray-700 mb-2"
+                  />
+                  <select
+                    value={bufferInput.unit}
+                    onChange={(e) => setBufferInput({...bufferInput, unit: e.target.value as 'kilometers' | 'meters' | 'miles' | 'feet'})}
+                    className="w-full text-white p-2 rounded bg-gray-700"
+                  >
+                    <option value="kilometers">Kilometers</option>
+                    <option value="meters">Meters</option>
+                    <option value="miles">Miles</option>
+                    <option value="feet">Feet</option>
+                  </select>
+                  <button onClick={() => setBufferData(bufferInput)} style={{ backgroundColor: brandColor }} className="w-full text-white font-bold py-2 rounded mt-3">Go</button>
                 </div>
               )}
 
               {activeRightPanel === 'measure' && (
                 <div className="space-y-3">
+                  {/* Measurement Type Tabs */}
+                  <div className="flex border-b border-gray-600">
+                    <button 
+                      onClick={() => setMeasureInput(prev => ({ ...prev, measurementType: 'distance' }))}
+                      className={`flex-1 py-2 text-xs font-medium ${measureInput.measurementType === 'distance' ? 'text-white border-b-2 border-[#318855]' : 'text-gray-400'}`}
+                    >
+                      Distance
+                    </button>
+                    <button 
+                      onClick={() => setMeasureInput(prev => ({ ...prev, measurementType: 'area' }))}
+                      className={`flex-1 py-2 text-xs font-medium ${measureInput.measurementType === 'area' ? 'text-white border-b-2 border-[#318855]' : 'text-gray-400'}`}
+                    >
+                      Area
+                    </button>
+                  </div>
+
                   <div className="text-center text-white mb-2">
                     {measureInput.isMeasuring 
-                      ? `Click on map to set ${measureInput.clickMode === 'start' ? 'start' : 'end'} point` 
+                      ? measureInput.measurementType === 'distance'
+                        ? `Click on map to set ${measureInput.clickMode === 'start' ? 'start' : 'end'} point`
+                        : `Click on map to add polygon vertices (min 3 points)`
                       : 'Click toggle to enable map measurement'
                     }
                   </div>
@@ -677,37 +828,56 @@ export default function MapsDashboard() {
                     style={{ backgroundColor: measureInput.isMeasuring ? brandColor : '#666' }} 
                     className="w-full text-white font-bold py-2 rounded mb-3"
                   >
-                    {measureInput.isMeasuring ? 'Stop Map Measurement' : 'Start Map Measurement'}
+                    {measureInput.isMeasuring ? 'Stop Measurement' : 'Start Measurement'}
                   </button>
-                  <div className="flex items-center justify-between">
-                    <label>Start Point:</label>
-                    <input 
-                      type="text" 
-                      placeholder="lat, lng" 
-                      value={measureInput.startPoint}
-                      onChange={(e) => handleMeasurePointChange('startPoint', e.target.value)}
-                      className="w-24 text-white p-1 rounded bg-gray-700 text-xs" 
-                    />
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <label>End Point:</label>
-                    <input 
-                      type="text" 
-                      placeholder="lat, lng" 
-                      value={measureInput.endPoint}
-                      onChange={(e) => handleMeasurePointChange('endPoint', e.target.value)}
-                      className="w-24 text-white p-1 rounded bg-gray-700 text-xs" 
-                    />
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <label>Distance:</label>
-                    <input 
-                      type="text" 
-                      value={measureInput.distance} 
-                      readOnly 
-                      className="w-24 text-white p-1 rounded bg-gray-700 text-xs" 
-                    />
-                  </div>
+
+                  {measureInput.measurementType === 'distance' && (
+                    <>
+                      <div className="flex items-center justify-between">
+                        <label>Start Point:</label>
+                        <input 
+                          type="text" 
+                          placeholder="lat, lng" 
+                          value={measureInput.startPoint}
+                          onChange={(e) => handleMeasurePointChange('startPoint', e.target.value)}
+                          className="w-24 text-white p-1 rounded bg-gray-700 text-xs" 
+                        />
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <label>End Point:</label>
+                        <input 
+                          type="text" 
+                          placeholder="lat, lng" 
+                          value={measureInput.endPoint}
+                          onChange={(e) => handleMeasurePointChange('endPoint', e.target.value)}
+                          className="w-24 text-white p-1 rounded bg-gray-700 text-xs" 
+                        />
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <label>Distance:</label>
+                        <input 
+                          type="text" 
+                          value={measureInput.distance} 
+                          readOnly 
+                          className="w-24 text-white p-1 rounded bg-gray-700 text-xs" 
+                        />
+                      </div>
+                    </>
+                  )}
+
+                  {measureInput.measurementType === 'area' && measureInput.visualElements.polygon.length >= 3 && (
+                    <div className="mt-3 p-3 bg-gray-700 rounded">
+                      <div className="text-xs font-bold text-gray-300 mb-2">Result</div>
+                      <div className="space-y-1 text-xs">
+                        <div className="flex justify-between"><span className="text-gray-400">km²:</span><span className="text-white">{calculateArea(measureInput.visualElements.polygon).km2}</span></div>
+                        <div className="flex justify-between"><span className="text-gray-400">m²:</span><span className="text-white">{calculateArea(measureInput.visualElements.polygon).m2}</span></div>
+                        <div className="flex justify-between"><span className="text-gray-400">mi²:</span><span className="text-white">{calculateArea(measureInput.visualElements.polygon).mi2}</span></div>
+                        <div className="flex justify-between"><span className="text-gray-400">ft²:</span><span className="text-white">{calculateArea(measureInput.visualElements.polygon).ft2}</span></div>
+                        <div className="flex justify-between"><span className="text-gray-400">M²:</span><span className="text-white">{calculateArea(measureInput.visualElements.polygon).ha}</span></div>
+                      </div>
+                    </div>
+                  )}
+
                   <button 
                     onClick={handleClearMeasurement} 
                     style={{ backgroundColor: brandColor }} 
