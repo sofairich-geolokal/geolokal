@@ -264,7 +264,7 @@ const MapRenderer = ({
                   });
                 }}
               />
-            ) : (
+            ) : layer.geometry ? (
               <Polygon 
                 key={layer.id} 
                 positions={layer.geometry} 
@@ -292,7 +292,7 @@ const MapRenderer = ({
                   </div>
                 </Popup>
               </Polygon>
-            );
+            ) : null;
           })}
 
           {/* LGU Infrastructure Layers */}

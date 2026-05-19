@@ -12,8 +12,8 @@ const pool = new Pool({
   // Optimized connection pooling for faster login
   max: 10, // Reduced for faster connection
   min: 1, // Keep 1 connection ready
-  idleTimeoutMillis: 5000, // Close idle connections faster
-  connectionTimeoutMillis: 3000, // Faster timeout for quick response
+  idleTimeoutMillis: 10000, // Close idle connections after 10 seconds
+  connectionTimeoutMillis: 10000, // Increased timeout to 10 seconds for better reliability
   maxUses: 500, // Reuse connections more frequently
 });
 

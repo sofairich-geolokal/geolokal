@@ -3,6 +3,7 @@
 import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
 import { query } from '@/lib/db';
+import bcrypt from 'bcrypt';
 
 // Interface to fix the 'unknown' type error for the database result
 interface UserLoginResult {
@@ -33,9 +34,20 @@ export async function login(
       return { success: false, error: 'User not found.' };
     }
 
-    // 2. Password Comparison (Plain text as per your setup)
-    if (user.password_hash !== password) {
-      return { success: false, error: 'Incorrect password.' };
+    // 2. Password Comparison (use bcrypt if password_hash appears hashed)
+    if (!user.password_hash) {
+      return { success: false, error: 'No password set for user.' };
+    }
+
+    const isHashed = typeof user.password_hash === 'string' && user.password_hash.startsWith('$2');
+    if (isHashed) {
+      const match = await bcrypt.compare(password, user.password_hash);
+      if (!match) return { success: false, error: 'Incorrect password.' };
+    } else {
+      // Fallback for plaintext-stored passwords (not recommended)
+      if (user.password_hash !== password) {
+        return { success: false, error: 'Incorrect password.' };
+      }
     }
 
     // 3. Role validation for target dashboard
@@ -73,20 +85,27 @@ export async function login(
       finalLocation = locationName;
     }
     
-    // 5. Generate Token & Set Cookie
+    // 5. Generate Token & Set Cookie (best-effort)
     const authToken = `token_${user.id}_${Date.now()}`;
-    const cookieStore = await cookies();
-    
-    cookieStore.set('auth_token', authToken, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'lax',
-      path: '/',
-      maxAge: 60 * 60 * 24 * 7, // 7 days
-    });
-    
+    let cookieSet = false;
+    try {
+      const cookieStore = await cookies();
+      cookieStore.set('auth_token', authToken, {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: 'lax',
+        path: '/',
+        maxAge: 60 * 60 * 24 * 7, // 7 days
+      });
+      cookieSet = true;
+    } catch (e: any) {
+      console.warn('Could not set auth cookie in this runtime:', e?.message || e);
+    }
+
     return { 
       success: true, 
+      authToken: authToken,
+      cookieSet, 
       user: { 
         id: String(user.id), 
         username: user.username, 
@@ -97,7 +116,11 @@ export async function login(
     };
 
   } catch (error: any) {
-    console.error('SERVER AUTH ERROR:', error.message);
+    console.error('SERVER AUTH ERROR:', error);
+    const message = error?.message || String(error);
+    if (process.env.NODE_ENV !== 'production') {
+      return { success: false, error: `Server error: ${message}`, stack: error.stack };
+    }
     return { success: false, error: 'An error occurred during login.' };
   }
 }

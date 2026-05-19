@@ -54,6 +54,7 @@ const Sidebar = () => {
             fill 
             className="object-contain"
             priority 
+            sizes="80px"
           />
         </div>
       </div>
@@ -74,7 +75,7 @@ const Sidebar = () => {
               }`}
             >
               <div className="relative w-4 h-4 brightness-0 invert">
-                <Image src={item.icon} alt={item.name} fill className="object-contain" />
+                <Image src={item.icon} alt={item.name} fill className="object-contain" sizes="16px" />
               </div>
               <span className="text-sm tracking-tight">{item.name}</span>
             </Link>
@@ -105,7 +106,7 @@ const SidebarSection = ({ title, icon, items }: { title: string; icon: string; i
     <div className="w-full">
       <div className="flex items-center space-x-3 mb-0">
         <div className="relative w-4 h-4 brightness-0 invert">
-          <Image src={icon} alt={title} fill className="object-contain" />
+          <Image src={icon} alt={title} fill className="object-contain" sizes="16px" />
         </div>
         <h3 className="font-extrabold text-sm tracking-tighter pb-1">{title}</h3>
       </div>

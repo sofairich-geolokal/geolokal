@@ -394,7 +394,7 @@ const MapPopup = ({ project, onClose }: MapPopupProps) => {
   };
 
   
-  const geoPortalRoadStyle = () => ({ color: '#06a506ee', weight: 3, opacity: 0.9 });
+  const geoPortalRoadStyle = () => ({ color: '#333333', weight: 3, opacity: 1.0 });
 
   const adminBoundaryStyle = (feature: any) => {
     const isSelected = feature.id === selectedBoundaryId;

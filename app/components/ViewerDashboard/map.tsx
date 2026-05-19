@@ -348,23 +348,6 @@ export default function GeoPortalMap() {
                 </span>
               </label>
             ))}
-            {uploadedLayers.length > 0 && (
-              <>
-                <div className="h-px bg-gray-100 my-2" />
-                <div className="text-xs font-bold text-gray-400 uppercase mb-2">Uploaded Layers</div>
-                {uploadedLayers.map((layer) => (
-                  <label key={layer.id} className="flex items-center gap-3 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={uploadedLayersVisibility[layer.id] || false}
-                      onChange={() => setUploadedLayersVisibility(prev => ({ ...prev, [layer.id]: !prev[layer.id] }))}
-                      className="w-4 h-4 accent-orange-500 rounded"
-                    />
-                    <span className="text-sm font-medium text-gray-700 truncate">{layer.layer_name}</span>
-                  </label>
-                ))}
-              </>
-            )}
           </div>
         </div>
 
@@ -421,20 +404,7 @@ export default function GeoPortalMap() {
                   </div>
                 </div>
               ))}
-              {uploadedLayers.filter(layer => uploadedLayersVisibility[layer.id]).map((layer) => (
-                <div key={layer.id} className="flex items-center space-x-2 text-xs">
-                  <div
-                    className="w-4 h-4 rounded-sm"
-                    style={{
-                      backgroundColor: layer.style_config?.fillColor || layer.style_config?.color || '#318855',
-                      border: `2px solid ${layer.style_config?.color || '#318855'}`
-                    }}
-                  ></div>
-                  <div className="flex-1">
-                    <div className="font-medium text-gray-700 truncate">{layer.layer_name}</div>
-                  </div>
-                </div>
-              ))}
+              
               {Object.values(layers).every(v => !v) && uploadedLayers.every(layer => !uploadedLayersVisibility[layer.id]) && <div className="text-[10px] text-gray-400 italic">No layers active</div>}
             </div>
           )}

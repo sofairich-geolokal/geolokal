@@ -45,7 +45,7 @@ export default function CitySelection() {
 
       {/* Logo */}
       <div className="absolute top-6 left-6 w-24 h-24">
-        <Image src="/images/logolg.png" alt="GEOLOKAL" fill className="object-contain" priority />
+        <Image src="/images/logolg.png" alt="GEOLOKAL" fill className="object-contain" priority sizes="96px" />
       </div>
 
       {/* City Selection Content */}
@@ -69,6 +69,7 @@ export default function CitySelection() {
                   alt={city.name} 
                   fill 
                   className="object-cover"
+                  sizes="(max-width: 768px) 100vw, 33vw"
                 />
                 <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/70 to-transparent p-4">
                   <p className="text-white font-semibold text-sm">{city.name}</p>

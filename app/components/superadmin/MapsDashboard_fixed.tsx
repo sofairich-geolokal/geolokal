@@ -280,26 +280,26 @@ const MapsDashboard = () => {
     return { color: 'blue' }; 
   };
 
-  // NEW: GeoPortal Style specifically for Roads
+  // NEW: GeoPortal Style specifically for Roads - Dark color to match QGIS display
   const geoPortalRoadStyle = (feature: any) => {
     console.log('Road feature geometry type:', feature.geometry?.type);
     if (feature.geometry?.type?.includes('Polygon')) {
       return { 
-        color: '#00ff00', // Bright Neon Green to match GeoPortal style
+        color: '#333333', // Dark grey to match QGIS black roads
         weight: 2, 
-        fillColor: '#00ff00',
+        fillColor: '#333333',
         fillOpacity: 0.3 
       }; 
     }
     if (feature.geometry?.type?.includes('LineString')) {
       return { 
-        color: '#00ff00', // Bright Neon Green to match GeoPortal style
+        color: '#333333', // Dark grey to match QGIS black roads
         weight: 3, 
-        opacity: 0.9 
+        opacity: 1.0 
       }; 
     }
     return { 
-      color: '#00ff00', 
+      color: '#333333', // Dark grey to match QGIS black roads
       weight: 2,
       opacity: 0.8
     }; 

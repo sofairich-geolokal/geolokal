@@ -44,11 +44,11 @@ export default function LoginPage() {
   return (
     <div className="relative min-h-screen w-full flex items-center justify-center p-6 sm:p-12">
       <div className="absolute inset-0 -z-10">
-        <Image src="/Login-bg.jpg" alt="Login Background" fill priority className="object-cover" />
+        <Image src="/Login-bg.jpg" alt="Login Background" fill priority className="object-cover" sizes="100vw" />
       </div>
 
       <div className="absolute top-6 left-6 w-24 h-24">
-        <Image src="/logo.png" alt="Logo" fill className="object-contain" priority />
+        <Image src="/logo.png" alt="Logo" fill className="object-contain" priority sizes="96px" />
       </div>
 
       <div className="bg-white p-8 sm:p-12 rounded-[40px] shadow-2xl w-full max-w-md border border-gray-50">
