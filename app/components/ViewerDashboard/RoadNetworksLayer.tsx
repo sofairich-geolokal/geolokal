@@ -211,7 +211,7 @@ const RoadNetworksLayer: React.FC<RoadNetworksLayerProps> = ({
     if (isVisible && !dataFetchedRef.current) {
       fetchRoadsData();
     }
-  }, []);
+  }, [isVisible]);
 
   // Transform road coordinates - data is already in WGS84 format
   const transformRoadCoordinates = (geoData: any) => {

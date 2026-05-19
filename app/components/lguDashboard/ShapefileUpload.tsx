@@ -125,14 +125,12 @@ export default function ShapefileUpload() {
       const dbfFile = filesToProcess.find(f => f.name.toLowerCase().endsWith('.dbf'));
 
       if (!shpFile) {
-        throw new Error("Missing .shp file. Please select all required shapefile components (.shp, .shx, .dbf) or a zip file containing them.");
-      }
-      if (!shxFile) {
-        throw new Error("Missing .shx file. Please select all required shapefile components (.shp, .shx, .dbf) or a zip file containing them.");
+        throw new Error("Missing .shp file. Please select the required shapefile components (.shp, .dbf) or a zip file containing them.");
       }
       if (!dbfFile) {
-        throw new Error("Missing .dbf file. Please select all required shapefile components (.shp, .shx, .dbf) or a zip file containing them.");
+        throw new Error("Missing .dbf file. Please select the required shapefile components (.shp, .dbf) or a zip file containing them.");
       }
+      // .shx is optional - it's just an index file for performance
       
       const baseName = shpFile.name.replace(/\.[^/.]+$/, "");
 
@@ -258,7 +256,7 @@ export default function ShapefileUpload() {
             >
               <Upload className="text-gray-400 mb-2" />
               <span className="text-sm font-medium text-gray-600 text-center">Select shapefile files or a zip file</span>
-              <span className="text-xs text-gray-400 mt-1">Required: .shp, .shx, .dbf (optional: .prj, .cpg) or upload a .zip file</span>
+              <span className="text-xs text-gray-400 mt-1">Required: .shp, .dbf (optional: .shx, .prj, .cpg) or upload a .zip file</span>
             </label>
             {isProcessing && <p className="text-xs text-[#318855] mt-2 animate-pulse">Processing geometry...</p>}
             {error && (

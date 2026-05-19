@@ -138,7 +138,9 @@ export async function POST(request: NextRequest) {
           created_at: new Date().toISOString()
         },
         is_visible: true,
-        created_at: new Date()
+        created_at: new Date(),
+        category_id: null,
+        uploaded_by: null
       }
     });
 

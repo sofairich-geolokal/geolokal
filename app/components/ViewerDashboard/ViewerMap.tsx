@@ -309,20 +309,31 @@ export default function ViewerMap() {
   const [legendsOpen, setLegendsOpen] = useState(true);
   const [xyInput, setXyInput] = useState({ lat: '', lng: '' });
   const [currentZoom, setCurrentZoom] = useState(6);
-  const [measureInput, setMeasureInput] = useState({ 
+  const [measureInput, setMeasureInput] = useState<{ 
+    startPoint: string; 
+    endPoint: string; 
+    distance: string;
+    area: string;
+    isMeasuring: boolean;
+    measurementType: 'distance' | 'area';
+    clickMode: string;
+    visualElements: {
+      lines: number[][];
+      markers: { lat: number; lng: number }[]
+      polygon: number[][]
+    }
+  }>({ 
     startPoint: '', 
     endPoint: '', 
     distance: '0.00 km',
     area: '0.00 km²',
-    bearing: '0.00°',
-    perimeter: '0.00 km',
     isMeasuring: false,
+    measurementType: 'distance',
     clickMode: 'start',
-    measureType: 'distance' as 'distance' | 'area' | 'bearing' | 'perimeter',
-    points: [] as [number, number][],
     visualElements: {
-      lines: [] as [number, number][][],
-      markers: [] as [number, number][]
+      lines: [],
+      markers: [],
+      polygon: []
     }
   });
 
@@ -383,12 +394,47 @@ export default function ViewerMap() {
 
   const handleMapClick = (lat: number, lng: number) => {
     if (activeRightPanel !== 'measure' || !measureInput.isMeasuring) return;
+    
     const coordString = `${lat.toFixed(6)}, ${lng.toFixed(6)}`;
-    const newPoint: [number, number] = [lat, lng];
-    if (measureInput.clickMode === 'start') {
-      setMeasureInput(prev => ({ ...prev, startPoint: coordString, clickMode: 'end', visualElements: { ...prev.visualElements, markers: [newPoint] } }));
-    } else {
-      setMeasureInput(prev => ({ ...prev, endPoint: coordString, clickMode: 'start', visualElements: { ...prev.visualElements, markers: [...prev.visualElements.markers, newPoint], lines: [[prev.visualElements.markers[0], newPoint]] } }));
+    
+    if (measureInput.measurementType === 'distance') {
+      if (measureInput.clickMode === 'start') {
+        handleMeasurePointChange('startPoint', coordString);
+        setMeasureInput(prev => ({ 
+          ...prev, 
+          clickMode: 'end',
+          visualElements: {
+            markers: [{ lat, lng }],
+            lines: [],
+            polygon: []
+          }
+        }));
+      } else {
+        handleMeasurePointChange('endPoint', coordString);
+        const startCoords = measureInput.startPoint.split(',').map(c => parseFloat(c.trim()));
+        setMeasureInput(prev => ({ 
+          ...prev, 
+          clickMode: 'start',
+          visualElements: {
+            markers: [
+              { lat: startCoords[0], lng: startCoords[1] },
+              { lat, lng }
+            ],
+            lines: [[startCoords[0], startCoords[1]], [lat, lng]],
+            polygon: []
+          }
+        }));
+      }
+    } else if (measureInput.measurementType === 'area') {
+      // For area measurement, keep adding points to create polygon
+      setMeasureInput(prev => ({
+        ...prev,
+        visualElements: {
+          ...prev.visualElements,
+          markers: [...prev.visualElements.markers, { lat, lng }],
+          polygon: [...prev.visualElements.polygon, [lat, lng]]
+        }
+      }));
     }
   };
 
@@ -418,17 +464,116 @@ export default function ViewerMap() {
 
   const handleClearMeasurement = () => {
     setMeasureInput({
-      startPoint: '', endPoint: '', distance: '0.00 km', area: '0.00 km²', bearing: '0.00°', perimeter: '0.00 km',
-      isMeasuring: false, clickMode: 'start', measureType: 'distance', points: [], visualElements: { lines: [], markers: [] }
+      startPoint: '',
+      endPoint: '',
+      distance: '0.00 km',
+      area: '0.00 km²',
+      isMeasuring: false,
+      measurementType: 'distance',
+      clickMode: 'start',
+      visualElements: {
+        lines: [],
+        markers: [],
+        polygon: []
+      }
     });
   };
 
-  const handleMeasureTypeChange = (type: any) => {
-    setMeasureInput(prev => ({ ...prev, measureType: type }));
+  // Calculate area from polygon coordinates using Shoelace formula
+  const calculateArea = (polygon: number[][]) => {
+    if (polygon.length < 3) {
+      return {
+        km2: '0.00',
+        m2: '0.00',
+        mi2: '0.00',
+        ft2: '0.00',
+        ha: '0.00'
+      };
+    }
+    
+    try {
+      // Convert to radians for spherical calculation
+      const R = 6371; // Earth's radius in km
+      let area = 0;
+      
+      for (let i = 0; i < polygon.length; i++) {
+        const j = (i + 1) % polygon.length;
+        const lat1 = polygon[i][0] * Math.PI / 180;
+        const lng1 = polygon[i][1] * Math.PI / 180;
+        const lat2 = polygon[j][0] * Math.PI / 180;
+        const lng2 = polygon[j][1] * Math.PI / 180;
+        
+        area += (lng2 - lng1) * (2 + Math.sin(lat1) + Math.sin(lat2));
+      }
+      
+      area = Math.abs(area * R * R / 2);
+      
+      // Convert to different units
+      const areaKm2 = area;
+      const areaM2 = area * 1000000;
+      const areaMi2 = area * 0.386102;
+      const areaFt2 = area * 10763910;
+      const areaHa = area * 100;
+      
+      return {
+        km2: areaKm2.toFixed(2),
+        m2: areaM2.toFixed(2),
+        mi2: areaMi2.toFixed(2),
+        ft2: areaFt2.toFixed(2),
+        ha: areaHa.toFixed(2)
+      };
+    } catch (error) {
+      return {
+        km2: '0.00',
+        m2: '0.00',
+        mi2: '0.00',
+        ft2: '0.00',
+        ha: '0.00'
+      };
+    }
   };
 
-  const handleMeasurePointChange = (field: any, value: any) => {
-    setMeasureInput(prev => ({ ...prev, [field]: value }));
+  // Calculate distance between two points using Haversine formula
+  const calculateDistance = (startPoint: string, endPoint: string) => {
+    try {
+      const startCoords = startPoint.split(',').map(coord => parseFloat(coord.trim()));
+      const endCoords = endPoint.split(',').map(coord => parseFloat(coord.trim()));
+      
+      if (startCoords.length !== 2 || endCoords.length !== 2) {
+        return '0.00 km';
+      }
+      
+      const [startLat, startLng] = startCoords;
+      const [endLat, endLng] = endCoords;
+      
+      if (isNaN(startLat) || isNaN(startLng) || isNaN(endLat) || isNaN(endLng)) {
+        return '0.00 km';
+      }
+      
+      const R = 6371;
+      const dLat = (endLat - startLat) * Math.PI / 180;
+      const dLng = (endLng - startLng) * Math.PI / 180;
+      const a = 
+        Math.sin(dLat/2) * Math.sin(dLat/2) +
+        Math.cos(startLat * Math.PI / 180) * Math.cos(endLat * Math.PI / 180) * 
+        Math.sin(dLng/2) * Math.sin(dLng/2);
+      const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+      const distance = R * c;
+      
+      return `${distance.toFixed(2)} km`;
+    } catch (error) {
+      return '0.00 km';
+    }
+  };
+
+  const handleMeasureTypeChange = (type: 'distance' | 'area') => {
+    setMeasureInput(prev => ({ ...prev, measurementType: type }));
+  };
+
+  const handleMeasurePointChange = (field: 'startPoint' | 'endPoint', value: string) => {
+    const newMeasureInput = { ...measureInput, [field]: value };
+    const distance = calculateDistance(newMeasureInput.startPoint, newMeasureInput.endPoint);
+    setMeasureInput({ ...newMeasureInput, distance, visualElements: measureInput.visualElements });
   };
 
   return (
@@ -623,15 +768,92 @@ export default function ViewerMap() {
               )}
               {activeRightPanel === 'measure' && (
                 <div className="space-y-3">
-                   <div className="grid grid-cols-2 gap-2">
-                     {['distance', 'area', 'bearing', 'perimeter'].map(type => (
-                       <button key={type} onClick={() => handleMeasureTypeChange(type)} className={`px-2 py-1 rounded text-xs transition-colors ${measureInput.measureType === type ? 'bg-white text-gray-800' : 'bg-gray-600 hover:bg-gray-500'}`}>{type}</button>
-                     ))}
-                   </div>
-                   <button onClick={toggleMeasurementMode} style={{ backgroundColor: measureInput.isMeasuring ? brandColor : '#666' }} className="w-full text-white font-bold py-2 rounded">
-                     {measureInput.isMeasuring ? 'Stop Measurement' : 'Start Measurement'}
-                   </button>
-                   <button onClick={handleClearMeasurement} style={{ backgroundColor: brandColor }} className="w-full text-white font-bold py-2 rounded">Clear Measurement</button>
+                  {/* Measurement Type Tabs */}
+                  <div className="flex border-b border-gray-600">
+                    <button 
+                      onClick={() => handleMeasureTypeChange('distance')}
+                      className={`flex-1 py-2 text-xs font-medium ${measureInput.measurementType === 'distance' ? 'text-white border-b-2 border-[#318855]' : 'text-gray-400'}`}
+                    >
+                      Distance
+                    </button>
+                    <button 
+                      onClick={() => handleMeasureTypeChange('area')}
+                      className={`flex-1 py-2 text-xs font-medium ${measureInput.measurementType === 'area' ? 'text-white border-b-2 border-[#318855]' : 'text-gray-400'}`}
+                    >
+                      Area
+                    </button>
+                  </div>
+
+                  <div className="text-center text-white mb-2">
+                    {measureInput.isMeasuring 
+                      ? measureInput.measurementType === 'distance'
+                        ? `Click on map to set ${measureInput.clickMode === 'start' ? 'start' : 'end'} point`
+                        : `Click on map to add polygon vertices (min 3 points)`
+                      : 'Click toggle to enable map measurement'
+                    }
+                  </div>
+                  <button 
+                    onClick={toggleMeasurementMode}
+                    style={{ backgroundColor: measureInput.isMeasuring ? brandColor : '#666' }} 
+                    className="w-full text-white font-bold py-2 rounded mb-3"
+                  >
+                    {measureInput.isMeasuring ? 'Stop Measurement' : 'Start Measurement'}
+                  </button>
+
+                  {measureInput.measurementType === 'distance' && (
+                    <>
+                      <div className="flex items-center justify-between">
+                        <label>Start Point:</label>
+                        <input 
+                          type="text" 
+                          placeholder="lat, lng" 
+                          value={measureInput.startPoint}
+                          onChange={(e) => handleMeasurePointChange('startPoint', e.target.value)}
+                          className="w-24 text-white p-1 rounded bg-gray-700 text-xs" 
+                        />
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <label>End Point:</label>
+                        <input 
+                          type="text" 
+                          placeholder="lat, lng" 
+                          value={measureInput.endPoint}
+                          onChange={(e) => handleMeasurePointChange('endPoint', e.target.value)}
+                          className="w-24 text-white p-1 rounded bg-gray-700 text-xs" 
+                        />
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <label>Distance:</label>
+                        <input 
+                          type="text" 
+                          value={measureInput.distance} 
+                          readOnly 
+                          className="w-24 text-white p-1 rounded bg-gray-700 text-xs" 
+                        />
+                      </div>
+                    </>
+                  )}
+
+                  {measureInput.measurementType === 'area' && measureInput.visualElements.polygon.length >= 3 && (
+                    <div className="mt-3 p-3 bg-gray-700 rounded">
+                      <div className="text-xs font-bold text-gray-300 mb-2">Result</div>
+                      <div className="space-y-1 text-xs">
+                        <div className="flex justify-between"><span className="text-gray-400">km²:</span><span className="text-white">{calculateArea(measureInput.visualElements.polygon).km2}</span></div>
+                        <div className="flex justify-between"><span className="text-gray-400">m²:</span><span className="text-white">{calculateArea(measureInput.visualElements.polygon).m2}</span></div>
+                        <div className="flex justify-between"><span className="text-gray-400">mi²:</span><span className="text-white">{calculateArea(measureInput.visualElements.polygon).mi2}</span></div>
+                        <div className="flex justify-between"><span className="text-gray-400">ft²:</span><span className="text-white">{calculateArea(measureInput.visualElements.polygon).ft2}</span></div>
+                        <div className="flex justify-between"><span className="text-gray-400">ha:</span><span className="text-white">{calculateArea(measureInput.visualElements.polygon).ha}</span></div>
+                      </div>
+                    </div>
+                  )}
+
+                  <button 
+                    onClick={handleClearMeasurement} 
+                    style={{ backgroundColor: brandColor }} 
+                    className="w-full text-white font-bold py-2 rounded"
+                  >
+                    Clear Measurement
+                  </button>
                 </div>
               )}
             </div>

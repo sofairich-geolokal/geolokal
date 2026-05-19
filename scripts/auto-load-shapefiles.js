@@ -2,7 +2,8 @@
  * Auto-Loader Script for Shapefiles
  * 
  * This script automatically watches a folder for new shapefile uploads,
- * converts them to GeoJSON, saves to the data folder, and updates the database.
+ * converts them to GeoJSON, saves to the data folder, creates dynamic tables,
+ * and updates the database.
  * 
  * Usage:
  *   node scripts/auto-load-shapefiles.js
@@ -18,6 +19,7 @@ const path = require('path');
 const { PrismaClient } = require('@prisma/client');
 const shp = require('shpjs');
 const JSZip = require('jszip');
+const { Pool } = require('pg');
 
 // Configuration
 const WATCH_FOLDER = path.join(__dirname, '..', 'uploads');
@@ -28,6 +30,18 @@ const CHECK_INTERVAL = 5000; // Check every 5 seconds
 
 const prisma = new PrismaClient();
 
+// PostgreSQL pool for dynamic table creation
+const pool = new Pool({
+  user: process.env.DB_USER,
+  host: process.env.DB_HOST,
+  database: process.env.DB_NAME,
+  password: process.env.DB_PASSWORD,
+  port: parseInt(process.env.DB_PORT || '16443'),
+  ssl: process.env.DB_SSL === 'true' ? {
+    rejectUnauthorized: false,
+  } : false,
+});
+
 // Ensure folders exist
 function ensureFolders() {
   [WATCH_FOLDER, PROCESSED_FOLDER, DATA_FOLDER].forEach(folder => {
@@ -36,6 +50,117 @@ function ensureFolders() {
       console.log(`Created folder: ${folder}`);
     }
   });
+}
+
+// Create dynamic table for layer data
+async function createDynamicTable(tableName, properties) {
+  const client = await pool.connect();
+  try {
+    // Sanitize table name
+    const sanitizedTableName = tableName.replace(/[^a-zA-Z0-9_]/g, '_').toLowerCase();
+    
+    // Check if table already exists
+    const checkTableQuery = `
+      SELECT EXISTS (
+        SELECT FROM information_schema.tables 
+        WHERE table_name = $1
+      );
+    `;
+    const tableExists = (await client.query(checkTableQuery, [sanitizedTableName])).rows[0].exists;
+    
+    if (tableExists) {
+      console.log(`Table ${sanitizedTableName} already exists, skipping creation`);
+      return sanitizedTableName;
+    }
+    
+    // Build column definitions from GeoJSON properties
+    const columnDefs = ['id SERIAL PRIMARY KEY', 'geom GEOMETRY(Geometry, 4326)', 'layer_id INTEGER'];
+    
+    for (const [key, value] of Object.entries(properties)) {
+      const colName = key.replace(/[^a-zA-Z0-9_]/g, '_').toLowerCase();
+      let colType = 'TEXT';
+      
+      if (typeof value === 'number') {
+        colType = Number.isInteger(value) ? 'INTEGER' : 'DECIMAL(20,6)';
+      } else if (typeof value === 'boolean') {
+        colType = 'BOOLEAN';
+      }
+      
+      columnDefs.push(`${colName} ${colType}`);
+    }
+    
+    // Create table
+    const createTableQuery = `
+      CREATE TABLE ${sanitizedTableName} (
+        ${columnDefs.join(', ')}
+      );
+    `;
+    
+    await client.query(createTableQuery);
+    console.log(`✅ Created table: ${sanitizedTableName}`);
+    
+    // Create spatial index
+    await client.query(`CREATE INDEX idx_${sanitizedTableName}_geom ON ${sanitizedTableName} USING GIST (geom);`);
+    console.log(`✅ Created spatial index on ${sanitizedTableName}`);
+    
+    return sanitizedTableName;
+  } catch (error) {
+    console.error(`Error creating table ${tableName}:`, error.message);
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
+// Insert GeoJSON data into dynamic table
+async function insertGeoJSONData(tableName, layerId, geojson) {
+  const client = await pool.connect();
+  try {
+    const sanitizedTableName = tableName.replace(/[^a-zA-Z0-9_]/g, '_').toLowerCase();
+    
+    if (!geojson.features || geojson.features.length === 0) {
+      console.log('No features to insert');
+      return;
+    }
+    
+    // Get column names from first feature
+    const firstFeature = geojson.features[0];
+    const properties = firstFeature.properties || {};
+    const columns = ['layer_id', 'geom'];
+    const placeholders = ['$1', 'ST_SetSRID(ST_GeomFromGeoJSON($2), 4326)'];
+    let paramIndex = 3;
+    
+    for (const key of Object.keys(properties)) {
+      const colName = key.replace(/[^a-zA-Z0-9_]/g, '_').toLowerCase();
+      columns.push(colName);
+      placeholders.push(`$${paramIndex}`);
+      paramIndex++;
+    }
+    
+    // Insert each feature
+    for (const feature of geojson.features) {
+      const values = [layerId, JSON.stringify(feature.geometry)];
+      
+      for (const key of Object.keys(properties)) {
+        const colName = key.replace(/[^a-zA-Z0-9_]/g, '_').toLowerCase();
+        values.push(feature.properties?.[key] || null);
+      }
+      
+      const insertQuery = `
+        INSERT INTO ${sanitizedTableName} (${columns.join(', ')})
+        VALUES (${placeholders.join(', ')})
+      `;
+      
+      await client.query(insertQuery, values);
+    }
+    
+    console.log(`✅ Inserted ${geojson.features.length} features into ${sanitizedTableName}`);
+  } catch (error) {
+    console.error(`Error inserting data into ${tableName}:`, error.message);
+    throw error;
+  } finally {
+    client.release();
+  }
 }
 
 // Process a single shapefile (zip or individual files)
@@ -134,10 +259,41 @@ async function processShapefile(filePath) {
         z_index: 0,
         is_visible: true,
         is_downloadable: false,
+        category_id: null,
+        uploaded_by: null
       }
     });
     
     console.log(`✅ Layer created successfully with ID: ${layer.id}`);
+    
+    // Create dynamic table and insert data
+    if (geojson.features && geojson.features.length > 0) {
+      const firstFeature = geojson.features[0];
+      const properties = firstFeature.properties || {};
+      
+      try {
+        const tableName = await createDynamicTable(sanitizedFileName, properties);
+        await insertGeoJSONData(tableName, layer.id, geojson);
+        
+        // Update metadata with table name
+        await prisma.map_layers.update({
+          where: { id: layer.id },
+          data: {
+            metadata: {
+              geojson_file: `${sanitizedFileName}.json`,
+              table_name: tableName,
+              description: `Auto-imported layer from ${fileName}`,
+              source: 'auto-loader'
+            }
+          }
+        });
+        
+        console.log(`✅ Dynamic table ${tableName} created and populated`);
+      } catch (tableError) {
+        console.error(`Error creating dynamic table: ${tableError.message}`);
+        // Continue without dynamic table - layer still works with GeoJSON file
+      }
+    }
     
     // Move processed files
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
@@ -207,12 +363,14 @@ function startWatcher() {
 process.on('SIGINT', async () => {
   console.log('\n\nShutting down...');
   await prisma.$disconnect();
+  await pool.end();
   process.exit(0);
 });
 
 process.on('SIGTERM', async () => {
   console.log('\n\nShutting down...');
   await prisma.$disconnect();
+  await pool.end();
   process.exit(0);
 });
 

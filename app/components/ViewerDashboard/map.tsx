@@ -1,19 +1,36 @@
 "use client";
 
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import dynamic from 'next/dynamic';
 import { Layers, Globe, Ruler, CircleDot, ChevronRight, X, Search } from 'lucide-react';
 
-const MapRenderer = dynamic(() => import('./MapRenderer').then(mod => ({ default: mod.default })), { 
-  ssr: false, 
-  loading: () => <div className="h-full w-full bg-gray-800 flex items-center justify-center text-white">Initializing...</div> 
+const MapRenderer = dynamic(() => import('./MapRenderer').then(mod => ({ default: mod.default })), {
+  ssr: false,
+  loading: () => <div className="h-full w-full bg-gray-800 flex items-center justify-center text-white">Initializing...</div>
 });
+
+interface UploadedLayer {
+  id: number;
+  layer_name: string;
+  layer_type: string;
+  style_config: {
+    color?: string;
+    fillColor?: string;
+    weight?: number;
+    opacity?: number;
+  };
+  metadata: {
+    geojson_file?: string;
+    table_name?: string;
+  };
+  is_visible: boolean;
+}
 
 export default function GeoPortalMap() {
   const brandColor = "#318855";
   const [activeRightPanel, setActiveRightPanel] = useState<string | null>(null);
   const [mapType, setMapType] = useState('osm');
-  
+
   // All layers set to false (unchecked) when page loads
   const [layers, setLayers] = useState({
     adminBoundary: false,
@@ -21,6 +38,9 @@ export default function GeoPortalMap() {
     rivers: false,
     parcelLots: false,
   });
+
+  const [uploadedLayers, setUploadedLayers] = useState<UploadedLayer[]>([]);
+  const [uploadedLayersVisibility, setUploadedLayersVisibility] = useState<Record<number, boolean>>({});
 
   const [mapView, setMapView] = useState<{ lat: number; lng: number; zoom: number } | null>(null);
   const [layerBounds, setLayerBounds] = useState<[[number, number], [number, number]] | null>(null);
@@ -32,9 +52,9 @@ export default function GeoPortalMap() {
   const [xyInput, setXyInput] = useState({ lat: '', lng: '' });
   const [bufferInput, setBufferInput] = useState({ type: 'Point', distance: '', unit: 'Kilometers', centerPoint: null as { lat: number; lng: number } | null });
   const [searchQuery, setSearchQuery] = useState('');
-  const [measureInput, setMeasureInput] = useState<{ 
-    startPoint: string; 
-    endPoint: string; 
+  const [measureInput, setMeasureInput] = useState<{
+    startPoint: string;
+    endPoint: string;
     distance: string;
     area: string;
     isMeasuring: boolean;
@@ -45,9 +65,9 @@ export default function GeoPortalMap() {
       markers: { lat: number; lng: number }[];
       polygon: [number, number][]
     }
-  }>({ 
-    startPoint: '', 
-    endPoint: '', 
+  }>({
+    startPoint: '',
+    endPoint: '',
     distance: '0.00 km',
     area: '0.00 sq km',
     isMeasuring: false,
@@ -59,6 +79,37 @@ export default function GeoPortalMap() {
       polygon: []
     }
   });
+
+  // Fetch uploaded layers from database
+  useEffect(() => {
+    const fetchUploadedLayers = async () => {
+      try {
+        const response = await fetch('/api/layers');
+        const data = await response.json();
+        if (data.success) {
+          setUploadedLayers(data.data);
+          // Initialize visibility state
+          const visibility: Record<number, boolean> = {};
+          data.data.forEach((layer: UploadedLayer) => {
+            visibility[layer.id] = layer.is_visible;
+          });
+          setUploadedLayersVisibility(visibility);
+        }
+      } catch (error) {
+        console.error('Error fetching uploaded layers:', error);
+      }
+    };
+
+    fetchUploadedLayers();
+
+    // Listen for layer updates from upload component
+    const handleLayersUpdated = () => {
+      fetchUploadedLayers();
+    };
+
+    window.addEventListener('layersUpdated', handleLayersUpdated);
+    return () => window.removeEventListener('layersUpdated', handleLayersUpdated);
+  }, []);
 
   const handleMapClick = (lat: number, lng: number) => {
     // Handle buffer center point selection
@@ -286,25 +337,42 @@ export default function GeoPortalMap() {
             
             {Object.entries(layers).map(([key, value]) => (
               <label key={key} className="flex items-center gap-3 cursor-pointer">
-                <input 
-                  type="checkbox" 
-                  checked={value} 
-                  onChange={() => setLayers(prev => ({ ...prev, [key]: !value }))} 
-                  className="w-4 h-4 accent-orange-500 rounded" 
+                <input
+                  type="checkbox"
+                  checked={value}
+                  onChange={() => setLayers(prev => ({ ...prev, [key]: !value }))}
+                  className="w-4 h-4 accent-orange-500 rounded"
                 />
                 <span className="text-sm font-medium text-gray-700 capitalize">
                   {key.replace(/([A-Z])/g, ' $1').trim()}
                 </span>
               </label>
             ))}
+            {uploadedLayers.length > 0 && (
+              <>
+                <div className="h-px bg-gray-100 my-2" />
+                <div className="text-xs font-bold text-gray-400 uppercase mb-2">Uploaded Layers</div>
+                {uploadedLayers.map((layer) => (
+                  <label key={layer.id} className="flex items-center gap-3 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={uploadedLayersVisibility[layer.id] || false}
+                      onChange={() => setUploadedLayersVisibility(prev => ({ ...prev, [layer.id]: !prev[layer.id] }))}
+                      className="w-4 h-4 accent-orange-500 rounded"
+                    />
+                    <span className="text-sm font-medium text-gray-700 truncate">{layer.layer_name}</span>
+                  </label>
+                ))}
+              </>
+            )}
           </div>
         </div>
 
         <div className="w-full h-full z-0" ref={mapContainerRef}>
-          <MapRenderer 
-            layers={[]} 
-            mapView={mapView} 
-            bufferData={bufferData} 
+          <MapRenderer
+            layers={[]}
+            mapView={mapView}
+            bufferData={bufferData}
             basemap={mapType}
             onMapClick={handleMapClick}
             isMeasuring={measureInput.isMeasuring}
@@ -319,6 +387,7 @@ export default function GeoPortalMap() {
             onParcelLotsBoundsReady={layers.parcelLots ? handleParcelLotsBounds : undefined}
             fitToBounds={fitToBounds}
             activeRightPanel={activeRightPanel}
+            uploadedLayers={uploadedLayers.filter(layer => uploadedLayersVisibility[layer.id])}
           />
         </div>
 
@@ -352,7 +421,21 @@ export default function GeoPortalMap() {
                   </div>
                 </div>
               ))}
-              {Object.values(layers).every(v => !v) && <div className="text-[10px] text-gray-400 italic">No layers active</div>}
+              {uploadedLayers.filter(layer => uploadedLayersVisibility[layer.id]).map((layer) => (
+                <div key={layer.id} className="flex items-center space-x-2 text-xs">
+                  <div
+                    className="w-4 h-4 rounded-sm"
+                    style={{
+                      backgroundColor: layer.style_config?.fillColor || layer.style_config?.color || '#318855',
+                      border: `2px solid ${layer.style_config?.color || '#318855'}`
+                    }}
+                  ></div>
+                  <div className="flex-1">
+                    <div className="font-medium text-gray-700 truncate">{layer.layer_name}</div>
+                  </div>
+                </div>
+              ))}
+              {Object.values(layers).every(v => !v) && uploadedLayers.every(layer => !uploadedLayersVisibility[layer.id]) && <div className="text-[10px] text-gray-400 italic">No layers active</div>}
             </div>
           )}
         </div>
