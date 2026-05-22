@@ -228,7 +228,7 @@ export async function POST(request: Request) {
 
     // Send email to the new viewer
     try {
-      const viewerPortalLink = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
+      const viewerPortalLink = process.env.NEXT_PUBLIC_APP_URL || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'https://your-domain.com');
       const emailSent = await emailService.sendViewerCreationEmail({
         username,
         email,

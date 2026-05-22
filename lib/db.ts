@@ -14,7 +14,7 @@ if (process.env.DATABASE_URL) {
     max: parseInt(process.env.DB_MAX_CONNECTIONS || '10'),
     min: parseInt(process.env.DB_MIN_CONNECTIONS || '0'),
     idleTimeoutMillis: parseInt(process.env.DB_IDLE_TIMEOUT_MS || '5000'),
-    connectionTimeoutMillis: parseInt(process.env.DB_CONN_TIMEOUT_MS || '3000'),
+    connectionTimeoutMillis: parseInt(process.env.DB_CONN_TIMEOUT_MS || '10000'),
     application_name: process.env.DB_APP_NAME || 'geolokal_app',
   };
 } else {
@@ -30,7 +30,7 @@ if (process.env.DATABASE_URL) {
     max: parseInt(process.env.DB_MAX_CONNECTIONS || '2'),
     min: 0,
     idleTimeoutMillis: parseInt(process.env.DB_IDLE_TIMEOUT_MS || '2000'),
-    connectionTimeoutMillis: parseInt(process.env.DB_CONN_TIMEOUT_MS || '3000'),
+    connectionTimeoutMillis: parseInt(process.env.DB_CONN_TIMEOUT_MS || '10000'),
     maxUses: parseInt(process.env.DB_MAX_USES || '10'),
     allowExitOnIdle: false,
     application_name: process.env.DB_APP_NAME || 'geolokal_app',
@@ -68,7 +68,7 @@ export const checkDatabaseHealth = async () => {
 
 export const query = async (text: string, params?: any[]) => {
   const maxRetries = 3;
-  const timeoutMs = parseInt(process.env.DB_QUERY_TIMEOUT_MS || '8000');
+  const timeoutMs = parseInt(process.env.DB_QUERY_TIMEOUT_MS || '15000');
   let lastError: any;
   const p = getPool();
 
