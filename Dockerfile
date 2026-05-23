@@ -1,4 +1,4 @@
-FROM node:20
+FROM node:20 AS base
 
 WORKDIR /app
 
@@ -6,11 +6,10 @@ COPY package*.json ./
 
 RUN npm install
 
-<<<<<<< HEAD
 # Rebuild the source code only when needed
 FROM base AS builder
 WORKDIR /app
-COPY --from=deps /app/node_modules ./node_modules
+COPY --from=base /app/node_modules ./node_modules
 COPY . .
 
 # Generate Prisma Client
@@ -42,13 +41,3 @@ USER nextjs
 EXPOSE 3000
 
 CMD ["node", "server.js"]
-=======
-# FIX: Copy all your local code into the container
-COPY . .
-
-# Expose the port your app uses (usually 3000 for Node/Next.js)
-EXPOSE 3000
-
-# Start your app in development mode
-CMD ["npm", "run", "dev"]
->>>>>>> ff7586a34d9dea45a960b302b8c934d64be82def

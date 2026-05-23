@@ -92,7 +92,7 @@ export async function login(
       const cookieStore = await cookies();
       cookieStore.set('auth_token', authToken, {
         httpOnly: true,
-        secure: process.env.NODE_ENV === 'production',
+        secure: true,
         sameSite: 'lax',
         path: '/',
         maxAge: 60 * 60 * 24 * 7, // 7 days
@@ -118,6 +118,13 @@ export async function login(
   } catch (error: any) {
     console.error('SERVER AUTH ERROR:', error);
     const message = error?.message || String(error);
+    // Log detailed error in production for debugging
+    console.error('AUTH ERROR DETAILS:', {
+      message,
+      stack: error?.stack,
+      code: error?.code,
+      detail: error?.detail
+    });
     if (process.env.NODE_ENV !== 'production') {
       return { success: false, error: `Server error: ${message}`, stack: error.stack };
     }
