@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, useMemo } from 'react';
 import { MapContainer, TileLayer, Circle, Marker, Popup, useMap, Polygon, GeoJSON, Polyline } from 'react-leaflet';
 import L from 'leaflet';
 import { area, polygon } from '@turf/turf';
@@ -13,33 +13,6 @@ import WaterwaysLayer from './WaterwaysLayer';
 import ParcelLotsLayer from './ParcelLotsLayer';
 import LandCoverLayer from './LandCoverLayer';
 import ClimateTypeLayer from './ClimateTypeLayer';
-
-// Fix Leaflet default icon issue
-delete (L.Icon.Default.prototype as any)._getIconUrl;
-L.Icon.Default.mergeOptions({
-  iconRetinaUrl: 'https://unpkg.com/leaflet@1.9.2/dist/images/marker-icon-2x.png',
-  iconUrl: 'https://unpkg.com/leaflet@1.9.2/dist/images/marker-icon.png',
-  shadowUrl: 'https://unpkg.com/leaflet@1.9.2/dist/images/marker-shadow.png',
-});
-
-const defaultIcon = L.icon({
-  iconUrl: 'https://unpkg.com/leaflet@1.9.2/dist/images/marker-icon.png',
-  iconAnchor: [12, 41]
-});
-
-// Custom pointed dot marker for measurement points
-const measurementPointIcon = L.divIcon({
-  className: 'custom-measurement-point',
-  html: `
-    <div style="position: relative; display: flex; justify-content: center; align-items: center;">
-      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-        <circle cx="12" cy="12" r="8" fill="#318855" stroke="#ffffff" stroke-width="2"/>
-        <circle cx="12" cy="12" r="3" fill="#ffffff"/>
-      </svg>
-    </div>`,
-  iconSize: [24, 24],
-  iconAnchor: [12, 12]
-});
 
 // Demographic data interface matching the data table
 interface DemographicData {
@@ -144,6 +117,37 @@ const MapRenderer = ({
   initialZoom = 18
 }: any) => {
   const mapRef = useRef<any>(null);
+
+  // Move Leaflet icon initialization inside the component or a check
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      // Fix Leaflet default icon issue
+      delete (L.Icon.Default.prototype as any)._getIconUrl;
+      L.Icon.Default.mergeOptions({
+        iconRetinaUrl: 'https://unpkg.com/leaflet@1.9.2/dist/images/marker-icon-2x.png',
+        iconUrl: 'https://unpkg.com/leaflet@1.9.2/dist/images/marker-icon.png',
+        shadowUrl: 'https://unpkg.com/leaflet@1.9.2/dist/images/marker-shadow.png',
+      });
+    }
+  }, []);
+
+  const defaultIcon = useMemo(() => {
+    if (typeof window === 'undefined') return null;
+    return L.icon({
+      iconUrl: 'https://unpkg.com/leaflet@1.9.2/dist/images/marker-icon.png',
+      iconAnchor: [12, 41]
+    });
+  }, []);
+
+  const measurementPointIcon = useMemo(() => {
+    if (typeof window === 'undefined') return null;
+    return L.divIcon({
+      className: 'custom-measurement-point',
+      html: `<div style="position: relative; display: flex; justify-content: center; align-items: center;"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><circle cx="12" cy="12" r="8" fill="#318855" stroke="#ffffff" stroke-width="2"/><circle cx="12" cy="12" r="3" fill="#ffffff"/></svg></div>`,
+      iconSize: [24, 24],
+      iconAnchor: [12, 12]
+    });
+  }, []);
 
   useEffect(() => {
     return () => {
@@ -336,7 +340,7 @@ const MapRenderer = ({
             activeRightPanel={activeRightPanel}
           />
 
-          {mapView && <Marker position={[mapView.lat, mapView.lng]} icon={defaultIcon} />}
+          {mapView && defaultIcon && <Marker position={[mapView.lat, mapView.lng]} icon={defaultIcon} />}
 
           {/* Measurement visual elements - markers and lines */}
           {measureVisualElements?.markers && measureVisualElements.markers.map((marker: any, index: number) => (
