@@ -32,7 +32,7 @@
     "leaflet-measure-path": "^1.5.0",
     "lucide-react": "^0.575.0",
     "mapshaper": "^0.6.113",
-    "next": "^16.2.1",
+    "next": "15.1.0",
     "nodemailer": "^8.0.4",
     "pg": "^8.20.0",
     "prisma": "^5.22.0",
