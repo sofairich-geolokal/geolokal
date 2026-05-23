@@ -6,18 +6,10 @@ const globalForPrisma = globalThis as unknown as {
 };
 
 const createPrismaClient = (): PrismaClient => {
-  const connectionString = process.env.DATABASE_URL;
-  
-  // Always create a basic client - adapter can be configured later if needed
+  // Prisma 7: datasource URL is configured in prisma.config.ts
+  // No need to pass datasources to constructor
   return new PrismaClient({
     log: process.env.NODE_ENV === 'development' ? ['query', 'error', 'warn'] : ['error'],
-    ...(connectionString && {
-      datasources: {
-        db: {
-          url: connectionString,
-        },
-      },
-    }),
   });
 };
 
