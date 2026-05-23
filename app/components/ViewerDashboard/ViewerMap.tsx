@@ -338,7 +338,12 @@ export default function ViewerMap() {
   });
 
   const toggleLayerVisibility = (id: number) => {
-    // Check if it's a dynamic layer (from database)
+    // Synchronize specialized visibility states for main infrastructure layers
+    if (id === 10001) setAdminBoundaryVisible(!adminBoundaryVisible);
+    if (id === 10002) setRoadNetworksVisible(!roadNetworksVisible);
+    if (id === 10003) setRiversVisible(!riversVisible);
+    if (id === 10006) setParcelLotsVisible(!parcelLotsVisible);
+
     const isDynamicLayer = availableLayers.find(l => l.id === id && !l.is_main_layer);
     
     if (isDynamicLayer) {
@@ -351,21 +356,22 @@ export default function ViewerMap() {
       setAvailableLayers(prev => prev.map(layer => 
         layer.id === id ? { ...layer, visible: !layer.visible } : layer
       ));
-    } else {
-      // Update loaded layers for main layers
-      setLoadedLayers(loadedLayers.map(layer => 
-        layer.id === id ? { ...layer, visible: !layer.visible } : layer
-      ));
     }
   };
 
   const isLayerLoaded = (layerId: number) => {
+    // Check specialized visibility states for main infrastructure layers
+    if (layerId === 10001) return adminBoundaryVisible;
+    if (layerId === 10002) return roadNetworksVisible;
+    if (layerId === 10003) return riversVisible;
+    if (layerId === 10006) return parcelLotsVisible;
+
     // Check if it's a dynamic layer (from database)
     const dynamicLayer = availableLayers.find(l => l.id === layerId && !l.is_main_layer);
     if (dynamicLayer) {
       return dynamicLayer.visible;
     }
-    return loadedLayers.some(l => l.id === layerId);
+    return false;
   };
 
   const updateLayerOpacity = (id: number, opacity: number) => {

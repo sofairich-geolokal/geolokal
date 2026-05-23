@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { query } from '@/lib/db-direct';
+import { query } from '@/lib/db';
 
 export async function GET() {
   try {
@@ -25,7 +25,7 @@ export async function GET() {
       ORDER BY ml.population DESC
     `;
     
-    const result = await query(queryText);
+    const result = await query(queryText) as { rows: any[] };
     console.log(`Found ${result.rows.length} map layers`);
     
     return NextResponse.json(result.rows || []);

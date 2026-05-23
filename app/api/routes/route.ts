@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getMapLayers } from '@/lib/db-direct';
+import { query, getMapLayers } from '@/lib/db';
 
 export async function GET(request: NextRequest) {
   try {
@@ -27,7 +27,7 @@ export async function GET(request: NextRequest) {
     // Note: bbox filtering disabled due to JSON filtering complexity
     // Can be re-enabled with proper PostgreSQL JSON operator implementation
 
-    const result = await getMapLayers(bounds || undefined, category || undefined);
+    const result = await getMapLayers(bounds || undefined, category || undefined) as { rows: any[] };
     const routeData = result.rows.map((row: any) => {
       // Parse numeric fields properly
       const population = row.population ? parseInt(row.population) : null;
@@ -56,15 +56,15 @@ export async function GET(request: NextRequest) {
       };
     });
 
-    const totalPopulation = routeData.reduce((sum, r) => sum + (r.population || 0), 0);
-    const totalHouseholds = routeData.reduce((sum, r) => sum + (r.households || 0), 0);
-    const validPovertyRates = routeData.filter(r => r.povertyRate !== null);
+    const totalPopulation = routeData.reduce((sum: number, r: any) => sum + (r.population || 0), 0);
+    const totalHouseholds = routeData.reduce((sum: number, r: any) => sum + (r.households || 0), 0);
+    const validPovertyRates = routeData.filter((r: any) => r.povertyRate !== null);
     const avgPovertyRate = validPovertyRates.length > 0 
-      ? (validPovertyRates.reduce((sum, r) => sum + parseFloat(r.povertyRate), 0) / validPovertyRates.length).toFixed(1) + '%'
+      ? (validPovertyRates.reduce((sum: number, r: any) => sum + parseFloat(r.povertyRate), 0) / validPovertyRates.length).toFixed(1) + '%'
       : '0%';
-    const validEmploymentRates = routeData.filter(r => r.employmentRate !== null);
+    const validEmploymentRates = routeData.filter((r: any) => r.employmentRate !== null);
     const avgEmploymentRate = validEmploymentRates.length > 0
-      ? (validEmploymentRates.reduce((sum, r) => sum + parseFloat(r.employmentRate), 0) / validEmploymentRates.length).toFixed(1) + '%'
+      ? (validEmploymentRates.reduce((sum: number, r: any) => sum + parseFloat(r.employmentRate), 0) / validEmploymentRates.length).toFixed(1) + '%'
       : '0%';
 
     return NextResponse.json({

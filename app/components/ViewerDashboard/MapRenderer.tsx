@@ -127,10 +127,10 @@ const MapRenderer = ({
   roadNetworkLayerHighlighted,
   waterwaysLayerVisible,
   waterwaysLayerHighlighted,
-  // FIXED: Destructured to match exactly what parent (GeoPortalMap) passes
-  landCoverVisible, 
+  // Fixed prop names to match parent call
+  landCoverLayerVisible, 
   landCoverLayerHighlighted,
-  climateTypeVisible,
+  climateTypeLayerVisible,
   climateTypeLayerHighlighted,
   parcelLotsVisible,
   onBoundaryBoundsReady,
@@ -314,12 +314,12 @@ const MapRenderer = ({
 
           {/* Environmental & Parcel Layers - UPDATED PROPS */}
           <LandCoverLayer 
-            isVisible={landCoverVisible} 
+            isVisible={landCoverLayerVisible} 
             isHighlighted={landCoverLayerHighlighted} 
             onBoundsReady={onLandCoverBoundsReady}
           />
           <ClimateTypeLayer 
-            isVisible={climateTypeVisible} 
+            isVisible={climateTypeLayerVisible} 
             isHighlighted={climateTypeLayerHighlighted} 
             onBoundsReady={onClimateTypeBoundsReady}
           />

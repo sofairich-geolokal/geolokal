@@ -2,8 +2,12 @@
 
 import React, { useState, useRef, useEffect } from 'react';
 import dynamic from 'next/dynamic';
-import { Layers, Globe, Ruler, CircleDot, ChevronRight, X } from 'lucide-react';
+import { 
+  Layers, Globe, Ruler, CircleDot, ChevronRight, 
+  ChevronLeft, X, ZoomIn, ZoomOut 
+} from 'lucide-react';
 import { GeoPortalService } from '@/lib/geoportal';
+import GeoPortalSync from '../GeoPortalSync';
 
 const MapRenderer = dynamic(() => import('@/app/components/ViewerDashboard/MapRenderer').then(mod => ({ default: mod.default })), { 
   ssr: false, 
@@ -13,28 +17,35 @@ const MapRenderer = dynamic(() => import('@/app/components/ViewerDashboard/MapRe
 export default function MapsDashboard() {
   const brandColor = "#318855";
   const [activeRightPanel, setActiveRightPanel] = useState<string | null>(null);
-  const [mapType, setMapType] = useState('osm');
+  const [basemap, setBasemap] = useState('Open Street Map'); // Default basemap
   
   // Search functionality
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<any[]>([]);
   const [isSearching, setIsSearching] = useState(false);
   const [showSearchResults, setShowSearchResults] = useState(false);
-  
-  // Layer visibility state matching viewer dashboard
-  const [layers, setLayers] = useState({
-    adminBoundary: true,
-    roadNetworks: true,
-    rivers: true,
-    parcelLots: true,
-    landCover: false,
-    climateType: false,
-  });
 
-  const [mapView, setMapView] = useState<{ lat: number; lng: number; zoom: number } | null>({ lat: 13.86, lng: 121.15, zoom: 16 });
+  // Unified visibility states
+  const [adminBoundaryVisible, setAdminBoundaryVisible] = useState(true);
+  const [roadNetworksVisible, setRoadNetworksVisible] = useState(true);
+  const [riversVisible, setRiversVisible] = useState(true);
+  const [parcelLotsVisible, setParcelLotsVisible] = useState(true);
+  const [landCoverVisible, setLandCoverVisible] = useState(false);
+  const [climateTypeVisible, setClimateTypeVisible] = useState(false);
+
+  const [availableLayers, setAvailableLayers] = useState<any[]>([]);
+  const [dynamicLayerVisibility, setDynamicLayerVisibility] = useState<Record<number, boolean>>({});
+
+  // Hover states for toolbar
+  const [layersHovered, setLayersHovered] = useState(false);
+  const [basemapHovered, setBasemapHovered] = useState(false);
+  const [measureHovered, setMeasureHovered] = useState(false);
+  const [xyHovered, setXyHovered] = useState(false);
+
+  const [mapView, setMapView] = useState<{ lat: number; lng: number; zoom: number } | null>(null);
+  const [currentZoom, setCurrentZoom] = useState(15);
   const [bufferData, setBufferData] = useState<any>(null);
   const [legendsOpen, setLegendsOpen] = useState(true);
-  const [savedLayers, setSavedLayers] = useState<any[]>([]);
   const [loadingLayers, setLoadingLayers] = useState(false);
   const mapContainerRef = useRef<HTMLDivElement>(null);
 
@@ -249,52 +260,16 @@ export default function MapsDashboard() {
       };
     }
   };
-
-  const handleGotoXY = () => {
-    const lat = parseFloat(xyInput.lat);
-    const lng = parseFloat(xyInput.lng);
-    if (!isNaN(lat) && !isNaN(lng)) {
-      setMapView({ lat, lng, zoom: 15 });
-    }
+  const handleZoomIn = () => {
+    const newZoom = Math.min(currentZoom + 1, 18);
+    setCurrentZoom(newZoom);
+    if (mapView) setMapView({ ...mapView, zoom: newZoom });
   };
 
-  // Calculate distance between two points using Haversine formula
-  const calculateDistance = (startPoint: string, endPoint: string) => {
-    try {
-      const startCoords = startPoint.split(',').map(coord => parseFloat(coord.trim()));
-      const endCoords = endPoint.split(',').map(coord => parseFloat(coord.trim()));
-      
-      if (startCoords.length !== 2 || endCoords.length !== 2) {
-        return '0.00 km';
-      }
-      
-      const [startLat, startLng] = startCoords;
-      const [endLat, endLng] = endCoords;
-      
-      if (isNaN(startLat) || isNaN(startLng) || isNaN(endLat) || isNaN(endLng)) {
-        return '0.00 km';
-      }
-      
-      const R = 6371;
-      const dLat = (endLat - startLat) * Math.PI / 180;
-      const dLng = (endLng - startLng) * Math.PI / 180;
-      const a = 
-        Math.sin(dLat/2) * Math.sin(dLat/2) +
-        Math.cos(startLat * Math.PI / 180) * Math.cos(endLat * Math.PI / 180) * 
-        Math.sin(dLng/2) * Math.sin(dLng/2);
-      const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
-      const distance = R * c;
-      
-      return `${distance.toFixed(2)} km`;
-    } catch (error) {
-      return '0.00 km';
-    }
-  };
-
-  const handleMeasurePointChange = (field: 'startPoint' | 'endPoint', value: string) => {
-    const newMeasureInput = { ...measureInput, [field]: value };
-    const distance = calculateDistance(newMeasureInput.startPoint, newMeasureInput.endPoint);
-    setMeasureInput({ ...newMeasureInput, distance, visualElements: measureInput.visualElements });
+  const handleZoomOut = () => {
+    const newZoom = Math.max(currentZoom - 1, 1);
+    setCurrentZoom(newZoom);
+    if (mapView) setMapView({ ...mapView, zoom: newZoom });
   };
 
   const handleClearMeasurement = () => {
@@ -314,6 +289,37 @@ export default function MapsDashboard() {
     });
   };
 
+  // Calculate distance between two points using Haversine formula
+  const calculateDistance = (startPoint: string, endPoint: string) => {
+    try {
+      const startCoords = startPoint.split(',').map(coord => parseFloat(coord.trim()));
+      const endCoords = endPoint.split(',').map(coord => parseFloat(coord.trim()));
+      if (startCoords.length !== 2 || endCoords.length !== 2) return '0.00 km';
+      const [startLat, startLng] = startCoords;
+      const [endLat, endLng] = endCoords;
+      if (isNaN(startLat) || isNaN(startLng) || isNaN(endLat) || isNaN(endLng)) return '0.00 km';
+      const R = 6371;
+      const dLat = (endLat - startLat) * Math.PI / 180;
+      const dLng = (endLng - startLng) * Math.PI / 180;
+      const a = Math.sin(dLat/2) * Math.sin(dLat/2) + Math.cos(startLat * Math.PI / 180) * Math.cos(endLat * Math.PI / 180) * Math.sin(dLng/2) * Math.sin(dLng/2);
+      const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+      return `${(R * c).toFixed(2)} km`;
+    } catch (error) { return '0.00 km'; }
+  };
+
+  const handleGotoXY = () => {
+    const lat = parseFloat(xyInput.lat);
+    const lng = parseFloat(xyInput.lng);
+    if (!isNaN(lat) && !isNaN(lng)) {
+      setMapView({ lat, lng, zoom: 15 });
+    }
+  };
+
+  const handleMeasurePointChange = (field: 'startPoint' | 'endPoint', value: string) => {
+    const newMeasureInput = { ...measureInput, [field]: value };
+    const distance = calculateDistance(newMeasureInput.startPoint, newMeasureInput.endPoint);
+    setMeasureInput({ ...newMeasureInput, distance, visualElements: measureInput.visualElements });
+  };
   // Search functionality
   const searchLocations = async (query: string) => {
     if (!query.trim()) {
@@ -388,71 +394,101 @@ export default function MapsDashboard() {
     }
   }, [showSearchResults]);
 
-  useEffect(() => {
-    const fetchSavedLayers = async () => {
-      setLoadingLayers(true);
-      try {
-        const dbResponse = await fetch('/api/layers');
+  const fetchLayers = async () => { // Renamed from fetchGeoPortalLayers
+    setLoadingLayers(true);
+    try {
+        const dbResponse = await fetch('/api/layers?visible=true');
         let dbLayers = [];
         
         if (dbResponse.ok) {
           const dbResult = await dbResponse.json();
           if (dbResult.success && dbResult.data) {
-            dbLayers = dbResult.data.map((layer: any) => ({
-              id: layer.id,
-              title: layer.layer_name,
-              agency: layer.city_muni_master?.name || 'Database',
-              description: layer.metadata?.description || `Dynamic layer: ${layer.layer_name}`,
-              geometry: layer.metadata?.geojson || null,
-              layer_type: layer.layer_type,
-              style_config: layer.style_config,
-              opacity: layer.opacity || 0.7,
-              is_downloadable: layer.is_downloadable,
-              category: layer.project_categories?.name || 'General',
-              metadata: layer.metadata
+            dbLayers = await Promise.all(dbResult.data.map(async (layer: any) => {
+              let geometry = layer.metadata?.geojson || null;
+              if (layer.metadata?.geojson_file && !geometry) {
+                try {
+                  const geojsonResponse = await fetch(`/data/${layer.metadata.geojson_file}`);
+                  if (geojsonResponse.ok) geometry = await geojsonResponse.json();
+                } catch (e) { console.error('Error loading GeoJSON file:', e); }
+              }
+              const isVisible = dynamicLayerVisibility[layer.id] !== undefined // Use dynamicLayerVisibility
+                ? dynamicLayerVisibility[layer.id] 
+                : (layer.is_visible !== false);
+              
+              return {
+                id: layer.id,
+                title: layer.layer_name,
+                agency: layer.city_muni_master?.name || 'Database',
+                geometry: geometry,
+                layer_type: layer.layer_type,
+                description: layer.metadata?.description || `Dynamic layer: ${layer.layer_name}`,
+                style_config: layer.style_config,
+                opacity: layer.opacity || 0.7,
+                visible: isVisible
+              };
             }));
           }
         }
 
         try {
-          const geoPortalLayers = await GeoPortalService.fetchAllLayers();
-          const formattedGeoPortalLayers = geoPortalLayers.map((layer, index) => ({
-            id: 2000 + index, 
-            title: layer.title,
-            agency: layer.attribution,
-            description: layer.description,
-            geometry: layer.geometry || null,
-            layer_type: layer.service === 'ArcGIS REST' ? 'arcgis' : 'wms',
-            style_config: layer.style,
-            opacity: layer.style.opacity || 0.7,
-            category: layer.category,
-            metadata: {
-              ...layer.properties,
-              wmsUrl: layer.wmsUrl,
-              wmsLayer: layer.wmsLayer,
-              arcgisUrl: layer.arcgisUrl,
-              service: layer.service,
-              layer: layer.layer,
-              is_geoportal: true
-            }
-          }));
+          const geoPortalLayers = await GeoPortalService.fetchAllLayers(); // Fetch GeoPortal layers
+          const formattedGeoPortalLayers = geoPortalLayers.map((layer, index) => ({ ...layer, id: 2000 + index, visible: false }));
           
-          const combinedLayers = [...mainLayers, ...dbLayers, ...formattedGeoPortalLayers];
-          setSavedLayers(combinedLayers);
-        } catch (fetchError) {
-          setSavedLayers([...mainLayers, ...dbLayers]);
-        }
-        
-      } catch (error) {
-        console.error('Error in fetchSavedLayers:', error);
-        setSavedLayers(mainLayers);
-      } finally {
-        setLoadingLayers(false);
-      }
-    };
+          setAvailableLayers([...mainLayers, ...dbLayers, ...formattedGeoPortalLayers]);
+        } catch (e) { setAvailableLayers([...mainLayers, ...dbLayers]); }
+      } catch (error) { setAvailableLayers(mainLayers); } finally { setLoadingLayers(false); }
+  };
 
-    fetchSavedLayers();
+  useEffect(() => {
+    fetchLayers();
+    const handleLayersUpdated = () => fetchLayers();
+    window.addEventListener('layersUpdated', handleLayersUpdated);
+    return () => window.removeEventListener('layersUpdated', handleLayersUpdated);
   }, []);
+
+  // Toggle layer visibility
+  // This function is crucial for synchronizing the UI with the map layers
+  const toggleLayerVisibility = (id: number) => {
+    if (id === 10001) setAdminBoundaryVisible(!adminBoundaryVisible);
+    if (id === 10002) setRoadNetworksVisible(!roadNetworksVisible);
+    if (id === 10003) setRiversVisible(!riversVisible);
+    if (id === 10006) setParcelLotsVisible(!parcelLotsVisible);
+
+    const isDynamicLayer = availableLayers.find(l => l.id === id && !l.is_main_layer);
+    if (isDynamicLayer) {
+      setDynamicLayerVisibility(prev => ({ ...prev, [id]: !prev[id] }));
+      setAvailableLayers(prev => prev.map(layer => layer.id === id ? { ...layer, visible: !layer.visible } : layer));
+    }
+  };
+
+  // Check if layer is loaded (visible)
+  // This function is crucial for synchronizing the UI with the map layers
+  const isLayerLoaded = (layerId: number) => {
+    if (layerId === 10001) return adminBoundaryVisible;
+    if (layerId === 10002) return roadNetworksVisible;
+    if (layerId === 10003) return riversVisible;
+    if (layerId === 10006) return parcelLotsVisible;
+    const dynamicLayer = availableLayers.find(l => l.id === layerId && !l.is_main_layer);
+    return dynamicLayer ? dynamicLayer.visible : false;
+  };
+
+  const handleMeasureTypeChange = (type: 'distance' | 'area') => {
+    setMeasureInput(prev => ({ ...prev, measurementType: type }));
+  };
+
+  const handleBufferApply = () => {
+    if (bufferInput.distance) {
+      setBufferData(bufferInput);
+    }
+  };
+
+  const getLayerColor = (layerTitle: string) => {
+    if (layerTitle.includes('Administrative') || layerTitle.includes('Boundary')) return '#8f058a';
+    if (layerTitle.includes('Road') || layerTitle.includes('Network')) return '#7d8b8f';
+    if (layerTitle.includes('Water') || layerTitle.includes('River')) return '#2591d9';
+    if (layerTitle.includes('Parcel')) return '#eba878';
+    return '#6b7280';
+  };
 
   return (
     <div className="relative h-screen w-full bg-[#f8f9fa] overflow-hidden flex flex-col font-sans">
@@ -472,11 +508,11 @@ export default function MapsDashboard() {
               <div className="relative">
                 <input
                   type="text"
-                  placeholder="Search locations..."
+                  placeholder="Search locations (e.g., Ibaan)..."
                   value={searchQuery}
                   onChange={(e) => handleSearchInputChange(e.target.value)}
                   onFocus={() => setShowSearchResults(true)}
-                  className="w-full pl-10 pr-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#318855] focus:border-transparent"
+                  className="w-full pl-10 pr-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#318855]"
                 />
                 {isSearching ? (
                   <div className="absolute left-3 top-1/2 transform -translate-y-1/2">
@@ -484,9 +520,7 @@ export default function MapsDashboard() {
                   </div>
                 ) : (
                   <div className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400">
-                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                    </svg>
+                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
                   </div>
                 )}
               </div>
@@ -521,26 +555,15 @@ export default function MapsDashboard() {
             <div className="mb-6">
               <h4 className="text-sm font-semibold text-gray-700 mb-3">Base Map</h4>
               <div className="space-y-2">
-                <label className="flex items-center gap-3 cursor-pointer">
-                  <input 
-                    type="radio" 
-                    name="basemap"
-                    className="w-4 h-4 text-[#318855] focus:ring-[#318855]" 
-                    checked={mapType === 'osm'}
-                    onChange={() => setMapType('osm')}
-                  />
-                  <span className="text-sm text-gray-700">Open Street Map</span>
-                </label>
-                <label className="flex items-center gap-3 cursor-pointer">
-                  <input 
-                    type="radio" 
-                    name="basemap"
-                    className="w-4 h-4 text-[#318855] focus:ring-[#318855]" 
-                    checked={mapType === 'satellite'}
-                    onChange={() => setMapType('satellite')}
-                  />
-                  <span className="text-sm text-gray-700">Satellite (Esri)</span>
-                </label>
+                {['Open Street Map', 'Satellite (Esri)'].map(bm => (
+                  <label key={bm} className="flex items-center gap-3 cursor-pointer">
+                    <input 
+                      type="radio" name="basemap" className="w-4 h-4 text-[#318855] focus:ring-[#318855]" 
+                      checked={basemap === bm} onChange={() => setBasemap(bm)} 
+                    />
+                    <span className="text-sm text-gray-700">{bm}</span>
+                  </label>
+                ))}
               </div>
             </div>
 
@@ -549,210 +572,139 @@ export default function MapsDashboard() {
               <h4 className="text-sm font-semibold text-gray-700 mb-3">Layers</h4>
               <div className="space-y-2">
                 <label className="flex items-center gap-3 cursor-pointer">
-                  <input 
-                    type="checkbox" 
-                    className="w-4 h-4 rounded border-gray-300 text-[#318855] focus:ring-[#318855]" 
-                    checked={layers.adminBoundary}
-                    onChange={(e) => setLayers(prev => ({ ...prev, adminBoundary: e.target.checked }))}
-                  />
+                  <input type="checkbox" className="w-4 h-4 rounded text-[#318855]" checked={adminBoundaryVisible} onChange={(e) => setAdminBoundaryVisible(e.target.checked)} />
                   <span className="text-sm text-gray-700">Admin Boundary</span>
                 </label>
-                                <label className="flex items-center gap-3 cursor-pointer">
-                  <input 
-                    type="checkbox" 
-                    className="w-4 h-4 rounded border-gray-300 text-[#318855] focus:ring-[#318855]" 
-                    checked={layers.roadNetworks}
-                    onChange={(e) => setLayers(prev => ({ ...prev, roadNetworks: e.target.checked }))}
-                  />
+                <label className="flex items-center gap-3 cursor-pointer">
+                  <input type="checkbox" className="w-4 h-4 rounded text-[#318855]" checked={roadNetworksVisible} onChange={(e) => setRoadNetworksVisible(e.target.checked)} />
                   <span className="text-sm text-gray-700">Road Networks</span>
                 </label>
                 <label className="flex items-center gap-3 cursor-pointer">
-                  <input 
-                    type="checkbox" 
-                    className="w-4 h-4 rounded border-gray-300 text-[#318855] focus:ring-[#318855]" 
-                    checked={layers.rivers}
-                    onChange={(e) => setLayers(prev => ({ ...prev, rivers: e.target.checked }))}
-                  />
+                  <input type="checkbox" className="w-4 h-4 rounded text-[#318855]" checked={riversVisible} onChange={(e) => setRiversVisible(e.target.checked)} />
                   <span className="text-sm text-gray-700">Rivers</span>
                 </label>
                 <label className="flex items-center gap-3 cursor-pointer">
-                  <input 
-                    type="checkbox" 
-                    className="w-4 h-4 rounded border-gray-300 text-[#318855] focus:ring-[#318855]" 
-                    checked={layers.parcelLots}
-                    onChange={(e) => setLayers(prev => ({ ...prev, parcelLots: e.target.checked }))}
-                  />
+                  <input type="checkbox" className="w-4 h-4 rounded text-[#318855]" checked={parcelLotsVisible} onChange={(e) => setParcelLotsVisible(e.target.checked)} />
                   <span className="text-sm text-gray-700">Parcel Lots</span>
                 </label>
-                {/* Temporarily hidden Land Cover (NAMRIA) layer */}
-                {/* <label className="flex items-center gap-3 cursor-pointer">
-                  <input 
-                    type="checkbox" 
-                    className="w-4 h-4 rounded border-gray-300 text-[#318855] focus:ring-[#318855]" 
-                    checked={layers.landCover}
-                    onChange={(e) => setLayers(prev => ({ ...prev, landCover: e.target.checked }))}
-                  />
+                <label className="flex items-center gap-3 cursor-pointer">
+                  <input type="checkbox" className="w-4 h-4 rounded text-[#318855]" checked={landCoverVisible} onChange={(e) => setLandCoverVisible(e.target.checked)} />
                   <span className="text-sm text-gray-700">Land Cover (NAMRIA)</span>
-                </label> */}
-                {/* Temporarily hidden Climate Type (PAGASA) layer */}
-                {/* <label className="flex items-center gap-3 cursor-pointer">
-                  <input 
-                    type="checkbox" 
-                    className="w-4 h-4 rounded border-gray-300 text-[#318855] focus:ring-[#318855]" 
-                    checked={layers.climateType}
-                    onChange={(e) => setLayers(prev => ({ ...prev, climateType: e.target.checked }))}
-                  />
+                </label>
+                <label className="flex items-center gap-3 cursor-pointer">
+                  <input type="checkbox" className="w-4 h-4 rounded text-[#318855]" checked={climateTypeVisible} onChange={(e) => setClimateTypeVisible(e.target.checked)} />
                   <span className="text-sm text-gray-700">Climate Type (PAGASA)</span>
-                </label> */}
-                              </div>
+                </label>
+              </div>
             </div>
           </div>
-
         </div>
 
-
-        <div className="w-full h-full z-0" ref={mapContainerRef}>
+        {/* Map */}
+        <div className="w-full h-full z-0">
           <MapRenderer 
-            layers={savedLayers} 
+            key="lgu-map-instance"
+            layers={availableLayers} 
             mapView={mapView} 
             bufferData={bufferData} 
-            basemap={mapType === 'osm' ? 'Open Street Map' : 'Satellite (Esri)'}
+            basemap={basemap}
             onMapClick={handleMapClick}
             isMeasuring={measureInput.isMeasuring}
             measureVisualElements={measureInput.visualElements}
-            boundaryLayerVisible={layers.adminBoundary}
-            boundaryLayerHighlighted={false}
-            roadNetworkLayerVisible={layers.roadNetworks}
-            roadNetworkLayerHighlighted={true}
-            waterwaysLayerVisible={layers.rivers}
-            waterwaysLayerHighlighted={false}
-            parcelLotsVisible={layers.parcelLots}
-            landCoverLayerVisible={layers.landCover}
-            landCoverLayerHighlighted={false}
-            climateTypeLayerVisible={layers.climateType}
-            climateTypeLayerHighlighted={false}
-            onBoundaryBoundsReady={null}
-            onRoadBoundsReady={null}
-            onWaterwayBoundsReady={null}
-            onParcelLotsBoundsReady={null}
-            onLandCoverBoundsReady={null}
-            onClimateTypeBoundsReady={null}
+            boundaryLayerVisible={adminBoundaryVisible}
+            roadNetworkLayerVisible={roadNetworksVisible}
+            waterwaysLayerVisible={riversVisible}
+            landCoverLayerVisible={landCoverVisible}
+            climateTypeLayerVisible={climateTypeVisible}
+            parcelLotsVisible={parcelLotsVisible}
             initialZoom={15}
           />
         </div>
 
+        {/* Zoom Controls */}
+        <div className="absolute bottom-4 right-4 z-[1000] flex flex-col space-y-1">
+          <button onClick={handleZoomIn} className="bg-white p-2 rounded shadow-lg border border-gray-200 hover:bg-gray-50"><ZoomIn size={20} color={brandColor} /></button>
+          <button onClick={handleZoomOut} className="bg-white p-2 rounded shadow-lg border border-gray-200 hover:bg-gray-50"><ZoomOut size={20} color={brandColor} /></button>
+        </div>
+
         {/* Legends Box - Right Side */}
-        <div className="absolute top-50 right-4 z-[1000] bg-white shadow-lg border border-gray-200 rounded-lg p-3 max-w-xs">
-          <div className="flex items-center justify-between mb-2">
-            <h3 className="text-xs font-bold text-gray-700 flex items-center">
-              <Layers size={12} className="mr-1" />
-              Map Legends
-            </h3>
-            <button 
-              onClick={() => setLegendsOpen(!legendsOpen)}
-              className="text-gray-500 hover:text-gray-700"
-            >
-              {legendsOpen ? <X size={14} /> : <ChevronRight size={14} />}
-            </button>
+        <div className="absolute top-50 right-4 z-[1000] bg-white shadow-lg border border-gray-200 rounded-lg max-w-xs">
+          <div style={{ backgroundColor: brandColor }} className="px-3 py-2 flex items-center justify-between rounded-t-lg">
+            <h3 className="text-xs font-bold text-white flex items-center"><Layers size={12} className="mr-1" /> Legends</h3>
           </div>
-          
-          {legendsOpen && (
-            <div className="space-y-2 max-h-48 overflow-y-auto">
-              {Object.entries(layers).map(([key, _]) => (
-                <div key={key} className="flex items-center space-x-2 text-xs">
-                  {key === 'adminBoundary' && (
-                    <div className="w-4 h-4 border-2 border-dashed rounded-sm" style={{ 
-                      borderColor: '#0000FF', 
-                      backgroundColor: 'transparent' 
-                    }}></div>
-                  )}
-                  {key === 'evacuationCenter' && (
-                    <div className="w-4 h-4 rounded-full flex items-center justify-center" style={{ 
-                      backgroundColor: '#3b82f6',
-                      border: '2px solid #1e40af'
-                    }}>
-                      <div className="w-1.5 h-1.5 bg-white rounded-full"></div>
-                    </div>
-                  )}
-                  {key === 'hazardArea' && (
-                    <div className="w-4 h-4 rounded-full" style={{ 
-                      backgroundColor: 'rgba(234, 88, 12, 0.3)',
-                      border: '2px solid #ea580c'
-                    }}></div>
-                  )}
-                  {key === 'roadNetworks' && (
-                    <div className="w-4 h-0.5" style={{ 
-                      backgroundColor: '#7d8b8f',
-                      height: '3px'
-                    }}></div>
-                  )}
-                  {key === 'rivers' && (
-                    <div className="w-4 h-0.5" style={{ 
-                      backgroundColor: '#2563eb',
-                      height: '3px'
-                    }}></div>
-                  )}
-                  {key === 'parcelLots' && (
-                    <div className="w-4 h-4 border-2 rounded-sm" style={{ 
-                      borderColor: '#e67e22', 
-                      backgroundColor: 'rgba(230, 126, 34, 0.2)' 
-                    }}></div>
-                  )}
-                  {key === 'riverBoundary' && (
-                    <div className="w-4 h-4 border-2 border-dashed rounded-sm" style={{ 
-                      borderColor: '#87CEEB',
-                      backgroundColor: 'rgba(135, 206, 235, 0.2)'
-                    }}></div>
-                  )}
-                  {/* Temporarily hidden Land Cover (NAMRIA) legend */}
-                  {/* {key === 'landCover' && (
-                    <div className="flex items-center space-x-1">
-                      <div className="w-2 h-2 rounded-full" style={{ backgroundColor: '#228B22' }}></div>
-                      <div className="w-2 h-2 rounded-full" style={{ backgroundColor: '#FFD700' }}></div>
-                      <div className="w-2 h-2 rounded-full" style={{ backgroundColor: '#DC143C' }}></div>
-                      <div className="w-2 h-2 rounded-full" style={{ backgroundColor: '#4169E1' }}></div>
-                    </div>
-                  )} */}
-                  {/* Temporarily hidden Climate Type (PAGASA) legend */}
-                  {/* {key === 'climateType' && (
-                    <div className="flex items-center space-x-1">
-                      <div className="w-2 h-2 rounded-full" style={{ backgroundColor: '#FF6B35' }}></div>
-                      <div className="w-2 h-2 rounded-full" style={{ backgroundColor: '#4A90E2' }}></div>
-                      <div className="w-2 h-2 rounded-full" style={{ backgroundColor: '#50C878' }}></div>
-                      <div className="w-2 h-2 rounded-full" style={{ backgroundColor: '#9B59B6' }}></div>
-                    </div>
-                  )} */}
-                  <div className="flex-1">
-                    <div className="font-medium text-gray-700 capitalize">{key.replace(/([A-Z])/g, ' $1').trim()}</div>
+          <div className="p-2">
+            {legendsOpen && (
+              <div className="space-y-2 max-h-48 overflow-y-auto">
+                {[
+                  { id: 1, title: 'Administrative Boundaries', color: '#8f058a', shape: 'boundary' },
+                  { id: 2, title: 'Road Networks', color: '#7d8b8f', shape: 'line' },
+                  { id: 3, title: 'Waterways', color: '#2591d9', shape: 'water' },
+                  { id: 4, title: 'Parcel Lots', color: '#eba878', shape: 'parcel' },
+                  { id: 5, title: 'Land Cover (NAMRIA 2020)', color: '#22c55e', shape: 'polygon' },
+                  { id: 6, title: 'Climate Type (PAGASA)', color: '#3d3d3d', shape: 'polygon' }
+                ].map((layer) => (
+                  <div key={layer.id} className="flex items-center space-x-2 text-xs">
+                    {layer.shape === 'boundary' && <div className="w-4 h-4 border-2 border-dashed" style={{ borderColor: layer.color }}></div>}
+                    {layer.shape === 'line' && <div className="w-4 h-0.5" style={{ backgroundColor: layer.color, height: '3px' }}></div>}
+                    {layer.shape === 'water' && (
+                      <div className="w-4 h-4">
+                        <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M2 8 Q 8 2, 14 8 Q 8 14, 2 8" stroke={layer.color} strokeWidth="1.5" fill="none"/></svg>
+                      </div>
+                    )}
+                    {layer.shape === 'parcel' && <div className="w-4 h-4 border-2 border-white bg-orange-500/40"></div>}
+                    {layer.shape === 'polygon' && <div className="w-4 h-4 border-2" style={{ borderColor: layer.color, backgroundColor: `${layer.color}1a` }}></div>}
+                    <div className="flex-1"><div className="font-medium text-gray-700 truncate">{layer.title}</div></div>
                   </div>
-                </div>
-              ))}
-            </div>
-          )}
+                ))}
+              </div>
+            )}
+          </div>
         </div>
 
         {/* Right Toolbar */}
         <div className="absolute top-4 right-4 z-[1000] flex flex-col space-y-1">
-          <ToolIcon active={activeRightPanel === 'measure'} onClick={() => setActiveRightPanel('measure')} icon={<Ruler size={18} />} brandColor={brandColor} />
-          <ToolIcon active={activeRightPanel === 'xy'} onClick={() => setActiveRightPanel('xy')} label="XY" brandColor={brandColor} />
+          <ToolIcon active={activeRightPanel === 'layers'} onClick={() => setActiveRightPanel('layers')} icon={<Layers size={18} />} brandColor={brandColor} onMouseEnter={() => setLayersHovered(true)} onMouseLeave={() => setLayersHovered(false)} />
+          <ToolIcon active={activeRightPanel === 'basemap'} onClick={() => setActiveRightPanel('basemap')} icon={<Globe size={18} />} brandColor={brandColor} onMouseEnter={() => setBasemapHovered(true)} onMouseLeave={() => setBasemapHovered(false)} />
+          <ToolIcon active={activeRightPanel === 'measure'} onClick={() => setActiveRightPanel('measure')} icon={<Ruler size={18} />} brandColor={brandColor} onMouseEnter={() => setMeasureHovered(true)} onMouseLeave={() => setMeasureHovered(false)} />
+          <ToolIcon active={activeRightPanel === 'xy'} onClick={() => setActiveRightPanel('xy')} label="XY" brandColor={brandColor} onMouseEnter={() => setXyHovered(true)} onMouseLeave={() => setXyHovered(false)} />
           <ToolIcon active={activeRightPanel === 'buffer'} onClick={() => setActiveRightPanel('buffer')} icon={<CircleDot size={18} />} brandColor={brandColor} />
         </div>
 
         {/* Right Panel Body */}
         {activeRightPanel && (
-          <div className="absolute top-4 right-16 z-[1000] w-64 bg-[#333] text-white shadow-2xl border border-gray-600">
-            <div style={{ backgroundColor: brandColor }} className="text-white px-3 py-1.5 flex items-center justify-between font-bold text-xs uppercase">
+          <div className="absolute top-4 right-16 z-[1000] w-64 bg-[#333] text-white shadow-2xl border border-gray-600 rounded">
+            <div style={{ backgroundColor: brandColor }} className="text-white px-3 py-1.5 flex items-center justify-between font-bold text-xs uppercase cursor-pointer">
               <div className="flex items-center"><ChevronRight size={14} className="mr-1 stroke-[3px]" /> {activeRightPanel}</div>
               <button onClick={() => setActiveRightPanel(null)}><X size={18} /></button>
             </div>
 
             <div className="p-4 space-y-4 text-xs">
+              {activeRightPanel === 'layers' && (
+                <div className="space-y-3">
+                  <GeoPortalSync />
+                  {availableLayers.map((layer) => (
+                    <div key={layer.id} className="flex items-center justify-between p-2 bg-gray-700 rounded cursor-pointer hover:bg-gray-600" onClick={() => toggleLayerVisibility(layer.id)}>
+                      <div className="flex items-center gap-2">
+                        <div className="w-3 h-3 rounded-full" style={{ backgroundColor: getLayerColor(layer.title) }}></div>
+                        <span className="text-white text-xs">{layer.title}</span>
+                      </div>
+                      <input type="checkbox" checked={isLayerLoaded(layer.id)} onChange={() => toggleLayerVisibility(layer.id)} className="w-4 h-4 accent-blue-600" onClick={(e) => e.stopPropagation()}/>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {activeRightPanel === 'basemap' && (
+                <select value={basemap} onChange={(e) => setBasemap(e.target.value)} className="w-full bg-white text-black p-2 rounded">
+                  {['Open Street Map', 'Satellite (Esri)'].map(b => <option key={b} value={b}>{b}</option>)}
+                </select>
+              )}
 
               {activeRightPanel === 'xy' && (
                 <div className="space-y-3">
-                  <div className="flex items-center justify-between"><label>Latitude</label><input type="text" value={xyInput.lat} onChange={(e) => setXyInput({...xyInput, lat: e.target.value})} className="w-32 text-white p-1 rounded bg-gray-700" /></div>
-                  <div className="flex items-center justify-between"><label>Longitude</label><input type="text" value={xyInput.lng} onChange={(e) => setXyInput({...xyInput, lng: e.target.value})} className="w-32 text-white p-1 rounded bg-gray-700" /></div>
-                  <button onClick={handleGotoXY} style={{ backgroundColor: brandColor }} className="w-full text-white font-bold py-2 mt-2 rounded">Go</button>
+                  <div className="flex items-center justify-between"><label>Lat</label><input type="text" value={xyInput.lat} onChange={(e) => setXyInput({...xyInput, lat: e.target.value})} className="w-32 text-white p-1 rounded bg-gray-700" /></div>
+                  <div className="flex items-center justify-between"><label>Lng</label><input type="text" value={xyInput.lng} onChange={(e) => setXyInput({...xyInput, lng: e.target.value})} className="w-32 text-white p-1 rounded bg-gray-700" /></div>
+                  <button onClick={handleGotoXY} style={{ backgroundColor: brandColor }} className="w-full text-white font-bold py-2 rounded">Go</button>
                 </div>
               )}
 
@@ -793,7 +745,7 @@ export default function MapsDashboard() {
                     <option value="miles">Miles</option>
                     <option value="feet">Feet</option>
                   </select>
-                  <button onClick={() => setBufferData(bufferInput)} style={{ backgroundColor: brandColor }} className="w-full text-white font-bold py-2 rounded mt-3">Go</button>
+                  <button onClick={handleBufferApply} style={{ backgroundColor: brandColor }} className="w-full text-white font-bold py-2 rounded mt-3">Go</button>
                 </div>
               )}
 
@@ -802,13 +754,13 @@ export default function MapsDashboard() {
                   {/* Measurement Type Tabs */}
                   <div className="flex border-b border-gray-600">
                     <button 
-                      onClick={() => setMeasureInput(prev => ({ ...prev, measurementType: 'distance' }))}
+                      onClick={() => handleMeasureTypeChange('distance')}
                       className={`flex-1 py-2 text-xs font-medium ${measureInput.measurementType === 'distance' ? 'text-white border-b-2 border-[#318855]' : 'text-gray-400'}`}
                     >
                       Distance
                     </button>
                     <button 
-                      onClick={() => setMeasureInput(prev => ({ ...prev, measurementType: 'area' }))}
+                      onClick={() => handleMeasureTypeChange('area')}
                       className={`flex-1 py-2 text-xs font-medium ${measureInput.measurementType === 'area' ? 'text-white border-b-2 border-[#318855]' : 'text-gray-400'}`}
                     >
                       Area
@@ -873,7 +825,7 @@ export default function MapsDashboard() {
                         <div className="flex justify-between"><span className="text-gray-400">m²:</span><span className="text-white">{calculateArea(measureInput.visualElements.polygon).m2}</span></div>
                         <div className="flex justify-between"><span className="text-gray-400">mi²:</span><span className="text-white">{calculateArea(measureInput.visualElements.polygon).mi2}</span></div>
                         <div className="flex justify-between"><span className="text-gray-400">ft²:</span><span className="text-white">{calculateArea(measureInput.visualElements.polygon).ft2}</span></div>
-                        <div className="flex justify-between"><span className="text-gray-400">M²:</span><span className="text-white">{calculateArea(measureInput.visualElements.polygon).ha}</span></div>
+                        <div className="flex justify-between"><span className="text-gray-400">ha:</span><span className="text-white">{calculateArea(measureInput.visualElements.polygon).ha}</span></div>
                       </div>
                     </div>
                   )}
@@ -895,14 +847,13 @@ export default function MapsDashboard() {
   );
 }
 
-function ToolIcon({ active, onClick, icon, label, brandColor }: any) {
+function ToolIcon({ active, onClick, icon, label, brandColor, ...props }: any) {
   return (
     <button 
-      key={`tool-${label || 'icon'}`}
-      suppressHydrationWarning={true}
-      onClick={onClick} 
+      suppressHydrationWarning={true} onClick={onClick} 
       style={active ? { backgroundColor: brandColor } : { backgroundColor: '#333' }} 
       className={`w-10 h-10 flex items-center justify-center border-b border-gray-600 text-white shadow-sm`}
+      {...props}
     >
       {icon || <span className="font-bold text-xs">{label}</span>}
     </button>

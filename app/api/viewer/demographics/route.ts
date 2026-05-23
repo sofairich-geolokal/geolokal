@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { query } from '@/lib/db-direct';
+import { query } from '@/lib/db';
 
 // Geoportal API configuration
 const GEOPORTAL_BASE_URL = 'https://geoportal.gov.ph';
@@ -99,7 +99,7 @@ export async function GET(request: NextRequest) {
           AND ml.population IS NOT NULL
       `;
       
-      const result = await query(queryText);
+      const result = await query(queryText) as { rows: any[] };
       layers = result.rows;
       console.log(`📊 Found ${layers.length} layers with demographic data in database`);
     } catch (dbError) {

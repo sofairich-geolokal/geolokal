@@ -9,7 +9,7 @@
     "DB_USER": "@db_user",
     "DB_PASSWORD": "@db_password",
     "DB_NAME": "@db_name",
-    "DB_SSL_MODE": "require",
+    "DB_SSL_MODE": "disable",
     "NODE_ENV": "production",
     "NEXT_PUBLIC_GEOSERVER_URL": "@next_public_geoserver_url"
   }

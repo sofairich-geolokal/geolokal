@@ -158,33 +158,34 @@ const RoadNetworksLayer: React.FC<RoadNetworksLayerProps> = ({
         
         console.log('RoadNetworksLayer: Starting data fetch...');
         
-        // Try to fetch from database first
+        // Try local file first for faster loading
         try {
-          const rRes = await fetch('/api/roads');
-          console.log('RoadNetworksLayer: API response status:', rRes.status);
-          if (rRes.ok) {
-            const result = await rRes.json();
-            console.log('RoadNetworksLayer: API response:', result);
-            if (result.success && result.data && result.data.features) {
-              rData = result.data;
-              console.log('RoadNetworksLayer: Data loaded from database');
-            }
+          console.log('RoadNetworksLayer: Trying local file first...');
+          const lRes = await fetch('/data/Ibaan_roadnetworks.json');
+          if (lRes.ok) {
+            rData = await lRes.json();
+            console.log('RoadNetworksLayer: Data loaded from local file, features:', rData?.features?.length);
           }
         } catch (e) { 
-          console.log("RoadNetworksLayer: DB route not ready, trying local file...", e); 
+          console.log("RoadNetworksLayer: Local file not available, trying database...", e); 
         }
 
-        // Fallback to local file if database fails
+        // Fallback to database if local file fails
         if (!rData) {
           try {
-            console.log('RoadNetworksLayer: Trying local file...');
-            const lRes = await fetch('/data/Ibaan_roadnetworks.json');
-            if (lRes.ok) {
-              rData = await lRes.json();
-              console.log('RoadNetworksLayer: Data loaded from local file, features:', rData?.features?.length);
+            console.log('RoadNetworksLayer: Trying database...');
+            const rRes = await fetch('/api/roads');
+            console.log('RoadNetworksLayer: API response status:', rRes.status);
+            if (rRes.ok) {
+              const result = await rRes.json();
+              console.log('RoadNetworksLayer: API response:', result);
+              if (result.success && result.data && result.data.features) {
+                rData = result.data;
+                console.log('RoadNetworksLayer: Data loaded from database');
+              }
             }
           } catch (e) { 
-            console.log("RoadNetworksLayer: No local road data found.", e); 
+            console.log("RoadNetworksLayer: Database route not ready", e); 
           }
         }
         
@@ -217,32 +218,48 @@ const RoadNetworksLayer: React.FC<RoadNetworksLayerProps> = ({
   const transformRoadCoordinates = (geoData: any) => {
     try {
       if (!geoData || !geoData.features || !Array.isArray(geoData.features)) return null;
+      
+      const transformCoord = (coord: any) => {
+        const x = Number(coord[0]);
+        const y = Number(coord[1]);
+        // Check if coordinates are in valid WGS84 range
+        if (x >= -180 && x <= 180 && y >= -90 && y <= 90) {
+          return [x, y];
+        }
+        // If coordinates are in PRS92 format, apply transformation using proj4
+        try {
+          return proj4(PRS92_PTM3, WGS84, [x, y]);
+        } catch (e) {
+          return [x, y];
+        }
+      };
+
       const transformedData = {
         ...geoData,
         type: "FeatureCollection",
         features: geoData.features.filter((feature: any) => feature && feature.geometry && feature.geometry.coordinates).map((feature: any) => {
+          let newCoords;
+          const geomType = feature.geometry.type;
+
           // Convert Polygon to LineString for roads
-          if (feature.geometry.type === 'Polygon') {
-            return { 
-              ...feature, 
-              geometry: { 
-                type: 'LineString', 
-                coordinates: feature.geometry.coordinates[0] 
-              } 
-            };
+          if (geomType === 'Polygon') {
+            newCoords = feature.geometry.coordinates[0].map(transformCoord);
+            return { ...feature, geometry: { type: 'LineString', coordinates: newCoords } };
           }
           // Convert MultiPolygon to MultiLineString for roads
-          if (feature.geometry.type === 'MultiPolygon') {
-            return { 
-              ...feature, 
-              geometry: { 
-                type: 'MultiLineString', 
-                coordinates: feature.geometry.coordinates.map((polygon: any) => polygon[0]) 
-              } 
-            };
+          if (geomType === 'MultiPolygon') {
+            newCoords = feature.geometry.coordinates.map((polygon: any) => polygon[0].map(transformCoord));
+            return { ...feature, geometry: { type: 'MultiLineString', coordinates: newCoords } };
           }
-          // Return as-is for LineString and MultiLineString
-          return feature;
+          if (geomType === 'LineString') {
+            newCoords = feature.geometry.coordinates.map(transformCoord);
+          } else if (geomType === 'MultiLineString') {
+            newCoords = feature.geometry.coordinates.map((line: any) => line.map(transformCoord));
+          } else {
+            return feature;
+          }
+
+          return { ...feature, geometry: { ...feature.geometry, coordinates: newCoords } };
         })
       };
       return transformedData;
@@ -252,8 +269,12 @@ const RoadNetworksLayer: React.FC<RoadNetworksLayerProps> = ({
     }
   };
 
-  // Road styling - Grey color to match legend
-  const geoPortalRoadStyle = (feature: any) => ({ color: '#7d8b8f', weight: 2, opacity: 1.0 });
+  // Road styling - Dark grey color for high visibility
+  const geoPortalRoadStyle = (feature: any) => ({ 
+    color: '#2d2d2d', 
+    weight: 4, 
+    opacity: 1.0 
+  });
 
   // Handle road feature interactions (same as superadmin)
   const onEachRoadFeature = (feature: any, layer: any) => {
