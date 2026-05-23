@@ -3,11 +3,11 @@
   "version": "0.1.0",
   "private": true,
   "engines": {
-    "node": ">=20.x"
+    "node": "22.x"
   },
   "scripts": {
     "dev": "next dev",
-    "build": "prisma generate && next build",
+    "build": "npx prisma generate && next build",
     "build:skip-prisma": "next build",
     "start": "next start",
     "lint": "eslint",
@@ -17,8 +17,8 @@
   },
   "dependencies": {
     "@netlify/blobs": "^10.7.2",
-    "@prisma/adapter-pg": "^7.5.0",
-    "@prisma/client": "^7.8.0",
+    "@prisma/adapter-pg": "5.22.0",
+    "@prisma/client": "5.22.0",
     "@turf/turf": "^7.3.4",
     "@types/nodemailer": "^7.0.11",
     "bcrypt": "^6.0.0",
@@ -35,7 +35,7 @@
     "next": "16.2.6",
     "nodemailer": "^8.0.4",
     "pg": "^8.20.0",
-    "prisma": "^7.8.0",
+    "prisma": "5.22.0",
     "proj4": "^2.20.4",
     "react": "19.2.3",
     "react-dom": "19.2.3",
@@ -58,5 +58,8 @@
     "eslint-config-next": "^15.0.0",
     "tailwindcss": "^4",
     "typescript": "5.9.3"
+  },
+  "overrides": {
+    "@types/pg": "^8.20.0"
   }
 }

@@ -3,6 +3,9 @@ import { query } from '@/lib/db';
 import { GeoPortalService } from '@/lib/geoportal';
 import { prisma } from '@/lib/prisma';
 
+// Force dynamic rendering to prevent Next.js from running this route during build time
+export const dynamic = 'force-dynamic';
+
 // Define a generic interface for your DB results
 interface QueryResult {
     rows: any[];

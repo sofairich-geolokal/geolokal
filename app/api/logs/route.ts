@@ -2,6 +2,9 @@ import { NextResponse } from 'next/server';
 import { getAuthUser } from '@/lib/auth';
 import { query } from '@/lib/db';
 
+// Force dynamic rendering to prevent Next.js from running this route during build time
+export const dynamic = 'force-dynamic';
+
 export async function GET() {
   try {
     console.log("Logs API: Starting GET request");

@@ -4,6 +4,9 @@ import { writeFile, mkdir } from 'fs/promises';
 import { join } from 'path';
 import { existsSync } from 'fs';
 
+// Force dynamic rendering to prevent Next.js from running this route during build time
+export const dynamic = 'force-dynamic';
+
 // Use dynamic import for simplify-geojson to avoid TypeScript issues
 const simplifyGeoJSON = (geojson: any, options?: {
   tolerance?: number;

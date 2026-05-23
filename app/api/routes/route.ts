@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { query, getMapLayers } from '@/lib/db';
 
+// Force dynamic rendering to prevent Next.js from running this route during build time
+export const dynamic = 'force-dynamic';
+
 export async function GET(request: NextRequest) {
   try {
     // Check if database is configured
