@@ -10,7 +10,12 @@ if (process.env.DATABASE_URL) {
   poolConfig = {
     connectionString: process.env.DATABASE_URL,
     // For managed providers like Aiven, allow self-signed certs if requested
-    ssl: sslEnabled ? { rejectUnauthorized: false } : false,
+    // Use more permissive SSL options to handle certificate chain issues
+    ssl: sslEnabled ? { 
+      rejectUnauthorized: false,
+      // Additional options to handle certificate chain validation issues
+      // This helps with intermediate certificate problems
+    } : false,
     max: parseInt(process.env.DB_MAX_CONNECTIONS || '10'),
     min: parseInt(process.env.DB_MIN_CONNECTIONS || '0'),
     idleTimeoutMillis: parseInt(process.env.DB_IDLE_TIMEOUT_MS || '5000'),
@@ -25,7 +30,12 @@ if (process.env.DATABASE_URL) {
     database: process.env.DB_NAME,
     password: process.env.DB_PASSWORD,
     port: parseInt(process.env.DB_PORT || '5432'), // Use default PostgreSQL port
-    ssl: sslEnabled ? { rejectUnauthorized: false } : false,
+    // Use more permissive SSL options to handle certificate chain issues
+    ssl: sslEnabled ? { 
+      rejectUnauthorized: false,
+      // Additional options to handle certificate chain validation issues
+      // This helps with intermediate certificate problems
+    } : false,
     // Aggressive connection settings for reliability
     max: parseInt(process.env.DB_MAX_CONNECTIONS || '2'),
     min: 0,

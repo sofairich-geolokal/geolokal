@@ -8,6 +8,11 @@ const nextConfig: NextConfig = {
   // Add cache configuration to prevent module instantiation issues
   experimental: {
     optimizePackageImports: ['framer-motion', 'lucide-react'],
+    // Configure server actions to prevent hash mismatch errors
+    serverActions: {
+      allowedOrigins: ['geo-lokal-final.vercel.app'],
+      bodySizeLimit: '2mb',
+    },
   },
   // Ensure proper module resolution
   transpilePackages: [],

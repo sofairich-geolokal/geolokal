@@ -1,5 +1,6 @@
 "use server";
 import { query } from "@/lib/db";
+import { cookies } from 'next/headers';
 
 // Interface to define the structure of the user row from the database
 interface TopbarUserRow {
@@ -8,11 +9,20 @@ interface TopbarUserRow {
   location: string | null;
 }
 
-// Helper to simulate getting the current session/logged-in user
+// Helper to get the current session/logged-in user from auth token
 export async function getCurrentUser() {
     try {
-        // For now, returning Rukhsar's ID from your DB screenshot
-        return 5; 
+        const cookieStore = await cookies();
+        const authToken = cookieStore.get('auth_token')?.value;
+        
+        if (!authToken) return null;
+        
+        const tokenParts = authToken.split('_');
+        if (tokenParts.length !== 3 || tokenParts[0] !== 'token') {
+            return null;
+        }
+        
+        return tokenParts[1];
     } catch (error) {
         console.error("Auth Error:", error);
         return null;

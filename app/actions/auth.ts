@@ -118,6 +118,7 @@ export async function login(
   } catch (error: any) {
     console.error('SERVER AUTH ERROR:', error);
     const message = error?.message || String(error);
+    const errorCode = error?.code || 'AUTH_ERROR';
     // Log detailed error in production for debugging
     console.error('AUTH ERROR DETAILS:', {
       message,
@@ -126,9 +127,9 @@ export async function login(
       detail: error?.detail
     });
     if (process.env.NODE_ENV !== 'production') {
-      return { success: false, error: `Server error: ${message}`, stack: error.stack };
+      return { success: false, error: `Server error: ${message}`, errorCode, stack: error.stack };
     }
-    return { success: false, error: 'An error occurred during login.' };
+    return { success: false, error: 'An error occurred during login.', errorCode };
   }
 }
 
