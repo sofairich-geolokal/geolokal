@@ -1,6 +1,5 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
-import { query } from '@/lib/db';
 
 // Define the shape of your database result to fix the "unknown" type error
 interface UserQueryResult {
@@ -30,21 +29,6 @@ const geonodePaths = [
   '/geoserver/',
   '/api/geoserver',
 ];
-
-async function getUserRole(userId: string): Promise<string | null> {
-  try {
-    // Cast the result to UserQueryResult to satisfy TypeScript
-    const result = (await query(
-      'SELECT role FROM users WHERE id = $1',
-      [userId]
-    )) as UserQueryResult;
-
-    return result.rows[0]?.role?.toLowerCase() || null;
-  } catch (error) {
-    console.error('Error fetching user role:', error);
-    return null;
-  }
-}
 
 async function proxyToGeonode(request: NextRequest, pathname: string) {
   const geonodeUrl = process.env.GEONODE_URL || 'http://localhost:8000';
@@ -98,8 +82,8 @@ async function proxyToGeonode(request: NextRequest, pathname: string) {
 }
 
 /**
- * The main export must be named 'proxy' (if your file is proxy.ts) 
- * or exported as default.
+ * Next.js Proxy must be named 'proxy' and exported
+ * from a file named proxy.ts in the root.
  */
 export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
@@ -138,7 +122,8 @@ export async function proxy(request: NextRequest) {
   }
 
   const userId = tokenParts[1];
-  const userRole = await getUserRole(userId);
+  // If role is the 3rd part of your token (token_id_role)
+  const userRole = tokenParts[2]?.toLowerCase();
 
   // 5. Role-based access control
   if (pathname.startsWith('/lgu-dashboard')) {
