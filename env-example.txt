@@ -15,9 +15,10 @@ SMTP_FROM_EMAIL=noreply@geolokal.com
 
 # Application URL (IMPORTANT: Set this dynamically based on environment)
 # For local development: http://localhost:3000
-# For Vercel production: https://your-project.vercel.app
-# This should be set automatically by your deployment platform or manually
-NEXT_PUBLIC_APP_URL=https://geo-lokal-final.vercel.app
+# For Vercel production: Leave empty to auto-detect from deployment URL
+# For manual deployment: Set to your domain (e.g., https://your-domain.com)
+# Vercel automatically provides VERCEL_URL environment variable
+NEXT_PUBLIC_APP_URL=
 
 # GeoServer URL (IMPORTANT: Set this to your production GeoServer URL)
 # For local development: http://localhost:8080/geoserver/wms
@@ -47,7 +48,10 @@ DB_QUERY_TIMEOUT_MS=15000
 
 # NextAuth Configuration
 NEXTAUTH_SECRET=your-secret-key-generate-with-openssl-rand-base64-32
-NEXTAUTH_URL=https://geo-lokal-final.vercel.app
+# NEXTAUTH_URL: Leave empty for auto-detection in production
+# For local development: http://localhost:3000
+# Vercel/Next.js will automatically detect the production URL
+NEXTAUTH_URL=
 
 # Google Maps API Key (for map integration)
 NEXT_PUBLIC_GOOGLE_MAPS_API_KEY=your-google-maps-api-key
